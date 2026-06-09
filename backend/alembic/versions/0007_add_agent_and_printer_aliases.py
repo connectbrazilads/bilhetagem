@@ -1,6 +1,6 @@
 """add agent and printer aliases
 
-Revision ID: 0007_add_agent_and_printer_aliases
+Revision ID: 0007_agent_printer_aliases
 Revises: 0006_add_toner_levels
 Create Date: 2026-06-09 00:00:00.000000
 """
@@ -10,7 +10,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0007_add_agent_and_printer_aliases"
+revision: str = "0007_agent_printer_aliases"
 down_revision: Union[str, None] = "0006_add_toner_levels"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
