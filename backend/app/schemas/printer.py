@@ -12,6 +12,21 @@ class PrinterCreate(BaseModel):
     ip_address: str | None = Field(default=None, max_length=45)
 
 
+class PrinterAliasRead(BaseModel):
+    id: int
+    queue_name: str
+    computer_name: str | None
+    driver_name: str | None
+    port_name: str | None
+    connection_type: str | None
+    ip_address: str | None
+    serial_number: str | None
+    fingerprint: str | None
+    last_seen_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
 class PrinterRead(BaseModel):
     id: int
     name: str
@@ -27,6 +42,7 @@ class PrinterRead(BaseModel):
     serial_number: str | None
     page_counter: int | None
     created_at: datetime
+    aliases: list[PrinterAliasRead] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

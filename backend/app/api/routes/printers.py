@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
+from app.models.printer_alias import PrinterAlias
 from app.models.quota import Quota
 from app.models.user import User, UserRole
 from app.repositories.printers import create_printer
@@ -20,7 +21,7 @@ def list_printers(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> list[Printer]:
-    return db.query(Printer).order_by(Printer.name).all()
+    return db.query(Printer).options(selectinload(Printer.aliases)).order_by(Printer.name).all()
 
 
 @router.post("", response_model=PrinterRead, status_code=status.HTTP_201_CREATED)
@@ -37,7 +38,7 @@ def create_printer_endpoint(
         return printer
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Impressora já cadastrada") from exc
+        raise HTTPException(status_code=409, detail="Impressora ja cadastrada") from exc
 
 
 @router.put("/{printer_id}", response_model=PrinterRead)
@@ -49,7 +50,7 @@ def update_printer_endpoint(
 ) -> Printer:
     printer = db.query(Printer).filter(Printer.id == printer_id).first()
     if not printer:
-        raise HTTPException(status_code=404, detail="Impressora não encontrada")
+        raise HTTPException(status_code=404, detail="Impressora nao encontrada")
     
     if payload.name is not None:
         printer.name = payload.name
@@ -123,6 +124,7 @@ def delete_printer_endpoint(
 
     for job in jobs:
         db.delete(job)
+    db.query(PrinterAlias).filter(PrinterAlias.printer_id == printer.id).delete(synchronize_session=False)
     write_audit(
         db,
         action="printer_deleted",
@@ -134,3 +136,70 @@ def delete_printer_endpoint(
     db.delete(printer)
     db.commit()
     return {"status": "deleted", "deleted_jobs": deleted_jobs}
+
+
+@router.post("/{source_printer_id}/merge/{target_printer_id}", response_model=PrinterRead)
+def merge_printer_endpoint(
+    source_printer_id: int,
+    target_printer_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> Printer:
+    if source_printer_id == target_printer_id:
+        raise HTTPException(status_code=400, detail="Impressoras devem ser diferentes")
+
+    source = db.query(Printer).filter(Printer.id == source_printer_id).first()
+    target = db.query(Printer).filter(Printer.id == target_printer_id).first()
+    if not source or not target:
+        raise HTTPException(status_code=404, detail="Impressora nao encontrada")
+
+    moved_jobs = db.query(PrintJob).filter(PrintJob.printer_id == source.id).update(
+        {PrintJob.printer_id: target.id},
+        synchronize_session=False,
+    )
+    moved_aliases = 0
+    for alias in db.query(PrinterAlias).filter(PrinterAlias.printer_id == source.id).all():
+        duplicate_alias = (
+            db.query(PrinterAlias)
+            .filter(
+                PrinterAlias.printer_id == target.id,
+                PrinterAlias.agent_id == alias.agent_id,
+                PrinterAlias.queue_name == alias.queue_name,
+            )
+            .first()
+        )
+        if duplicate_alias:
+            db.query(PrintJob).filter(PrintJob.printer_alias_id == alias.id).update(
+                {PrintJob.printer_alias_id: duplicate_alias.id},
+                synchronize_session=False,
+            )
+            db.delete(alias)
+            continue
+        alias.printer_id = target.id
+        moved_aliases += 1
+
+    if not target.ip_address and source.ip_address:
+        target.ip_address = source.ip_address
+    if not target.serial_number and source.serial_number:
+        target.serial_number = source.serial_number
+    if not target.location and source.location:
+        target.location = source.location
+    target.is_color = target.is_color or source.is_color
+
+    write_audit(
+        db,
+        action="printer_merged",
+        entity="printers",
+        entity_id=target.id,
+        actor_user_id=actor.id,
+        metadata={
+            "source_printer": source.name,
+            "target_printer": target.name,
+            "moved_jobs": moved_jobs,
+            "moved_aliases": moved_aliases,
+        },
+    )
+    db.delete(source)
+    db.commit()
+    db.refresh(target)
+    return target

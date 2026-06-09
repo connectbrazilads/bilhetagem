@@ -22,8 +22,12 @@ class PrintJob(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     printer_id: Mapped[int] = mapped_column(ForeignKey("printers.id"), nullable=False)
+    printer_alias_id: Mapped[int | None] = mapped_column(ForeignKey("printer_aliases.id"), nullable=True)
+    agent_id: Mapped[int | None] = mapped_column(ForeignKey("print_agents.id"), nullable=True)
     external_job_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     document_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    computer_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    queue_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     pages: Mapped[int] = mapped_column(Integer, nullable=False)
     is_color: Mapped[bool] = mapped_column(Boolean, nullable=False)
     cost: Mapped[float] = mapped_column(default=0.0, nullable=False)
@@ -34,3 +38,5 @@ class PrintJob(Base):
 
     user = relationship("User", back_populates="print_jobs")
     printer = relationship("Printer", back_populates="print_jobs")
+    printer_alias = relationship("PrinterAlias")
+    agent = relationship("PrintAgent")

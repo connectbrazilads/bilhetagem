@@ -27,3 +27,4 @@ class Printer(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     print_jobs = relationship("PrintJob", back_populates="printer")
+    aliases = relationship("PrinterAlias", back_populates="printer")

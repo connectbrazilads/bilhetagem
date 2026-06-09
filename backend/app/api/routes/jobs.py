@@ -56,6 +56,8 @@ def list_jobs(
             reason=job.reason,
             submitted_at=job.submitted_at,
             document_name=job.document_name,
+            computer_name=job.computer_name,
+            queue_name=job.queue_name,
         )
         for job in jobs
     ]

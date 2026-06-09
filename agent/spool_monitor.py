@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import json
 import logging
+import re
+import socket
 import time
+import uuid
 from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
+from dataclasses import replace
 
 from api_client import BillingApiClient, CapturedPrintJob
-from config import AgentConfig, config
+from config import AgentConfig, config, get_app_dir
 from print_event_log import PrintEventLogReader
 from snmp_probe import fetch_snmp_status
 
@@ -45,6 +50,8 @@ class SpoolMonitor:
         self._last_settings_poll = 0.0
         self._server_safe_release_enabled = True
         self._event_log_reader = PrintEventLogReader(agent_config=self.config)
+        self._agent_uid = self._load_agent_uid()
+        self._computer_name = os.getenv("COMPUTERNAME") or socket.gethostname()
 
     def run_forever(self, should_stop: Callable[[], bool] | None = None) -> None:
         should_stop = should_stop or (lambda: False)
@@ -64,7 +71,7 @@ class SpoolMonitor:
             try:
                 self._process_web_prints()
             except Exception:
-                logger.exception("Falha ao processar impressões web")
+                logger.exception("Falha ao processar impressoes web")
             try:
                 self._process_print_event_log()
             except Exception:
@@ -74,6 +81,21 @@ class SpoolMonitor:
 
     def _should_process_spool_jobs(self) -> bool:
         return not (self.config.use_print_event_log and not self._server_safe_release_enabled)
+
+    def _load_agent_uid(self) -> str:
+        path = get_app_dir() / "agent_identity.json"
+        try:
+            if path.exists():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                uid = str(data.get("agent_uid") or "").strip()
+                if uid:
+                    return uid
+            uid = f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}"
+            path.write_text(json.dumps({"agent_uid": uid}, indent=2), encoding="utf-8")
+            return uid
+        except Exception:
+            logger.warning("Nao foi possivel persistir identidade do agent")
+            return f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}"
 
     def _refresh_server_settings_if_due(self) -> None:
         now = time.monotonic()
@@ -165,7 +187,7 @@ class SpoolMonitor:
                         win32print.ClosePrinter(handle)
                     del self._paused_jobs[key]
         except Exception:
-            logger.exception("Falha ao checar ações dos trabalhos pausados")
+            logger.exception("Falha ao checar acoes dos trabalhos pausados")
 
     def _capture_job(self, printer_name: str, raw_job: dict) -> CapturedPrintJob:
         pages = raw_job.get("TotalPages") or raw_job.get("PagesPrinted") or 1
@@ -173,6 +195,7 @@ class SpoolMonitor:
         is_color = bool(getattr(devmode, "Color", 1) == 2) if devmode else False
         # JOB_INFO_2 pointer fields use 'p' prefix (pUserName, pDocument, etc.)
         username = self._extract_username(printer_name, raw_job)
+        metadata = self._queue_metadata(printer_name)
         logger.debug("Job fields: %s", list(raw_job.keys()))
         logger.info("Capturado job de '%s' na impressora '%s' (%d pags)", username, printer_name, max(int(pages), 1))
         return CapturedPrintJob(
@@ -183,7 +206,125 @@ class SpoolMonitor:
             external_job_id=str(raw_job.get("JobId")) if raw_job.get("JobId") is not None else None,
             document_name=raw_job.get("pDocument"),
             submitted_at=datetime.now(timezone.utc),
+            **metadata,
         )
+
+    def _queue_metadata(self, printer_name: str) -> dict:
+        data = {
+            "agent_uid": self._agent_uid,
+            "computer_name": self._computer_name,
+            "queue_name": printer_name,
+            "printer_driver_name": None,
+            "printer_port_name": None,
+            "printer_connection_type": "unknown",
+            "printer_ip_address": None,
+            "printer_serial": None,
+            "printer_device_id": None,
+            "printer_fingerprint": None,
+        }
+        try:
+            handle = win32print.OpenPrinter(printer_name)
+            try:
+                info = win32print.GetPrinter(handle, 2)
+            finally:
+                win32print.ClosePrinter(handle)
+            port_name = self._clean_metadata(info.get("pPortName"))
+            driver_name = self._clean_metadata(info.get("pDriverName"))
+            data["printer_port_name"] = port_name
+            data["printer_driver_name"] = driver_name
+            data["printer_connection_type"] = self._connection_type(printer_name, port_name)
+            data["printer_ip_address"] = self._extract_ip(port_name)
+            wmi_metadata = self._wmi_printer_metadata(printer_name)
+            if wmi_metadata.get("port_name") and not data["printer_port_name"]:
+                data["printer_port_name"] = wmi_metadata["port_name"]
+            if wmi_metadata.get("driver_name") and not data["printer_driver_name"]:
+                data["printer_driver_name"] = wmi_metadata["driver_name"]
+            if wmi_metadata.get("device_id"):
+                data["printer_device_id"] = wmi_metadata["device_id"]
+            if data["printer_connection_type"] == "usb":
+                data["printer_device_id"] = data["printer_device_id"] or self._usb_device_id(
+                    data["computer_name"],
+                    data["printer_port_name"],
+                    data["printer_driver_name"],
+                )
+        except Exception:
+            logger.debug("Nao foi possivel ler metadata da fila %s", printer_name, exc_info=True)
+
+        data["printer_fingerprint"] = self._printer_fingerprint(data)
+        return data
+
+    @staticmethod
+    def _clean_metadata(value: object) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    def _connection_type(self, printer_name: str, port_name: str | None) -> str:
+        port = (port_name or "").lower()
+        if printer_name.startswith("\\\\"):
+            return "shared"
+        if port.startswith(("usb", "dot4")):
+            return "usb"
+        if self._extract_ip(port_name) or port.startswith(("ip_", "tcp", "wsd")):
+            return "network"
+        if port.startswith(("lpt", "com")):
+            return "local"
+        return "unknown"
+
+    @staticmethod
+    def _extract_ip(value: str | None) -> str | None:
+        if not value:
+            return None
+        match = re.search(r"(?:(?:IP_)?)(\d{1,3}(?:\.\d{1,3}){3})", value, flags=re.IGNORECASE)
+        if not match:
+            return None
+        octets = match.group(1).split(".")
+        if all(0 <= int(octet) <= 255 for octet in octets):
+            return match.group(1)
+        return None
+
+    @staticmethod
+    def _printer_fingerprint(metadata: dict) -> str:
+        if metadata.get("printer_serial"):
+            return f"serial:{metadata['printer_serial']}".lower()
+        if metadata.get("printer_ip_address"):
+            return f"ip:{metadata['printer_ip_address']}".lower()
+        if metadata.get("printer_device_id"):
+            if metadata.get("printer_connection_type") == "usb":
+                computer = metadata.get("computer_name") or ""
+                return f"usb:{computer}|{metadata['printer_device_id']}".lower()
+            return f"device:{metadata['printer_device_id']}".lower()
+        parts = [
+            metadata.get("computer_name") or "",
+            metadata.get("queue_name") or "",
+            metadata.get("printer_port_name") or "",
+            metadata.get("printer_driver_name") or "",
+        ]
+        return "queue:" + "|".join(part.strip().lower() for part in parts)
+
+    @staticmethod
+    def _usb_device_id(computer_name: str | None, port_name: str | None, driver_name: str | None) -> str | None:
+        parts = [part for part in (computer_name, port_name, driver_name) if part]
+        return "|".join(parts) if parts else None
+
+    def _wmi_printer_metadata(self, printer_name: str) -> dict[str, str | None]:
+        metadata: dict[str, str | None] = {"port_name": None, "driver_name": None, "device_id": None}
+        try:
+            import win32com.client
+
+            wmi = win32com.client.GetObject("winmgmts:")
+            for printer in wmi.ExecQuery("SELECT Name, PortName, DriverName, DeviceID, PNPDeviceID FROM Win32_Printer"):
+                name = self._clean_metadata(getattr(printer, "Name", None))
+                if not name or name.lower() != printer_name.lower():
+                    continue
+                metadata["port_name"] = self._clean_metadata(getattr(printer, "PortName", None))
+                metadata["driver_name"] = self._clean_metadata(getattr(printer, "DriverName", None))
+                metadata["device_id"] = self._clean_metadata(getattr(printer, "PNPDeviceID", None)) or self._clean_metadata(getattr(printer, "DeviceID", None))
+                return metadata
+        except Exception:
+            logger.debug("Nao foi possivel consultar metadata WMI da fila %s", printer_name, exc_info=True)
+        return metadata
 
     def _extract_username(self, printer_name: str, raw_job: dict) -> str:
         configured = self._clean_username(self.config.default_username)
@@ -217,7 +358,7 @@ class SpoolMonitor:
 
     @staticmethod
     def _preferred_username(username: str, configured: str | None) -> str:
-        if configured and username.lower() in {"user", "usuario", "usuário", "unknown", "system", "localsystem"}:
+        if configured and username.lower() in {"user", "usuario", "unknown", "system", "localsystem"}:
             return configured
         return username
 
@@ -284,7 +425,7 @@ class SpoolMonitor:
         try:
             web_jobs = self.api_client.get_agent_web_prints()
         except Exception:
-            logger.warning("Não foi possível buscar as impressões web no servidor")
+            logger.warning("Nao foi possivel buscar as impressoes web no servidor")
             return
             
         if not web_jobs:
@@ -295,12 +436,12 @@ class SpoolMonitor:
             printer_name = job["printer_name"]
             filename = job["filename"]
             
-            logger.info("Encontrada impressão web liberada: ID %s, Impressora '%s', Arquivo '%s'", job_id, printer_name, filename)
+            logger.info("Encontrada impressao web liberada: ID %s, Impressora '%s', Arquivo '%s'", job_id, printer_name, filename)
             
             try:
                 pdf_data = self.api_client.download_web_print_file(job_id)
             except Exception:
-                logger.exception("Erro ao baixar arquivo para impressão web ID %s", job_id)
+                logger.exception("Erro ao baixar arquivo para impressao web ID %s", job_id)
                 continue
                 
             fd, temp_path = tempfile.mkstemp(suffix=".pdf", prefix=f"webprint_{job_id}_")
@@ -312,16 +453,16 @@ class SpoolMonitor:
                 if win32api is not None:
                     try:
                         win32api.ShellExecute(0, "printto", temp_path, f'"{printer_name}"', ".", 0)
-                        logger.info("Comando de impressão enviado com sucesso.")
+                        logger.info("Comando de impressao enviado com sucesso.")
                     except Exception as print_err:
-                        logger.warning("Erro ao tentar chamar ShellExecute 'printto': %s. Continuando com a simulação.", print_err)
+                        logger.warning("Erro ao tentar chamar ShellExecute 'printto': %s. Continuando com a simulacao.", print_err)
                 else:
-                    logger.info("win32api não disponível. Simulação de impressão silenciosa realizada.")
+                    logger.info("win32api nao disponivel. Simulacao de impressao silenciosa realizada.")
                 
                 self.api_client.confirm_web_printed(job_id)
-                logger.info("Impressão web ID %s confirmada com sucesso no backend.", job_id)
+                logger.info("Impressao web ID %s confirmada com sucesso no backend.", job_id)
             except Exception:
-                logger.exception("Erro ao processar impressão web ID %s", job_id)
+                logger.exception("Erro ao processar impressao web ID %s", job_id)
             finally:
                 if os.path.exists(temp_path):
                     try:
@@ -365,13 +506,15 @@ class SpoolMonitor:
         events = self._event_log_reader.read_new_printed_jobs()
         for event in events:
             try:
-                decision = self.api_client.submit_job(event.job)
+                metadata = self._queue_metadata(event.job.printer_name)
+                event_job = replace(event.job, **metadata)
+                decision = self.api_client.submit_job(event_job)
                 logger.info(
                     "Evento PrintService registrado: record_id=%s usuario=%s impressora=%s paginas=%s status=%s",
                     event.record_id,
-                    event.job.username,
-                    event.job.printer_name,
-                    event.job.pages,
+                    event_job.username,
+                    event_job.printer_name,
+                    event_job.pages,
                     decision.get("status"),
                 )
                 self._event_log_reader.mark_processed(event.record_id)

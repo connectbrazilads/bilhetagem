@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Edit, Plus, Server, Activity, Hash, Info, X, Cpu, Droplets, FileText, Clock, AlertTriangle, Trash2 } from "lucide-react";
+import { Activity, AlertTriangle, Cpu, Droplets, Edit, FileText, GitMerge, Hash, Info, Server, Trash2, X } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -21,6 +21,13 @@ type PrinterRow = {
   paper_status: string | null;
   serial_number: string | null;
   page_counter: number | null;
+  aliases?: {
+    id: number;
+    queue_name: string;
+    computer_name: string | null;
+    connection_type: string | null;
+    port_name: string | null;
+  }[];
 };
 
 export default function PrintersPage() {
@@ -37,6 +44,8 @@ export default function PrintersPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [selectedPrinter, setSelectedPrinter] = useState<PrinterRow | null>(null);
+  const [mergingPrinter, setMergingPrinter] = useState<PrinterRow | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState("");
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -143,6 +152,25 @@ export default function PrintersPage() {
     }
   }
 
+  async function mergePrinter() {
+    if (!mergingPrinter || !mergeTargetId) return;
+    const target = printers.find((printer) => printer.id.toString() === mergeTargetId);
+    if (!target) return;
+    const confirmed = window.confirm(`Unir "${mergingPrinter.name}" em "${target.name}"? Os historicos serao movidos para a impressora de destino.`);
+    if (!confirmed) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setError(null);
+    try {
+      await apiFetch<PrinterRow>(`/printers/${mergingPrinter.id}/merge/${target.id}`, token, { method: "POST" });
+      setMergingPrinter(null);
+      setMergeTargetId("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao unir impressoras");
+    }
+  }
+
   function tonerEntries(printer: PrinterRow) {
     return Object.entries(printer.toner_levels ?? {});
   }
@@ -178,12 +206,12 @@ export default function PrintersPage() {
     <ProtectedPage>
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">Impressoras</h1>
-        <p className="text-sm text-muted-foreground">Adicione e gerencie filas de impressão e monitore o status do hardware via SNMP.</p>
+        <p className="text-sm text-muted-foreground">Adicione e gerencie filas de impressao e monitore o status do hardware via SNMP.</p>
       </div>
 
       <Surface as="form" className="mb-6 flex flex-wrap gap-3 items-end p-4" onSubmit={submit}>
         <div className="grid gap-1.5 flex-1 min-w-[150px]">
-          <label className="text-xs font-semibold text-muted-foreground">Fila de Impressão</label>
+          <label className="text-xs font-semibold text-muted-foreground">Fila de Impressao</label>
           <Input
             placeholder="Ex: Sala_TI"
             value={form.name}
@@ -194,16 +222,16 @@ export default function PrintersPage() {
         </div>
         
         <div className="grid gap-1.5 flex-1 min-w-[150px]">
-          <label className="text-xs font-semibold text-muted-foreground">Localização</label>
+          <label className="text-xs font-semibold text-muted-foreground">Localizacao</label>
           <Input
-            placeholder="Ex: Bloco B, Térreo"
+            placeholder="Ex: Bloco B, Terreo"
             value={form.location}
             onChange={(event) => setForm({ ...form, location: event.target.value })}
           />
         </div>
 
         <div className="grid gap-1.5 w-40">
-          <label className="text-xs font-semibold text-muted-foreground">Endereço IP (SNMP)</label>
+          <label className="text-xs font-semibold text-muted-foreground">Endereco IP (SNMP)</label>
           <Input
             placeholder="Ex: 192.168.1.50"
             value={form.ip_address}
@@ -293,17 +321,48 @@ export default function PrintersPage() {
         </Surface>
       ) : null}
 
+      {mergingPrinter ? (
+        <Surface className="mb-6 flex flex-wrap items-end gap-3 p-4">
+          <div className="min-w-[240px] flex-1">
+            <div className="text-xs font-semibold text-muted-foreground">Unir impressora duplicada</div>
+            <div className="mt-1 text-sm font-semibold">{mergingPrinter.name}</div>
+          </div>
+          <label className="grid min-w-[260px] flex-1 gap-1.5 text-xs font-semibold text-muted-foreground">
+            Impressora de destino
+            <select
+              value={mergeTargetId}
+              onChange={(event) => setMergeTargetId(event.target.value)}
+              className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+            >
+              <option value="">Selecione</option>
+              {printers.filter((printer) => printer.id !== mergingPrinter.id).map((printer) => (
+                <option key={printer.id} value={printer.id}>
+                  {printer.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button type="button" onClick={mergePrinter} disabled={!mergeTargetId}>
+            <GitMerge className="h-4 w-4" />
+            Unir
+          </Button>
+          <Button type="button" variant="outline" onClick={() => { setMergingPrinter(null); setMergeTargetId(""); }}>
+            Cancelar
+          </Button>
+        </Surface>
+      ) : null}
+
       <Surface className="overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted text-left">
             <tr>
               <th className="p-3">Fila / Hardware</th>
-              <th className="p-3">Localização</th>
+              <th className="p-3">Localizacao</th>
               <th className="p-3">IP / Monitoramento</th>
-              <th className="p-3">Nível Toner</th>
+              <th className="p-3">Nivel Toner</th>
               <th className="p-3">Custos (P&B / Cor)</th>
               <th className="p-3">Status</th>
-              <th className="p-3 text-right">Ações</th>
+              <th className="p-3 text-right">Acoes</th>
             </tr>
           </thead>
           <tbody>
@@ -321,6 +380,11 @@ export default function PrintersPage() {
                       <span>S/N: {printer.serial_number}</span>
                     </div>
                   )}
+                  {(printer.aliases?.length ?? 0) > 0 && (
+                    <div className="mt-1 text-[10px] text-muted-foreground">
+                      {printer.aliases?.length} fila(s) vinculada(s)
+                    </div>
+                  )}
                 </td>
                 <td className="p-3">{printer.location ?? "-"}</td>
                 <td className="p-3">
@@ -333,7 +397,7 @@ export default function PrintersPage() {
                       {printer.page_counter !== null && (
                         <div className="text-[10px] text-muted-foreground flex items-center gap-0.5">
                           <Activity className="h-3 w-3" />
-                          <span>Hardware Counter: {printer.page_counter.toLocaleString()} págs</span>
+                          <span>Hardware Counter: {printer.page_counter.toLocaleString()} pags</span>
                         </div>
                       )}
                     </div>
@@ -413,6 +477,9 @@ export default function PrintersPage() {
                     <Button variant="ghost" onClick={(e) => { e.stopPropagation(); startEdit(printer); }} title="Editar" className="h-8 w-8 p-0">
                       <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                     </Button>
+                    <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setMergingPrinter(printer); setMergeTargetId(""); }} title="Unir duplicada" className="h-8 w-8 p-0">
+                      <GitMerge className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    </Button>
                     <Button variant="ghost" onClick={(e) => { e.stopPropagation(); deletePrinter(printer); }} title="Excluir" className="h-8 w-8 p-0">
                       <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
                     </Button>
@@ -474,29 +541,29 @@ export default function PrintersPage() {
                 <div className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
                   <Server className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Endereço IP</p>
-                    <p className="text-sm font-mono font-medium">{selectedPrinter.ip_address || "—"}</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Endereco IP</p>
+                    <p className="text-sm font-mono font-medium">{selectedPrinter.ip_address || "-"}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
                   <Cpu className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Localização</p>
-                    <p className="text-sm font-medium">{selectedPrinter.location || "—"}</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Localizacao</p>
+                    <p className="text-sm font-medium">{selectedPrinter.location || "-"}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
                   <FileText className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Contador de Páginas</p>
-                    <p className="text-sm font-bold">{selectedPrinter.page_counter !== null ? selectedPrinter.page_counter.toLocaleString() : "—"}</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Contador de Paginas</p>
+                    <p className="text-sm font-bold">{selectedPrinter.page_counter !== null ? selectedPrinter.page_counter.toLocaleString() : "-"}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
                   <Hash className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Número de Série</p>
-                    <p className="text-sm font-mono font-medium">{selectedPrinter.serial_number || "—"}</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Numero de Serie</p>
+                    <p className="text-sm font-mono font-medium">{selectedPrinter.serial_number || "-"}</p>
                   </div>
                 </div>
               </div>
@@ -507,7 +574,7 @@ export default function PrintersPage() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <Droplets className="h-5 w-5 text-primary" />
-                      <span className="text-sm font-semibold">Nível de Toner</span>
+                      <span className="text-sm font-semibold">Nivel de Toner</span>
                     </div>
                     <span className={`text-lg font-bold ${tonerTextColor(selectedPrinter.toner_level)}`}>
                       {selectedPrinter.toner_level !== null ? `${selectedPrinter.toner_level}%` : "N/A"}
@@ -539,7 +606,7 @@ export default function PrintersPage() {
                   {(selectedPrinter.toner_level ?? 100) <= 10 && (
                     <div className="mt-2 flex items-center gap-1.5 text-xs text-red-600">
                       <AlertTriangle className="h-3.5 w-3.5" />
-                      <span>Toner crítico! Substituição necessária em breve.</span>
+                      <span>Toner critico! Substituicao necessaria em breve.</span>
                     </div>
                   )}
                 </div>

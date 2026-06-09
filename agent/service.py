@@ -6,6 +6,7 @@ import win32event
 import win32service
 import win32serviceutil
 
+import sys
 from api_client import BillingApiClient
 from spool_monitor import SpoolMonitor
 
@@ -29,13 +30,29 @@ class PrintBillingService(win32serviceutil.ServiceFramework):
         win32event.SetEvent(self.stop_event)
 
     def SvcDoRun(self) -> None:
-        logging.basicConfig(level=logging.INFO)
+        from config import get_app_dir
+        log_file = get_app_dir() / "agent.log"
+        logging.basicConfig(
+            filename=str(log_file),
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s"
+        )
+        logging.info(f"{SERVICE_NAME} iniciado")
         servicemanager.LogInfoMsg(f"{SERVICE_NAME} iniciado")
-        self.monitor.run_forever(should_stop=self._should_stop)
+        try:
+            self.monitor.run_forever(should_stop=self._should_stop)
+        except Exception as e:
+            logging.exception("Erro fatal no monitor do spooler")
+            raise
 
     def _should_stop(self) -> bool:
         return win32event.WaitForSingleObject(self.stop_event, 0) == win32event.WAIT_OBJECT_0
 
 
 if __name__ == "__main__":
-    win32serviceutil.HandleCommandLine(PrintBillingService)
+    if len(sys.argv) == 1:
+        servicemanager.Initialize()
+        servicemanager.PrepareToHostSingle(PrintBillingService)
+        servicemanager.StartServiceCtrlDispatcher()
+    else:
+        win32serviceutil.HandleCommandLine(PrintBillingService)

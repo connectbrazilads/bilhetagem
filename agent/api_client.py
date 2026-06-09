@@ -21,6 +21,16 @@ class CapturedPrintJob:
     external_job_id: str | None = None
     document_name: str | None = None
     submitted_at: datetime = datetime.now(timezone.utc)
+    agent_uid: str | None = None
+    computer_name: str | None = None
+    queue_name: str | None = None
+    printer_driver_name: str | None = None
+    printer_port_name: str | None = None
+    printer_connection_type: str | None = None
+    printer_ip_address: str | None = None
+    printer_serial: str | None = None
+    printer_device_id: str | None = None
+    printer_fingerprint: str | None = None
 
 
 class BillingApiClient:

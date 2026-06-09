@@ -13,6 +13,16 @@ class PrintJobCreate(BaseModel):
     external_job_id: str | None = Field(default=None, max_length=120)
     document_name: str | None = Field(default=None, max_length=255)
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    agent_uid: str | None = Field(default=None, max_length=120)
+    computer_name: str | None = Field(default=None, max_length=180)
+    queue_name: str | None = Field(default=None, max_length=180)
+    printer_driver_name: str | None = Field(default=None, max_length=180)
+    printer_port_name: str | None = Field(default=None, max_length=180)
+    printer_connection_type: str | None = Field(default=None, max_length=40)
+    printer_ip_address: str | None = Field(default=None, max_length=45)
+    printer_serial: str | None = Field(default=None, max_length=80)
+    printer_device_id: str | None = Field(default=None, max_length=255)
+    printer_fingerprint: str | None = Field(default=None, max_length=255)
 
 
 class PrintJobDecision(BaseModel):
@@ -35,6 +45,8 @@ class PrintJobRead(BaseModel):
     reason: str | None
     submitted_at: datetime
     document_name: str | None = None
+    computer_name: str | None = None
+    queue_name: str | None = None
 
 
 class JobFilter(BaseModel):
