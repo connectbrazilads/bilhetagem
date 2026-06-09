@@ -4,68 +4,44 @@ from sqlalchemy.orm import Session
 
 from app.models.printer import Printer
 from app.models.user import User, UserRole
-from app.models.print_job import PrintJob, JobStatus
+from app.models.print_job import PrintJob
 from app.models.quota import Quota
-from app.services.snmp_service import poll_printers_once
+from app.services.snmp_service import SnmpPrinterStatus, poll_printers_once
 from app.services.ldap_service import sync_ldap_users, test_ldap_connection as check_ldap_connection
 from app.api.routes.jobs import get_pdf_page_count
 from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
 
-def test_snmp_simulation_drains_toner_and_counts_pages(db_session: Session, monkeypatch):
+def test_snmp_poll_uses_real_status_payload(db_session: Session, monkeypatch):
     # Mock SessionLocal in snmp_service to return db_session
     import app.services.snmp_service as snmp_mod
     monkeypatch.setattr(snmp_mod, "SessionLocal", lambda: db_session)
     # Prevent the service from closing the test DB session
     monkeypatch.setattr(db_session, "close", lambda: None)
     
-    # 1. Add printer with IP
-    printer = Printer(name="HP Lab", location="Lab", ip_address="192.168.1.99") # ends with .99 -> Sem Papel
+    monkeypatch.setattr(
+        snmp_mod,
+        "fetch_printer_snmp",
+        lambda _: SnmpPrinterStatus(
+            serial_number="BR123456",
+            page_counter=12345,
+            toner_levels={"black": 81, "cyan": 72, "magenta": 64, "yellow": 57},
+            paper_status="Pronta",
+        ),
+    )
+
+    printer = Printer(name="HP Lab", location="Lab", ip_address="192.168.1.99")
     db_session.add(printer)
     db_session.commit()
     
-    # 2. Run poll
     poll_printers_once()
     printer = db_session.query(Printer).filter(Printer.id == printer.id).one()
     
-    # Verify initial mock simulation stats
-    assert printer.serial_number == f"SN-MOCK-{printer.id:04d}"
-    assert printer.toner_level == 100
-    assert printer.page_counter == 5000
-    assert printer.paper_status == "Sem Papel"
-    
-    # 3. Create a user, quota and some print jobs
-    user = User(username="pedro", full_name="Pedro", role=UserRole.user)
-    db_session.add(user)
-    db_session.flush()
-    db_session.add(Quota(user_id=user.id, year=2026, month=6, monthly_limit=200, used_pages=0, monthly_balance=50.0))
-    db_session.commit()
-    
-    # Register jobs that are released
-    for _ in range(5):
-        register_print_job(
-            db_session,
-            PrintJobCreate(
-                username="pedro",
-                printer_name="HP Lab",
-                pages=10,
-                is_color=False,
-                submitted_at=datetime(2026, 6, 8, tzinfo=timezone.utc),
-            )
-        )
-    
-    # Force release of these jobs
-    jobs = db_session.query(PrintJob).filter(PrintJob.printer_id == printer.id).all()
-    for job in jobs:
-        job.status = JobStatus.released
-    db_session.commit()
-    
-    # 4. Poll again, toner should drain by 50 * 0.05% = 2% -> toner level should be 98
-    poll_printers_once()
-    printer = db_session.query(Printer).filter(Printer.id == printer.id).one()
-    
-    assert printer.toner_level == 98
-    assert printer.page_counter == 5050
+    assert printer.serial_number == "BR123456"
+    assert printer.page_counter == 12345
+    assert printer.toner_levels == {"black": 81, "cyan": 72, "magenta": 64, "yellow": 57}
+    assert printer.toner_level == 57
+    assert printer.paper_status == "Pronta"
 
 
 def test_ldap_user_and_department_sync(db_session: Session):

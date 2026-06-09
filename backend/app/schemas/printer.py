@@ -22,6 +22,7 @@ class PrinterRead(BaseModel):
     is_active: bool
     ip_address: str | None
     toner_level: int | None
+    toner_levels: dict[str, int] | None
     paper_status: str | None
     serial_number: str | None
     page_counter: int | None

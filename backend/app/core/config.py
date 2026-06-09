@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     auto_create_users: bool = True
     auto_create_printers: bool = True
     safe_release_enabled: bool = True
+    snmp_community: str = "public"
+    snmp_timeout_seconds: float = 2.0
+    snmp_retries: int = 1
     initial_admin_username: str = "admin"
     initial_admin_password: str = "admin12345"
     initial_agent_username: str = "agent"

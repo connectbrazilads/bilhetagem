@@ -10,6 +10,7 @@ from app.services.quota_service import can_consume, get_or_create_current_quota
 
 
 def _resolve_user(db: Session, username: str, auto_create_users: bool) -> User:
+    username = _normalize_username(username)
     user = db.query(User).filter(User.username == username).first()
     if user:
         return user
@@ -19,6 +20,15 @@ def _resolve_user(db: Session, username: str, auto_create_users: bool) -> User:
     db.add(user)
     db.flush()
     return user
+
+
+def _normalize_username(username: str) -> str:
+    normalized = username.strip()
+    if "\\" in normalized:
+        normalized = normalized.rsplit("\\", 1)[-1]
+    if "@" in normalized:
+        normalized = normalized.split("@", 1)[0]
+    return normalized.strip().lower() or "unknown"
 
 
 def _resolve_printer(db: Session, printer_name: str, is_color: bool) -> Printer:
@@ -40,6 +50,26 @@ def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision
     user = _resolve_user(db, payload.username, sys_settings["auto_create_users"])
     printer = _resolve_printer(db, payload.printer_name, payload.is_color)
     quota = get_or_create_current_quota(db, user, payload.submitted_at)
+
+    if payload.external_job_id:
+        existing_job = (
+            db.query(PrintJob)
+            .filter(
+                PrintJob.printer_id == printer.id,
+                PrintJob.external_job_id == payload.external_job_id,
+            )
+            .order_by(PrintJob.id.desc())
+            .first()
+        )
+        if existing_job:
+            return PrintJobDecision(
+                job_id=existing_job.id,
+                status=existing_job.status,
+                authorized=existing_job.status in (JobStatus.authorized, JobStatus.pending_release, JobStatus.released),
+                remaining_pages=quota.remaining_pages,
+                remaining_balance=quota.remaining_balance,
+                reason=existing_job.reason,
+            )
 
     # Calculate print job cost
     cost = payload.pages * (printer.cost_color if payload.is_color else printer.cost_mono)

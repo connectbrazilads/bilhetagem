@@ -17,6 +17,7 @@ type PrinterRow = {
   is_active: boolean;
   ip_address: string | null;
   toner_level: number | null;
+  toner_levels: Record<string, number> | null;
   paper_status: string | null;
   serial_number: string | null;
   page_counter: number | null;
@@ -111,6 +112,37 @@ export default function PrintersPage() {
       is_active: printer.is_active,
       ip_address: printer.ip_address ?? "",
     });
+  }
+
+  function tonerEntries(printer: PrinterRow) {
+    return Object.entries(printer.toner_levels ?? {});
+  }
+
+  function tonerLabel(key: string) {
+    const labels: Record<string, string> = {
+      black: "Preto",
+      cyan: "Ciano",
+      magenta: "Magenta",
+      yellow: "Amarelo",
+    };
+    return labels[key] ?? key.replace(/_/g, " ");
+  }
+
+  function tonerBarColor(key: string, level: number) {
+    if (level <= 10) return "bg-red-500 animate-pulse";
+    if (level <= 30) return "bg-amber-400";
+    if (key === "cyan") return "bg-cyan-500";
+    if (key === "magenta") return "bg-fuchsia-500";
+    if (key === "yellow") return "bg-yellow-400";
+    if (key === "black") return "bg-neutral-800";
+    return "bg-emerald-500";
+  }
+
+  function tonerTextColor(level: number | null) {
+    if (level === null) return "text-muted-foreground";
+    if (level <= 10) return "text-red-600";
+    if (level <= 30) return "text-amber-500";
+    return "text-green-600";
   }
 
   return (
@@ -282,27 +314,36 @@ export default function PrintersPage() {
                 </td>
                 <td className="p-3">
                   {printer.ip_address ? (
-                    <div className="flex flex-col gap-1.5 w-32">
+                    <div className="flex flex-col gap-1.5 w-40">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-medium text-muted-foreground">Toner:</span>
-                        <span className={`font-bold ${
-                          (printer.toner_level ?? 0) <= 10 ? "text-red-600" :
-                          (printer.toner_level ?? 0) <= 30 ? "text-amber-500" : "text-green-600"
-                        }`}>
+                        <span className={`font-bold ${tonerTextColor(printer.toner_level)}`}>
                           {printer.toner_level !== null ? `${printer.toner_level}%` : "N/A"}
                         </span>
                       </div>
-                      {printer.toner_level !== null && (
+                      {tonerEntries(printer).length > 0 ? (
+                        <div className="grid gap-1">
+                          {tonerEntries(printer).map(([key, level]) => (
+                            <div key={key} className="grid grid-cols-[52px_1fr_32px] items-center gap-1 text-[10px]">
+                              <span className="truncate text-muted-foreground">{tonerLabel(key)}</span>
+                              <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+                                <div
+                                  className={`h-full transition-all duration-500 ${tonerBarColor(key, level)}`}
+                                  style={{ width: `${level}%` }}
+                                />
+                              </div>
+                              <span className="text-right font-medium">{level}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : printer.toner_level !== null ? (
                         <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">
                           <div
-                            className={`h-full transition-all duration-500 ${
-                              printer.toner_level <= 10 ? "bg-red-500 animate-pulse" :
-                              printer.toner_level <= 30 ? "bg-amber-400" : "bg-emerald-500"
-                            }`}
+                            className={`h-full transition-all duration-500 ${tonerBarColor("summary", printer.toner_level)}`}
                             style={{ width: `${printer.toner_level}%` }}
                           />
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   ) : (
                     <span className="text-muted-foreground text-xs">-</span>
@@ -436,24 +477,33 @@ export default function PrintersPage() {
                       <Droplets className="h-5 w-5 text-primary" />
                       <span className="text-sm font-semibold">Nível de Toner</span>
                     </div>
-                    <span className={`text-lg font-bold ${
-                      (selectedPrinter.toner_level ?? 0) <= 10 ? "text-red-600" :
-                      (selectedPrinter.toner_level ?? 0) <= 30 ? "text-amber-500" : "text-green-600"
-                    }`}>
+                    <span className={`text-lg font-bold ${tonerTextColor(selectedPrinter.toner_level)}`}>
                       {selectedPrinter.toner_level !== null ? `${selectedPrinter.toner_level}%` : "N/A"}
                     </span>
                   </div>
-                  {selectedPrinter.toner_level !== null && (
+                  {tonerEntries(selectedPrinter).length > 0 ? (
+                    <div className="grid gap-2">
+                      {tonerEntries(selectedPrinter).map(([key, level]) => (
+                        <div key={key} className="grid grid-cols-[72px_1fr_40px] items-center gap-2 text-xs">
+                          <span className="truncate font-medium text-muted-foreground">{tonerLabel(key)}</span>
+                          <div className="h-3 w-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+                            <div
+                              className={`h-full rounded-full transition-all duration-700 ${tonerBarColor(key, level)}`}
+                              style={{ width: `${level}%` }}
+                            />
+                          </div>
+                          <span className="text-right font-semibold">{level}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : selectedPrinter.toner_level !== null ? (
                     <div className="h-3 w-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">
                       <div
-                        className={`h-full rounded-full transition-all duration-700 ${
-                          selectedPrinter.toner_level <= 10 ? "bg-red-500" :
-                          selectedPrinter.toner_level <= 30 ? "bg-amber-400" : "bg-emerald-500"
-                        }`}
+                        className={`h-full rounded-full transition-all duration-700 ${tonerBarColor("summary", selectedPrinter.toner_level)}`}
                         style={{ width: `${selectedPrinter.toner_level}%` }}
                       />
                     </div>
-                  )}
+                  ) : null}
                   {(selectedPrinter.toner_level ?? 100) <= 10 && (
                     <div className="mt-2 flex items-center gap-1.5 text-xs text-red-600">
                       <AlertTriangle className="h-3.5 w-3.5" />

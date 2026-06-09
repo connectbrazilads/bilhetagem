@@ -56,3 +56,47 @@ def test_blocks_and_keeps_balance_when_quota_is_insufficient(db_session):
     assert decision.authorized is False
     assert decision.remaining_pages == 5
     assert quota.used_pages == 95
+
+
+def test_auto_creates_normalized_windows_user(db_session):
+    printer = Printer(name="Canon Recepcao", is_color=False)
+    db_session.add(printer)
+    db_session.commit()
+
+    decision = register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="EMPRESA\\MARIA.SILVA",
+            printer_name="Canon Recepcao",
+            pages=1,
+            is_color=False,
+            submitted_at=datetime(2026, 6, 8, tzinfo=timezone.utc),
+        ),
+    )
+
+    user = db_session.query(User).filter(User.username == "maria.silva").one()
+    assert decision.authorized is True
+    assert user.full_name == "maria.silva"
+
+
+def test_reuses_existing_spool_job(db_session):
+    user = User(username="ana", full_name="Ana", role=UserRole.user)
+    printer = Printer(name="Ricoh Fiscal", is_color=False)
+    db_session.add_all([user, printer])
+    db_session.flush()
+    db_session.add(Quota(user_id=user.id, year=2026, month=6, monthly_limit=100, used_pages=0))
+    db_session.commit()
+
+    payload = PrintJobCreate(
+        username="ana",
+        printer_name="Ricoh Fiscal",
+        pages=2,
+        is_color=False,
+        external_job_id="42",
+        submitted_at=datetime(2026, 6, 8, tzinfo=timezone.utc),
+    )
+
+    first = register_print_job(db_session, payload)
+    second = register_print_job(db_session, payload)
+
+    assert second.job_id == first.job_id

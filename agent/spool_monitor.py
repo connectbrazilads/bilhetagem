@@ -70,17 +70,36 @@ class SpoolMonitor:
                     continue
                 self._seen_jobs.add(key)
                 captured = self._capture_job(printer_name, raw_job)
-                decision = self.api_client.submit_job(captured)
+                job_id = raw_job.get("JobId")
+
+                if job_id is not None:
+                    logger.info("Pausando trabalho ate decisao do servidor: %s", key)
+                    win32print.SetJob(handle, job_id, 0, None, win32con.JOB_CONTROL_PAUSE)
+
+                try:
+                    decision = self.api_client.submit_job(captured)
+                except Exception:
+                    logger.exception("Falha ao registrar trabalho no servidor: %s", key)
+                    if self.config.cancel_blocked_jobs:
+                        self._cancel_job(handle, job_id)
+                    else:
+                        self._seen_jobs.discard(key)
+                    continue
                 
                 status = decision.get("status")
                 authorized = decision.get("authorized")
                 
                 if status == "pending_release":
-                    logger.info("Pausando trabalho para liberação segura: %s", key)
-                    win32print.SetJob(handle, raw_job.get("JobId"), 0, None, win32con.JOB_CONTROL_PAUSE)
-                    self._paused_jobs[key] = (printer_name, raw_job.get("JobId"))
+                    logger.info("Mantendo trabalho pausado para liberacao segura: %s", key)
+                    self._paused_jobs[key] = (printer_name, job_id)
                 elif not authorized and self.config.cancel_blocked_jobs:
-                    self._cancel_job(handle, raw_job.get("JobId"))
+                    self._cancel_job(handle, job_id)
+                elif not authorized:
+                    logger.warning("Trabalho nao autorizado mantido pausado: %s", key)
+                    self._paused_jobs[key] = (printer_name, job_id)
+                elif job_id is not None:
+                    logger.info("Servidor autorizou trabalho, retomando spooler: %s", key)
+                    win32print.SetJob(handle, job_id, 0, None, win32con.JOB_CONTROL_RESUME)
         finally:
             win32print.ClosePrinter(handle)
 

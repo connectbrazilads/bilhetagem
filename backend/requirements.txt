@@ -5,6 +5,7 @@ openpyxl==3.1.5
 passlib[bcrypt]==1.7.4
 psycopg[binary]==3.2.1
 pydantic-settings==2.4.0
+pysnmp==7.1.27
 pytest==8.3.2
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.9

@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, func
+from typing import Any
+
+from sqlalchemy import Boolean, DateTime, Integer, JSON, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -17,6 +19,7 @@ class Printer(Base):
     cost_color: Mapped[float] = mapped_column(default=0.25, nullable=False)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     toner_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    toner_levels: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     paper_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     serial_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
     page_counter: Mapped[int | None] = mapped_column(Integer, nullable=True)

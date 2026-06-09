@@ -11,6 +11,7 @@ def initialize_lite_database() -> None:
         return
 
     Base.metadata.create_all(bind=engine)
+    _ensure_lite_schema()
     db = SessionLocal()
     try:
         ensure_user(
@@ -30,3 +31,10 @@ def initialize_lite_database() -> None:
         db.commit()
     finally:
         db.close()
+
+
+def _ensure_lite_schema() -> None:
+    with engine.begin() as conn:
+        existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(printers)").fetchall()}
+        if "toner_levels" not in existing_columns:
+            conn.exec_driver_sql("ALTER TABLE printers ADD COLUMN toner_levels JSON")
