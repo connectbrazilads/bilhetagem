@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [autoCreateUsers, setAutoCreateUsers] = useState(true);
   const [blockingEnabled, setBlockingEnabled] = useState(true);
   const [showBalance, setShowBalance] = useState(true);
+  const [safeReleaseEnabled, setSafeReleaseEnabled] = useState(true);
 
   // LDAP configurations
   const [ldapServer, setLdapServer] = useState("ldap://localhost:389");
@@ -41,6 +42,7 @@ export default function SettingsPage() {
           setAutoCreateUsers(data.auto_create_users);
           setBlockingEnabled(data.blocking_enabled);
           setShowBalance(data.show_balance);
+          setSafeReleaseEnabled(data.safe_release_enabled);
         })
         .catch((err) => {
           console.error("Erro ao buscar configurações no servidor:", err);
@@ -83,7 +85,7 @@ export default function SettingsPage() {
           auto_create_users: autoCreateUsers,
           blocking_enabled: blockingEnabled,
           show_balance: showBalance,
-          safe_release_enabled: true
+          safe_release_enabled: safeReleaseEnabled
         })
       });
       setStatusMsg({ text: "Configurações salvas com sucesso no servidor!", type: "success" });
@@ -257,6 +259,18 @@ export default function SettingsPage() {
               />
               <label htmlFor="showBalance" className="text-sm font-medium cursor-pointer">
                 Exibir Saldo Mensal nas Telas (tabelas e formulários)
+              </label>
+            </div>
+            <div className="flex items-center gap-2.5 mt-2 py-1">
+              <input
+                type="checkbox"
+                id="safeRelease"
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                checked={safeReleaseEnabled}
+                onChange={(e) => setSafeReleaseEnabled(e.target.checked)}
+              />
+              <label htmlFor="safeRelease" className="text-sm font-medium cursor-pointer">
+                Habilitar Liberação Segura (Follow-Me) — impressões ficam em fila até serem liberadas
               </label>
             </div>
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Edit, Plus, Server, Activity, Hash, Info } from "lucide-react";
+import { Edit, Plus, Server, Activity, Hash, Info, X, Cpu, Droplets, FileText, Clock, AlertTriangle } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -35,6 +35,7 @@ export default function PrintersPage() {
   });
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [selectedPrinter, setSelectedPrinter] = useState<PrinterRow | null>(null);
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -246,7 +247,11 @@ export default function PrintersPage() {
           </thead>
           <tbody>
             {printers.map((printer) => (
-              <tr key={printer.id} className="border-t animate-fade-in hover:bg-muted/30">
+              <tr
+                key={printer.id}
+                className="border-t animate-fade-in hover:bg-muted/30 cursor-pointer"
+                onClick={() => setSelectedPrinter(printer)}
+              >
                 <td className="p-3">
                   <div className="font-semibold text-foreground">{printer.name}</div>
                   {printer.serial_number && (
@@ -329,15 +334,165 @@ export default function PrintersPage() {
                   </div>
                 </td>
                 <td className="p-3 text-right">
-                  <Button variant="ghost" onClick={() => startEdit(printer)} title="Editar" className="h-8 w-8 p-0">
-                    <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                  </Button>
+                  <div className="flex items-center justify-end gap-1">
+                    {printer.ip_address && (
+                      <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setSelectedPrinter(printer); }} title="Detalhes SNMP" className="h-8 w-8 p-0">
+                        <Info className="h-4 w-4 text-primary" />
+                      </Button>
+                    )}
+                    <Button variant="ghost" onClick={(e) => { e.stopPropagation(); startEdit(printer); }} title="Editar" className="h-8 w-8 p-0">
+                      <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </Surface>
+
+      {/* Printer Detail Modal */}
+      {selectedPrinter && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setSelectedPrinter(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary to-blue-700 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">{selectedPrinter.name}</h2>
+                {selectedPrinter.serial_number && (
+                  <p className="text-xs text-white/70 font-mono mt-0.5">S/N: {selectedPrinter.serial_number}</p>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedPrinter(null)}
+                className="text-white/80 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 grid gap-5">
+              {/* Status Row */}
+              <div className="flex items-center gap-3">
+                <div className={`h-3 w-3 rounded-full ${
+                  selectedPrinter.paper_status === "Pronta" ? "bg-green-500" :
+                  selectedPrinter.paper_status === "Toner Baixo" ? "bg-amber-500 animate-pulse" :
+                  "bg-red-500 animate-pulse"
+                }`} />
+                <span className="text-sm font-semibold">
+                  {selectedPrinter.paper_status || (selectedPrinter.ip_address ? "Sem dados" : "Sem monitoramento")}
+                </span>
+                {selectedPrinter.is_active ? (
+                  <span className="ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200">Ativa</span>
+                ) : (
+                  <span className="ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">Inativa</span>
+                )}
+              </div>
+
+              {/* Info Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
+                  <Server className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Endereço IP</p>
+                    <p className="text-sm font-mono font-medium">{selectedPrinter.ip_address || "—"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
+                  <Cpu className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Localização</p>
+                    <p className="text-sm font-medium">{selectedPrinter.location || "—"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
+                  <FileText className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Contador de Páginas</p>
+                    <p className="text-sm font-bold">{selectedPrinter.page_counter !== null ? selectedPrinter.page_counter.toLocaleString() : "—"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
+                  <Hash className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Número de Série</p>
+                    <p className="text-sm font-mono font-medium">{selectedPrinter.serial_number || "—"}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Toner Level */}
+              {selectedPrinter.ip_address && (
+                <div className="bg-muted/40 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Droplets className="h-5 w-5 text-primary" />
+                      <span className="text-sm font-semibold">Nível de Toner</span>
+                    </div>
+                    <span className={`text-lg font-bold ${
+                      (selectedPrinter.toner_level ?? 0) <= 10 ? "text-red-600" :
+                      (selectedPrinter.toner_level ?? 0) <= 30 ? "text-amber-500" : "text-green-600"
+                    }`}>
+                      {selectedPrinter.toner_level !== null ? `${selectedPrinter.toner_level}%` : "N/A"}
+                    </span>
+                  </div>
+                  {selectedPrinter.toner_level !== null && (
+                    <div className="h-3 w-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${
+                          selectedPrinter.toner_level <= 10 ? "bg-red-500" :
+                          selectedPrinter.toner_level <= 30 ? "bg-amber-400" : "bg-emerald-500"
+                        }`}
+                        style={{ width: `${selectedPrinter.toner_level}%` }}
+                      />
+                    </div>
+                  )}
+                  {(selectedPrinter.toner_level ?? 100) <= 10 && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-red-600">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      <span>Toner crítico! Substituição necessária em breve.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Costs */}
+              <div className="flex items-center justify-between text-sm border-t pt-3">
+                <span className="text-muted-foreground">Custo P&B / Cor:</span>
+                <span className="font-semibold">
+                  R$ {selectedPrinter.cost_mono.toFixed(2)} / R$ {selectedPrinter.cost_color.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Tipo:</span>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                  selectedPrinter.is_color ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-gray-100 text-gray-700 border border-gray-200"
+                }`}>
+                  {selectedPrinter.is_color ? "Suporta Colorido" : "Apenas P&B"}
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-muted/30 px-6 py-3 flex justify-end gap-2 border-t">
+              <Button variant="outline" onClick={() => { setSelectedPrinter(null); startEdit(selectedPrinter); }}>
+                <Edit className="h-4 w-4 mr-1.5" />
+                Editar
+              </Button>
+              <Button onClick={() => setSelectedPrinter(null)}>
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </ProtectedPage>
   );
 }
