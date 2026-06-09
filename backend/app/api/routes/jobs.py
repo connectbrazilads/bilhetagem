@@ -269,7 +269,7 @@ def get_agent_web_prints(
         db.query(PrintJob)
         .join(Printer)
         .filter(
-            PrintJob.status == JobStatus.released,
+            PrintJob.status.in_([JobStatus.released, JobStatus.authorized]),
             PrintJob.external_job_id.like("webprint_%"),
             ~PrintJob.external_job_id.like("webprint_printed_%")
         )

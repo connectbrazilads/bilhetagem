@@ -7,7 +7,7 @@ from app.core.deps import require_roles
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.repositories.printers import create_printer
-from app.schemas.printer import PrinterCreate, PrinterRead, PrinterUpdate
+from app.schemas.printer import PrinterCreate, PrinterRead, PrinterStatusUpdate, PrinterUpdate
 from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/printers", tags=["printers"])
@@ -65,6 +65,27 @@ def update_printer_endpoint(
         printer.ip_address = payload.ip_address if payload.ip_address.strip() != "" else None
         
     write_audit(db, action="printer_updated", entity="printers", entity_id=printer.id, actor_user_id=actor.id)
+    db.commit()
+    db.refresh(printer)
+    return printer
+
+
+@router.put("/{printer_id}/status", response_model=PrinterRead)
+def update_printer_status_endpoint(
+    printer_id: int,
+    payload: PrinterStatusUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin)),
+) -> Printer:
+    printer = db.query(Printer).filter(Printer.id == printer_id).first()
+    if not printer:
+        raise HTTPException(status_code=404, detail="Impressora nÃ£o encontrada")
+
+    printer.toner_level = payload.toner_level
+    printer.toner_levels = payload.toner_levels
+    printer.paper_status = payload.paper_status
+    printer.serial_number = payload.serial_number
+    printer.page_counter = payload.page_counter
     db.commit()
     db.refresh(printer)
     return printer

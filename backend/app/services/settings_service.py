@@ -1,7 +1,9 @@
 from typing import Any
 from sqlalchemy.orm import Session
+from app.models.print_job import JobStatus, PrintJob
 from app.models.system_setting import SystemSetting
 from app.core.config import settings
+from app.services.quota_service import get_or_create_current_quota
 
 
 def get_system_settings_dict(db: Session) -> dict[str, Any]:
@@ -24,6 +26,7 @@ def get_system_settings_dict(db: Session) -> dict[str, Any]:
 
 
 def update_system_settings(db: Session, updates: dict[str, Any]) -> dict[str, Any]:
+    disabling_safe_release = updates.get("safe_release_enabled") is False
     for key, val in updates.items():
         # Store booleans as "true"/"false" and other values as string
         str_val = str(val).lower() if isinstance(val, bool) else str(val)
@@ -33,5 +36,17 @@ def update_system_settings(db: Session, updates: dict[str, Any]) -> dict[str, An
             db.add(setting)
         else:
             setting.value = str_val
+    if disabling_safe_release:
+        release_pending_jobs(db)
     db.commit()
     return get_system_settings_dict(db)
+
+
+def release_pending_jobs(db: Session) -> None:
+    pending_jobs = db.query(PrintJob).filter(PrintJob.status == JobStatus.pending_release).all()
+    for job in pending_jobs:
+        quota = get_or_create_current_quota(db, job.user, job.submitted_at)
+        quota.used_pages += job.pages
+        quota.used_balance += job.cost
+        job.status = JobStatus.authorized
+        job.reason = "Liberado automaticamente ao desativar Follow-Me"

@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [username, setUsername] = useState<string | null>(null);
+  const [safeReleaseEnabled, setSafeReleaseEnabled] = useState(false);
 
   // Web Print states
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
@@ -88,10 +89,22 @@ export default function DashboardPage() {
     }
   }
 
+  async function loadSettings() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      const data = await apiFetch<{ safe_release_enabled: boolean }>("/settings", token);
+      setSafeReleaseEnabled(data.safe_release_enabled);
+    } catch {
+      setSafeReleaseEnabled(false);
+    }
+  }
+
   useEffect(() => {
     loadMetrics();
     loadJobs();
     loadPrinters();
+    loadSettings();
     
     // Poll for jobs periodically to update queue
     const interval = setInterval(() => {
@@ -191,7 +204,7 @@ export default function DashboardPage() {
 
   // Filter pending release jobs for the current user
   const pendingJobs = jobs.filter(
-    (job) => job.status === "pending_release" && (username === "admin" || job.username === username)
+    (job) => safeReleaseEnabled && job.status === "pending_release" && (username === "admin" || job.username === username)
   );
 
   const selectedPrinter = printers.find(p => p.id.toString() === selectedPrinterId);

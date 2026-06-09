@@ -12,7 +12,8 @@ app = FastAPI(title=settings.app_name, version="0.1.0")
 @app.on_event("startup")
 def startup() -> None:
     initialize_lite_database()
-    start_snmp_poller()
+    if settings.backend_snmp_poller_enabled:
+        start_snmp_poller()
 
 app.add_middleware(
     CORSMiddleware,

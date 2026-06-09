@@ -39,3 +39,11 @@ class PrinterUpdate(BaseModel):
     cost_color: float | None = None
     is_active: bool | None = None
     ip_address: str | None = Field(default=None, max_length=45)
+
+
+class PrinterStatusUpdate(BaseModel):
+    toner_level: int | None = Field(default=None, ge=0, le=100)
+    toner_levels: dict[str, int] | None = None
+    paper_status: str | None = Field(default=None, max_length=50)
+    serial_number: str | None = Field(default=None, max_length=80)
+    page_counter: int | None = Field(default=None, ge=0)

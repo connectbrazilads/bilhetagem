@@ -47,6 +47,32 @@ class AgentConfig:
             file_config.get("PRINTBILLING_POLL_INTERVAL", "5")
         )
     )
+    snmp_poll_interval_seconds: int = int(
+        os.getenv(
+            "PRINTBILLING_SNMP_POLL_INTERVAL",
+            file_config.get("PRINTBILLING_SNMP_POLL_INTERVAL", "60")
+        )
+    )
+    snmp_community: str = os.getenv(
+        "PRINTBILLING_SNMP_COMMUNITY",
+        file_config.get("PRINTBILLING_SNMP_COMMUNITY", "public")
+    )
+    snmp_timeout_seconds: float = float(
+        os.getenv(
+            "PRINTBILLING_SNMP_TIMEOUT_SECONDS",
+            file_config.get("PRINTBILLING_SNMP_TIMEOUT_SECONDS", "2")
+        )
+    )
+    snmp_retries: int = int(
+        os.getenv(
+            "PRINTBILLING_SNMP_RETRIES",
+            file_config.get("PRINTBILLING_SNMP_RETRIES", "1")
+        )
+    )
+    default_username: str | None = os.getenv(
+        "PRINTBILLING_DEFAULT_USERNAME",
+        file_config.get("PRINTBILLING_DEFAULT_USERNAME")
+    ) or None
     cancel_blocked_jobs: bool = str(
         os.getenv(
             "PRINTBILLING_CANCEL_BLOCKED",

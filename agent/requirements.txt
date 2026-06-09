@@ -1,3 +1,4 @@
 pywin32==306
+pysnmp==7.1.27
 requests==2.32.3
 tenacity==9.0.0

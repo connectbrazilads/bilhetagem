@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from api_client import BillingApiClient, CapturedPrintJob
 from config import AgentConfig, config
+from snmp_probe import fetch_snmp_status
 
 try:
     import win32con
@@ -34,7 +35,8 @@ class SpoolMonitor:
         self.config = agent_config
         self.sleep = sleep
         self._seen_jobs: set[str] = set()
-        self._paused_jobs: dict[str, tuple[str, int]] = {}
+        self._paused_jobs: dict[str, tuple[str, int | None]] = {}
+        self._last_snmp_poll = 0.0
 
     def run_forever(self, should_stop: Callable[[], bool] | None = None) -> None:
         should_stop = should_stop or (lambda: False)
@@ -53,6 +55,7 @@ class SpoolMonitor:
                 self._process_web_prints()
             except Exception:
                 logger.exception("Falha ao processar impressões web")
+            self._process_printer_statuses_if_due()
             self.sleep(self.config.poll_interval_seconds)
 
     def _enum_printers(self) -> Iterable[str]:
@@ -138,7 +141,7 @@ class SpoolMonitor:
         devmode = raw_job.get("pDevMode")
         is_color = bool(getattr(devmode, "Color", 1) == 2) if devmode else False
         # JOB_INFO_2 pointer fields use 'p' prefix (pUserName, pDocument, etc.)
-        username = raw_job.get("pUserName") or raw_job.get("UserName") or "unknown"
+        username = self._extract_username(raw_job)
         logger.debug("Job fields: %s", list(raw_job.keys()))
         logger.info("Capturado job de '%s' na impressora '%s' (%d pags)", username, printer_name, max(int(pages), 1))
         return CapturedPrintJob(
@@ -150,6 +153,41 @@ class SpoolMonitor:
             document_name=raw_job.get("pDocument"),
             submitted_at=datetime.now(timezone.utc),
         )
+
+    def _extract_username(self, raw_job: dict) -> str:
+        candidate_fields = ("pUserName", "UserName", "pNotifyName", "NotifyName", "Owner")
+        for field in candidate_fields:
+            username = self._clean_username(raw_job.get(field))
+            if username:
+                return username
+
+        configured = self._clean_username(self.config.default_username)
+        if configured:
+            return configured
+
+        for env_name in ("USERNAME", "USERDOMAIN"):
+            username = self._clean_username(os.getenv(env_name))
+            if username and username.lower() not in {"system", "localsystem"}:
+                return username
+
+        logger.warning(
+            "Nao foi possivel identificar usuario do job. Campos disponiveis: %s",
+            {field: raw_job.get(field) for field in candidate_fields if raw_job.get(field)}
+        )
+        return "unknown"
+
+    @staticmethod
+    def _clean_username(value: object) -> str | None:
+        if value is None:
+            return None
+        username = str(value).strip()
+        if not username or username.lower() in {"none", "unknown"}:
+            return None
+        if "\\" in username:
+            username = username.rsplit("\\", 1)[-1]
+        if "@" in username:
+            username = username.split("@", 1)[0]
+        return username.strip() or None
 
     def _cancel_job(self, printer_handle, job_id: int | None) -> None:
         if job_id is None:
@@ -205,3 +243,32 @@ class SpoolMonitor:
                         os.remove(temp_path)
                     except Exception:
                         pass
+
+    def _process_printer_statuses_if_due(self) -> None:
+        now = time.monotonic()
+        if now - self._last_snmp_poll < self.config.snmp_poll_interval_seconds:
+            return
+        self._last_snmp_poll = now
+
+        try:
+            printers = self.api_client.get_printers()
+        except Exception:
+            logger.exception("Falha ao buscar impressoras para monitoramento SNMP local")
+            return
+
+        for printer in printers:
+            printer_id = printer.get("id")
+            ip_address = printer.get("ip_address")
+            if not printer_id or not ip_address:
+                continue
+            try:
+                status = fetch_snmp_status(ip_address, self.config)
+                self.api_client.update_printer_status(printer_id, status.as_payload())
+                logger.info("Status SNMP atualizado para impressora %s (%s)", printer.get("name"), ip_address)
+            except Exception as exc:
+                logger.warning(
+                    "Falha ao consultar SNMP local da impressora %s (%s): %s",
+                    printer.get("name"),
+                    ip_address,
+                    exc,
+                )
