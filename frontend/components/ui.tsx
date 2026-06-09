@@ -5,14 +5,14 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        outline: "border bg-background hover:bg-muted",
+        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
+        outline: "border bg-card hover:bg-muted",
         ghost: "hover:bg-muted",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
       }
     },
     defaultVariants: {
@@ -40,7 +40,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     <input
       ref={ref}
       className={cn(
-        "h-9 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        "h-9 w-full rounded-md border bg-white px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20",
         className
       )}
       {...props}
@@ -56,5 +56,5 @@ type SurfaceProps<T extends React.ElementType> = {
 
 export function Surface<T extends React.ElementType = "div">({ as, className, ...props }: SurfaceProps<T>) {
   const Comp = as ?? "div";
-  return <Comp className={cn("rounded-md border bg-card text-card-foreground shadow-sm", className)} {...props} />;
+  return <Comp className={cn("rounded-lg border bg-card text-card-foreground shadow-sm shadow-slate-200/60", className)} {...props} />;
 }

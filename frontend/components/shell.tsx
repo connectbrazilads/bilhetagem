@@ -19,6 +19,7 @@ const navItems = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const activeItem = navItems.find((item) => item.href === pathname);
 
   function logout() {
     localStorage.removeItem("token");
@@ -26,19 +27,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen">
-      <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r bg-white md:block">
-        <div className="flex h-14 items-center border-b px-4 font-semibold">PrintBilling</div>
+    <div className="min-h-screen bg-background">
+      <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r border-slate-900/10 bg-slate-950 text-white md:block">
+        <div className="flex h-16 items-center gap-3 border-b border-white/10 px-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-white">PB</div>
+          <div>
+            <div className="text-sm font-semibold">PrintBilling</div>
+            <div className="text-xs text-slate-400">Controle de impressao</div>
+          </div>
+        </div>
         <nav className="space-y-1 p-3">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const active = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex h-9 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
-                  pathname === item.href && "bg-muted text-foreground"
+                  "flex h-10 items-center gap-3 rounded-md px-3 text-sm text-slate-300 transition-colors hover:bg-white/10 hover:text-white",
+                  active && "bg-white text-slate-950 shadow-sm hover:bg-white hover:text-slate-950"
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -49,14 +57,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
       <main className="md:pl-64">
-        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-white px-4">
-          <div className="text-sm font-medium">Bilhetagem de Impressao</div>
-          <Button variant="ghost" onClick={logout} title="Sair">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-white/90 px-4 backdrop-blur md:px-6">
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bilhetagem de Impressao</div>
+            <div className="text-sm font-semibold">{activeItem?.label ?? "Painel"}</div>
+          </div>
+          <Button variant="outline" onClick={logout} title="Sair">
             <LogOut className="h-4 w-4" />
             Sair
           </Button>
         </header>
-        <div className="mx-auto max-w-7xl p-4 md:p-6">{children}</div>
+        <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">{children}</div>
       </main>
     </div>
   );

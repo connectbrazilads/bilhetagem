@@ -3,19 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --background: 210 25% 98%;
-  --foreground: 220 26% 14%;
+  --background: 210 24% 96%;
+  --foreground: 220 32% 12%;
   --card: 0 0% 100%;
-  --card-foreground: 220 26% 14%;
-  --primary: 204 88% 35%;
+  --card-foreground: 220 32% 12%;
+  --primary: 202 86% 32%;
   --primary-foreground: 0 0% 100%;
-  --muted: 210 30% 94%;
-  --muted-foreground: 216 12% 42%;
-  --destructive: 0 72% 46%;
+  --muted: 210 22% 92%;
+  --muted-foreground: 216 14% 38%;
+  --destructive: 0 72% 48%;
   --destructive-foreground: 0 0% 100%;
-  --border: 215 20% 84%;
-  --input: 215 20% 84%;
-  --ring: 204 88% 35%;
+  --border: 214 22% 84%;
+  --input: 214 22% 84%;
+  --ring: 202 86% 32%;
 }
 
 * {
@@ -25,4 +25,14 @@
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.18);
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
 }
