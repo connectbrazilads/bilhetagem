@@ -33,7 +33,7 @@ PrintBillingAgent.exe stop >nul 2>&1
 PrintBillingAgent.exe remove >nul 2>&1
 
 echo [2/3] Instalando servico como Inicializacao Automatica...
-PrintBillingAgent.exe install --startup auto
+PrintBillingAgent.exe --startup auto install
 if %errorlevel% neq 0 (
     echo [ERRO] Falha ao instalar o servico.
     pause
