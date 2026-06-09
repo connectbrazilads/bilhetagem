@@ -118,8 +118,12 @@ class SpoolMonitor:
         pages = raw_job.get("TotalPages") or raw_job.get("PagesPrinted") or 1
         devmode = raw_job.get("pDevMode")
         is_color = bool(getattr(devmode, "Color", 1) == 2) if devmode else False
+        # JOB_INFO_2 pointer fields use 'p' prefix (pUserName, pDocument, etc.)
+        username = raw_job.get("pUserName") or raw_job.get("UserName") or "unknown"
+        logger.debug("Job fields: %s", list(raw_job.keys()))
+        logger.info("Capturado job de '%s' na impressora '%s' (%d pags)", username, printer_name, max(int(pages), 1))
         return CapturedPrintJob(
-            username=raw_job.get("UserName") or "unknown",
+            username=username,
             printer_name=printer_name,
             pages=max(int(pages), 1),
             is_color=is_color,
