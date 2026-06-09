@@ -1,0 +1,55 @@
+# Sistema de Bilhetagem de Impressao
+
+MVP funcional para controle de impressoes, cotas mensais, bloqueio por saldo, dashboards e relatorios.
+
+## Componentes
+
+- `backend`: FastAPI, SQLAlchemy, Alembic, PostgreSQL, JWT e bcrypt.
+- `frontend`: Next.js, TypeScript, Tailwind e componentes no estilo shadcn/ui.
+- `agent`: servico Windows em Python/pywin32 para monitorar o Print Spooler.
+
+## Executar em desenvolvimento com Docker
+
+```powershell
+docker compose up --build
+```
+
+Servicos:
+
+- Frontend: `http://localhost:3000`
+- Backend/API docs: `http://localhost:8000/docs`
+- PostgreSQL: `localhost:5432`
+
+Credenciais iniciais do ambiente local:
+
+- Admin: `admin` / `admin12345`
+- Agente: `agent` / `agent12345`
+
+Altere essas senhas antes de qualquer uso fora de desenvolvimento.
+
+## Executar testes do backend
+
+```powershell
+cd backend
+python -m venv .venv
+.\\.venv\\Scripts\\pip install -r requirements.txt
+.\\.venv\\Scripts\\pytest
+```
+
+## Endpoints principais
+
+- `POST /auth/login`
+- `GET /users`, `POST /users`
+- `GET /printers`, `POST /printers`
+- `GET /jobs`, `POST /jobs`
+- `GET /reports`, `GET /reports/export`
+- `GET /quotas`, `PUT /quotas/{id}`
+
+## Fluxo de cota
+
+1. O agente captura o trabalho no spooler.
+2. O agente envia `username`, `printer_name`, `pages`, `is_color` e metadados para `POST /jobs`.
+3. O backend localiza ou cria usuario/impressora conforme configuracao.
+4. O backend bloqueia a linha de cota mensal, valida saldo e registra o trabalho.
+5. Se autorizado, debita paginas. Se bloqueado, grava tentativa e retorna `authorized=false`.
+6. O agente cancela o trabalho no spooler quando `PRINTBILLING_CANCEL_BLOCKED=true`.

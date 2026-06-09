@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+node_modules/
+.next/
+dist/
+build/
+*.pyc
+*.log
+postgres_data/

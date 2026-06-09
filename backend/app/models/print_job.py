@@ -1,0 +1,36 @@
+import enum
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.base import Base
+
+
+class JobStatus(str, enum.Enum):
+    authorized = "authorized"
+    blocked = "blocked"
+    pending_release = "pending_release"
+    released = "released"
+    cancelled = "cancelled"
+
+
+class PrintJob(Base):
+    __tablename__ = "print_jobs"
+    __table_args__ = (Index("ix_print_jobs_submitted_at", "submitted_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    printer_id: Mapped[int] = mapped_column(ForeignKey("printers.id"), nullable=False)
+    external_job_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    document_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pages: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_color: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    cost: Mapped[float] = mapped_column(default=0.0, nullable=False)
+    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user = relationship("User", back_populates="print_jobs")
+    printer = relationship("Printer", back_populates="print_jobs")

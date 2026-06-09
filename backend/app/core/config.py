@@ -1,0 +1,32 @@
+from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    app_name: str = "Sistema de Bilhetagem"
+    environment: str = "development"
+    database_url: str = "postgresql+psycopg://printbilling:printbilling@localhost:5432/printbilling"
+    secret_key: str = Field(default="change-me-in-production", min_length=16)
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+    cors_origins: list[str] = ["http://localhost:3000"]
+    default_monthly_quota: int = 500
+    auto_create_users: bool = True
+    auto_create_printers: bool = True
+    safe_release_enabled: bool = True
+    initial_admin_username: str = "admin"
+    initial_admin_password: str = "admin12345"
+    initial_agent_username: str = "agent"
+    initial_agent_password: str = "agent12345"
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

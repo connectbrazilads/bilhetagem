@@ -1,0 +1,324 @@
+from datetime import datetime
+import re
+import os
+import shutil
+import time
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.deps import get_current_user, require_roles
+from app.models.department import Department
+from app.models.print_job import PrintJob
+from app.models.printer import Printer
+from app.models.user import User, UserRole
+from app.schemas.job import PrintJobCreate, PrintJobDecision, PrintJobRead
+from app.services.print_job_service import register_print_job
+
+router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+@router.get("", response_model=list[PrintJobRead])
+def list_jobs(
+    user_id: int | None = Query(default=None),
+    department_id: int | None = Query(default=None),
+    printer_id: int | None = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+) -> list[PrintJobRead]:
+    query = db.query(PrintJob).join(User).join(Printer)
+    if user_id:
+        query = query.filter(PrintJob.user_id == user_id)
+    if department_id:
+        query = query.outerjoin(Department).filter(User.department_id == department_id)
+    if printer_id:
+        query = query.filter(PrintJob.printer_id == printer_id)
+    if date_from:
+        query = query.filter(PrintJob.submitted_at >= date_from)
+    if date_to:
+        query = query.filter(PrintJob.submitted_at <= date_to)
+
+    jobs = query.order_by(PrintJob.submitted_at.desc()).limit(500).all()
+    return [
+        PrintJobRead(
+            id=job.id,
+            username=job.user.username,
+            printer_name=job.printer.name,
+            pages=job.pages,
+            is_color=job.is_color,
+            status=job.status,
+            reason=job.reason,
+            submitted_at=job.submitted_at,
+            document_name=job.document_name,
+        )
+        for job in jobs
+    ]
+
+
+@router.post("", response_model=PrintJobDecision)
+def create_job(
+    payload: PrintJobCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> PrintJobDecision:
+    try:
+        return register_print_job(db, payload)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/agent-actions")
+def get_agent_actions(
+    job_keys: str = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> dict[str, str]:
+    actions = {}
+    if not job_keys:
+        return actions
+        
+    keys = job_keys.split(",")
+    for key in keys:
+        if ":" not in key:
+            continue
+        printer_name, ext_id = key.split(":", 1)
+        job = (
+            db.query(PrintJob)
+            .join(Printer)
+            .filter(Printer.name == printer_name, PrintJob.external_job_id == ext_id)
+            .order_by(PrintJob.id.desc())
+            .first()
+        )
+        if not job:
+            actions[key] = "delete"
+        elif job.status in (JobStatus.released, JobStatus.authorized):
+            actions[key] = "resume"
+        elif job.status in (JobStatus.cancelled, JobStatus.blocked):
+            actions[key] = "delete"
+        else:
+            actions[key] = "hold"
+            
+    return actions
+
+
+@router.post("/{job_id}/release", response_model=PrintJobDecision)
+def release_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PrintJobDecision:
+    job = db.query(PrintJob).filter(PrintJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Trabalho não encontrado")
+        
+    if job.user_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Permissão negada")
+        
+    if job.status != JobStatus.pending_release:
+        raise HTTPException(status_code=400, detail="Trabalho não está pendente de liberação")
+        
+    from app.services.quota_service import get_or_create_current_quota, can_consume
+    quota = get_or_create_current_quota(db, job.user, job.submitted_at)
+    
+    authorized_pages = can_consume(quota, job.pages)
+    authorized_balance = quota.remaining_balance >= job.cost
+    
+    if not authorized_pages or not authorized_balance:
+        job.status = JobStatus.blocked
+        job.reason = "Cota ou saldo insuficientes no momento da liberação"
+        db.commit()
+        db.refresh(job)
+        return PrintJobDecision(
+            job_id=job.id,
+            status=job.status,
+            authorized=False,
+            remaining_pages=quota.remaining_pages,
+            remaining_balance=quota.remaining_balance,
+            reason=job.reason,
+        )
+        
+    quota.used_pages += job.pages
+    quota.used_balance += job.cost
+    job.status = JobStatus.released
+    db.commit()
+    db.refresh(job)
+    return PrintJobDecision(
+        job_id=job.id,
+        status=job.status,
+        authorized=True,
+        remaining_pages=quota.remaining_pages,
+        remaining_balance=quota.remaining_balance,
+    )
+
+
+@router.post("/{job_id}/cancel")
+def cancel_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    job = db.query(PrintJob).filter(PrintJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Trabalho não encontrado")
+        
+    if job.user_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Permissão negada")
+        
+    if job.status != JobStatus.pending_release:
+        raise HTTPException(status_code=400, detail="Trabalho não está pendente de liberação")
+        
+    job.status = JobStatus.cancelled
+    job.reason = "Cancelado pelo usuário"
+    db.commit()
+    return {"status": "cancelled", "job_id": job.id}
+
+
+# --- Web Print Support ---
+
+def get_pdf_page_count(file_content: bytes) -> int:
+    try:
+        pages = len(re.findall(rb'/Type\s*/Page\b', file_content))
+        if pages > 0:
+            return pages
+        matches = re.findall(rb'/Count\s+(\d+)', file_content)
+        if matches:
+            return max(int(m) for m in matches)
+    except Exception:
+        pass
+    return 1
+
+
+@router.post("/web-print", response_model=PrintJobDecision)
+def web_print_endpoint(
+    file: UploadFile = File(...),
+    printer_id: int = Form(...),
+    is_color: bool = Form(default=False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PrintJobDecision:
+    # 1. Resolve printer
+    printer = db.query(Printer).filter(Printer.id == printer_id).first()
+    if not printer:
+        raise HTTPException(status_code=404, detail="Impressora não encontrada")
+        
+    # 2. Read PDF contents to temp location and parse page count
+    try:
+        file_content = file.file.read()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Erro ao ler arquivo enviado") from exc
+        
+    page_count = get_pdf_page_count(file_content)
+    
+    # 3. Create temp file inside uploads folder to preserve data
+    uploads_dir = Path("uploads")
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Register the print job using the service
+    payload = PrintJobCreate(
+        username=current_user.username,
+        printer_name=printer.name,
+        pages=page_count,
+        is_color=is_color,
+        external_job_id="webprint_pending",
+        document_name=file.filename,
+        submitted_at=datetime.now(timezone.utc),
+    )
+    
+    try:
+        decision = register_print_job(db, payload)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        
+    # If job is created and not blocked, save the actual file using job_id
+    if decision.authorized or decision.status == JobStatus.pending_release:
+        file_path = uploads_dir / f"webprint_{decision.job_id}.pdf"
+        try:
+            with open(file_path, "wb") as f:
+                f.write(file_content)
+            
+            # Update the external_job_id to map to the file
+            job = db.query(PrintJob).filter(PrintJob.id == decision.job_id).first()
+            if job:
+                job.external_job_id = f"webprint_{decision.job_id}"
+                db.commit()
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="Erro ao salvar o arquivo no servidor") from exc
+    return decision
+
+
+@router.get("/agent-web-prints")
+def get_agent_web_prints(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[dict]:
+    # Query all released web-prints that are not yet printed
+    # Web print jobs have external_job_id pattern: webprint_{job_id}
+    jobs = (
+        db.query(PrintJob)
+        .join(Printer)
+        .filter(
+            PrintJob.status == JobStatus.released,
+            PrintJob.external_job_id.like("webprint_%"),
+            ~PrintJob.external_job_id.like("webprint_printed_%")
+        )
+        .all()
+    )
+    return [
+        {
+            "id": job.id,
+            "printer_name": job.printer.name,
+            "filename": job.document_name,
+            "download_url": f"/jobs/{job.id}/download",
+            "is_color": job.is_color,
+            "pages": job.pages,
+        }
+        for job in jobs
+    ]
+
+
+@router.get("/{job_id}/download")
+def download_web_print_file(
+    job_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> FileResponse:
+    job = db.query(PrintJob).filter(PrintJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Trabalho de impressão não encontrado")
+        
+    file_path = Path("uploads") / f"webprint_{job.id}.pdf"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Arquivo correspondente não encontrado")
+        
+    return FileResponse(
+        path=str(file_path),
+        media_type="application/pdf",
+        filename=job.document_name or f"webprint_{job.id}.pdf"
+    )
+
+
+@router.post("/{job_id}/confirm-web-printed")
+def confirm_web_printed(
+    job_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> dict:
+    job = db.query(PrintJob).filter(PrintJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Trabalho não encontrado")
+        
+    # Mark it as printed by renaming the external_job_id
+    if job.external_job_id and job.external_job_id.startswith("webprint_") and not job.external_job_id.startswith("webprint_printed_"):
+        job.external_job_id = f"webprint_printed_{job.id}"
+        db.commit()
+        return {"success": True, "message": "Impressão confirmada"}
+        
+    return {"success": False, "message": "Trabalho não é uma impressão web pendente"}

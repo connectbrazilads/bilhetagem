@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-printbilling}
+      POSTGRES_USER: ${POSTGRES_USER:-printbilling}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-printbilling}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U printbilling -d printbilling"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-printbilling}:${POSTGRES_PASSWORD:-printbilling}@postgres:5432/${POSTGRES_DB:-printbilling}
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret-in-production-please}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
+      INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:-admin}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-admin12345}
+      INITIAL_AGENT_USERNAME: ${INITIAL_AGENT_USERNAME:-agent}
+      INITIAL_AGENT_PASSWORD: ${INITIAL_AGENT_PASSWORD:-agent12345}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
