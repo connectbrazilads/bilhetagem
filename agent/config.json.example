@@ -1,0 +1,7 @@
+{
+  "PRINTBILLING_API_URL": "https://multiatendimento-backend-bilhetagem.oi0gat.easypanel.host",
+  "PRINTBILLING_AGENT_USER": "agent",
+  "PRINTBILLING_AGENT_PASSWORD": "agent12345",
+  "PRINTBILLING_CANCEL_BLOCKED": true,
+  "PRINTBILLING_POLL_INTERVAL": 5
+}
