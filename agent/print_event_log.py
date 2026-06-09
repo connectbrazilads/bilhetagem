@@ -87,15 +87,14 @@ class PrintEventLogReader:
             if created is not None and created.attrib.get("SystemTime"):
                 submitted_at = self._parse_windows_datetime(created.attrib["SystemTime"])
 
-            data_nodes = root.findall("./e:EventData/e:Data", namespaces=ns)
-            values = [(node.attrib.get("Name") or f"Param{index + 1}", node.text or "") for index, node in enumerate(data_nodes)]
+            values = self._event_values(root, ns)
             by_name = {name: value for name, value in values}
             ordered = [value for _, value in values]
 
             document_name = self._first_value(by_name, ordered, ("Document", "Param1", "Param2"), (0, 1))
             username = self._clean_username(self._first_value(by_name, ordered, ("User", "Owner", "Param2", "Param3"), (1, 2)))
             printer_name = self._first_value(by_name, ordered, ("Printer", "PrinterName", "Param3", "Param4"), (2, 3))
-            pages_text = self._first_value(by_name, ordered, ("Pages", "PagesPrinted", "Param8", "Param7"), (7, 6))
+            pages_text = self._first_value(by_name, ordered, ("Pages", "PagesPrinted", "Param6", "Param7", "Param8"), (5, 6, 7))
             pages = max(int(pages_text), 1) if pages_text and str(pages_text).isdigit() else 1
 
             if not username:
@@ -129,6 +128,29 @@ class PrintEventLogReader:
         except Exception:
             logger.exception("Falha ao interpretar evento do PrintService")
             return None
+
+    def _event_values(self, root: ElementTree.Element, ns: dict[str, str]) -> list[tuple[str, str]]:
+        event_data_nodes = root.findall("./e:EventData/e:Data", namespaces=ns)
+        if event_data_nodes:
+            return [
+                (node.attrib.get("Name") or f"Param{index + 1}", node.text or "")
+                for index, node in enumerate(event_data_nodes)
+            ]
+
+        user_data = root.find("./e:UserData", namespaces=ns)
+        if user_data is None:
+            return []
+
+        values: list[tuple[str, str]] = []
+        for node in user_data.iter():
+            if list(node):
+                continue
+            text = (node.text or "").strip()
+            if not text:
+                continue
+            tag = node.tag.rsplit("}", 1)[-1]
+            values.append((tag, text))
+        return values
 
     @staticmethod
     def _parse_windows_datetime(value: str) -> datetime:
