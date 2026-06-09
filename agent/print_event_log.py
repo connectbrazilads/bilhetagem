@@ -83,7 +83,7 @@ class PrintEventLogReader:
             created = root.find("./e:System/e:TimeCreated", namespaces=ns)
             submitted_at = datetime.now(timezone.utc)
             if created is not None and created.attrib.get("SystemTime"):
-                submitted_at = datetime.fromisoformat(created.attrib["SystemTime"].replace("Z", "+00:00"))
+                submitted_at = self._parse_windows_datetime(created.attrib["SystemTime"])
 
             data_nodes = root.findall("./e:EventData/e:Data", namespaces=ns)
             values = [(node.attrib.get("Name") or f"Param{index + 1}", node.text or "") for index, node in enumerate(data_nodes)]
@@ -115,6 +115,23 @@ class PrintEventLogReader:
         except Exception:
             logger.exception("Falha ao interpretar evento do PrintService")
             return None
+
+    @staticmethod
+    def _parse_windows_datetime(value: str) -> datetime:
+        normalized = value.strip()
+        if normalized.endswith("Z"):
+            normalized = f"{normalized[:-1]}+00:00"
+        if "." in normalized:
+            prefix, suffix = normalized.split(".", 1)
+            offset = ""
+            fraction = suffix
+            for marker in ("+", "-"):
+                if marker in suffix:
+                    fraction, offset_part = suffix.split(marker, 1)
+                    offset = f"{marker}{offset_part}"
+                    break
+            normalized = f"{prefix}.{fraction[:6].ljust(6, '0')}{offset}"
+        return datetime.fromisoformat(normalized)
 
     @staticmethod
     def _first_value(by_name: dict[str, str], ordered: list[str], names: tuple[str, ...], indexes: tuple[int, ...]) -> str | None:
