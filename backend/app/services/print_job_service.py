@@ -50,6 +50,7 @@ def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision
     user = _resolve_user(db, payload.username, sys_settings["auto_create_users"])
     printer = _resolve_printer(db, payload.printer_name, payload.is_color)
     quota = get_or_create_current_quota(db, user, payload.submitted_at)
+    is_print_event_log_job = bool(payload.external_job_id and payload.external_job_id.startswith("eventlog:"))
 
     if payload.external_job_id:
         existing_job = (
@@ -105,7 +106,7 @@ def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision
         else:
             reason = "Saldo mensal insuficiente (fila de liberação inclusa)"
     else:
-        if sys_settings["safe_release_enabled"]:
+        if sys_settings["safe_release_enabled"] and not is_print_event_log_job:
             status = JobStatus.pending_release
         else:
             status = JobStatus.authorized

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from api_client import BillingApiClient, CapturedPrintJob
 from config import AgentConfig, config
+from print_event_log import PrintEventLogReader
 from snmp_probe import fetch_snmp_status
 
 try:
@@ -37,6 +38,7 @@ class SpoolMonitor:
         self._seen_jobs: set[str] = set()
         self._paused_jobs: dict[str, tuple[str, int | None]] = {}
         self._last_snmp_poll = 0.0
+        self._event_log_reader = PrintEventLogReader()
 
     def run_forever(self, should_stop: Callable[[], bool] | None = None) -> None:
         should_stop = should_stop or (lambda: False)
@@ -55,6 +57,10 @@ class SpoolMonitor:
                 self._process_web_prints()
             except Exception:
                 logger.exception("Falha ao processar impressões web")
+            try:
+                self._process_print_event_log()
+            except Exception:
+                logger.exception("Falha ao processar Event Log de impressao")
             self._process_printer_statuses_if_due()
             self.sleep(self.config.poll_interval_seconds)
 
@@ -320,3 +326,22 @@ class SpoolMonitor:
                     ip_address,
                     exc,
                 )
+
+    def _process_print_event_log(self) -> None:
+        if not self.config.use_print_event_log:
+            return
+
+        events = self._event_log_reader.read_new_printed_jobs()
+        for event in events:
+            try:
+                decision = self.api_client.submit_job(event.job)
+                logger.info(
+                    "Evento PrintService registrado: record_id=%s usuario=%s impressora=%s paginas=%s status=%s",
+                    event.record_id,
+                    event.job.username,
+                    event.job.printer_name,
+                    event.job.pages,
+                    decision.get("status"),
+                )
+            except Exception:
+                logger.exception("Falha ao enviar evento PrintService record_id=%s para API", event.record_id)

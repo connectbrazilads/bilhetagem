@@ -28,11 +28,14 @@ pause
 exit /b
 
 :config_exists
-echo [1/3] Parando servico antigo (se existir)...
+echo [1/4] Habilitando log operacional de impressao do Windows...
+wevtutil sl Microsoft-Windows-PrintService/Operational /e:true >nul 2>&1
+
+echo [2/4] Parando servico antigo (se existir)...
 PrintBillingAgent.exe stop >nul 2>&1
 PrintBillingAgent.exe remove >nul 2>&1
 
-echo [2/3] Instalando servico como Inicializacao Automatica...
+echo [3/4] Instalando servico como Inicializacao Automatica...
 PrintBillingAgent.exe --startup auto install
 if %errorlevel% neq 0 (
     echo [ERRO] Falha ao instalar o servico.
@@ -40,7 +43,7 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-echo [3/3] Iniciando servico...
+echo [4/4] Iniciando servico...
 PrintBillingAgent.exe start
 if %errorlevel% neq 0 (
     echo [ERRO] Falha ao iniciar o servico.

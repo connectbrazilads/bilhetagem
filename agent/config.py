@@ -73,6 +73,12 @@ class AgentConfig:
         "PRINTBILLING_DEFAULT_USERNAME",
         file_config.get("PRINTBILLING_DEFAULT_USERNAME")
     ) or None
+    use_print_event_log: bool = str(
+        os.getenv(
+            "PRINTBILLING_USE_PRINT_EVENT_LOG",
+            file_config.get("PRINTBILLING_USE_PRINT_EVENT_LOG", True)
+        )
+    ).lower() == "true"
     cancel_blocked_jobs: bool = str(
         os.getenv(
             "PRINTBILLING_CANCEL_BLOCKED",

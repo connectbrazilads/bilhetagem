@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules
 
-hiddenimports = ['win32timezone', 'win32ts', 'win32com.client']
+hiddenimports = ['win32timezone', 'win32ts', 'win32evtlog', 'win32com.client']
 hiddenimports += collect_submodules('win32service')
 hiddenimports += collect_submodules('pysnmp')
 
