@@ -38,7 +38,7 @@ class SpoolMonitor:
         self._seen_jobs: set[str] = set()
         self._paused_jobs: dict[str, tuple[str, int | None]] = {}
         self._last_snmp_poll = 0.0
-        self._event_log_reader = PrintEventLogReader()
+        self._event_log_reader = PrintEventLogReader(agent_config=self.config)
 
     def run_forever(self, should_stop: Callable[[], bool] | None = None) -> None:
         should_stop = should_stop or (lambda: False)

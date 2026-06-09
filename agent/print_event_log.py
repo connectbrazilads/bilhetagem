@@ -8,7 +8,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from api_client import CapturedPrintJob
-from config import get_app_dir
+from config import AgentConfig, config, get_app_dir
 
 try:
     import win32evtlog
@@ -28,7 +28,8 @@ class PrintEvent:
 
 
 class PrintEventLogReader:
-    def __init__(self, state_file: Path | None = None) -> None:
+    def __init__(self, agent_config: AgentConfig = config, state_file: Path | None = None) -> None:
+        self.config = agent_config
         self.state_file = state_file or (get_app_dir() / "agent_state.json")
         self._last_record_id = self._load_last_record_id()
         self._initialized = self._last_record_id is not None
@@ -53,6 +54,7 @@ class PrintEventLogReader:
         if new_events:
             self._last_record_id = max(event.record_id for event in new_events)
             self._save_last_record_id()
+            logger.info("PrintService Event Log: %s evento(s) novo(s) encontrados", len(new_events))
         return new_events
 
     def _query_recent_print_events(self) -> list[PrintEvent]:
@@ -90,15 +92,27 @@ class PrintEventLogReader:
             by_name = {name: value for name, value in values}
             ordered = [value for _, value in values]
 
-            document_name = self._first_value(by_name, ordered, ("Document", "Param2", "Param1"), (1, 0))
-            username = self._clean_username(self._first_value(by_name, ordered, ("User", "Owner", "Param3"), (2,)))
-            printer_name = self._first_value(by_name, ordered, ("Printer", "PrinterName", "Param4"), (3,))
-            pages_text = self._first_value(by_name, ordered, ("Pages", "PagesPrinted", "Param7"), (6,))
+            document_name = self._first_value(by_name, ordered, ("Document", "Param1", "Param2"), (0, 1))
+            username = self._clean_username(self._first_value(by_name, ordered, ("User", "Owner", "Param2", "Param3"), (1, 2)))
+            printer_name = self._first_value(by_name, ordered, ("Printer", "PrinterName", "Param3", "Param4"), (2, 3))
+            pages_text = self._first_value(by_name, ordered, ("Pages", "PagesPrinted", "Param8", "Param7"), (7, 6))
             pages = max(int(pages_text), 1) if pages_text and str(pages_text).isdigit() else 1
 
+            if not username:
+                username = self._clean_username(self.config.default_username)
+
             if not username or not printer_name:
-                logger.info("Evento PrintService sem usuario/impressora reconhecidos: %s", values)
+                logger.warning("Evento PrintService sem usuario/impressora reconhecidos. record_id=%s campos=%s", record_id, values)
                 return None
+
+            logger.info(
+                "Evento PrintService interpretado: record_id=%s usuario=%s impressora=%s paginas=%s documento=%s",
+                record_id,
+                username,
+                printer_name,
+                pages,
+                document_name or "",
+            )
 
             return PrintEvent(
                 record_id=record_id,
