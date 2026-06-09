@@ -141,7 +141,7 @@ class SpoolMonitor:
         devmode = raw_job.get("pDevMode")
         is_color = bool(getattr(devmode, "Color", 1) == 2) if devmode else False
         # JOB_INFO_2 pointer fields use 'p' prefix (pUserName, pDocument, etc.)
-        username = self._extract_username(raw_job)
+        username = self._extract_username(printer_name, raw_job)
         logger.debug("Job fields: %s", list(raw_job.keys()))
         logger.info("Capturado job de '%s' na impressora '%s' (%d pags)", username, printer_name, max(int(pages), 1))
         return CapturedPrintJob(
@@ -154,16 +154,24 @@ class SpoolMonitor:
             submitted_at=datetime.now(timezone.utc),
         )
 
-    def _extract_username(self, raw_job: dict) -> str:
+    def _extract_username(self, printer_name: str, raw_job: dict) -> str:
         candidate_fields = ("pUserName", "UserName", "pNotifyName", "NotifyName", "Owner")
         for field in candidate_fields:
             username = self._clean_username(raw_job.get(field))
             if username:
                 return username
 
+        username = self._lookup_print_job_owner(printer_name, raw_job.get("JobId"))
+        if username:
+            return username
+
         configured = self._clean_username(self.config.default_username)
         if configured:
             return configured
+
+        username = self._active_windows_username()
+        if username:
+            return username
 
         for env_name in ("USERNAME", "USERDOMAIN"):
             username = self._clean_username(os.getenv(env_name))
@@ -175,6 +183,46 @@ class SpoolMonitor:
             {field: raw_job.get(field) for field in candidate_fields if raw_job.get(field)}
         )
         return "unknown"
+
+    def _lookup_print_job_owner(self, printer_name: str, job_id: object) -> str | None:
+        try:
+            job_id_int = int(job_id)
+        except (TypeError, ValueError):
+            return None
+
+        try:
+            import win32com.client
+
+            wmi = win32com.client.GetObject("winmgmts:")
+            jobs = wmi.ExecQuery(f"SELECT Name, Owner FROM Win32_PrintJob WHERE JobId = {job_id_int}")
+            fallback_owner = None
+            for job in jobs:
+                owner = self._clean_username(getattr(job, "Owner", None))
+                if not owner:
+                    continue
+                fallback_owner = fallback_owner or owner
+                job_name = str(getattr(job, "Name", ""))
+                if job_name.lower().startswith(printer_name.lower()):
+                    return owner
+            return fallback_owner
+        except Exception:
+            logger.debug("Nao foi possivel consultar owner via WMI para job %s", job_id, exc_info=True)
+            return None
+
+    def _active_windows_username(self) -> str | None:
+        try:
+            import win32ts
+
+            session_id = win32ts.WTSGetActiveConsoleSessionId()
+            username = win32ts.WTSQuerySessionInformation(
+                win32ts.WTS_CURRENT_SERVER_HANDLE,
+                session_id,
+                win32ts.WTSUserName,
+            )
+            return self._clean_username(username)
+        except Exception:
+            logger.debug("Nao foi possivel identificar usuario ativo do Windows", exc_info=True)
+            return None
 
     @staticmethod
     def _clean_username(value: object) -> str | None:
