@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_roles
+from app.models.audit_log import AuditLog
+from app.models.print_job import PrintJob
 from app.models.quota import Quota
 from app.models.user import User, UserRole
 from app.repositories.users import create_user
@@ -102,3 +104,35 @@ def update_user_endpoint(
     db.commit()
     db.refresh(user)
     return _read_user(user, db)
+
+
+@router.delete("/{user_id}")
+def delete_user_endpoint(
+    user_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> dict[str, str | int]:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    if user.id == actor.id:
+        raise HTTPException(status_code=400, detail="Nao e possivel excluir o usuario logado")
+    if user.username.lower() in {"admin", "agent"}:
+        raise HTTPException(status_code=400, detail="Usuario tecnico nao pode ser excluido")
+
+    deleted_jobs = db.query(PrintJob).filter(PrintJob.user_id == user.id).delete(synchronize_session=False)
+    db.query(AuditLog).filter(AuditLog.actor_user_id == user.id).update(
+        {AuditLog.actor_user_id: None},
+        synchronize_session=False,
+    )
+    write_audit(
+        db,
+        action="user_deleted",
+        entity="users",
+        entity_id=user.id,
+        actor_user_id=actor.id,
+        metadata={"username": user.username, "deleted_jobs": deleted_jobs},
+    )
+    db.delete(user)
+    db.commit()
+    return {"status": "deleted", "deleted_jobs": deleted_jobs}

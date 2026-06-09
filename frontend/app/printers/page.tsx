@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Edit, Plus, Server, Activity, Hash, Info, X, Cpu, Droplets, FileText, Clock, AlertTriangle } from "lucide-react";
+import { Edit, Plus, Server, Activity, Hash, Info, X, Cpu, Droplets, FileText, Clock, AlertTriangle, Trash2 } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -112,6 +112,35 @@ export default function PrintersPage() {
       is_active: printer.is_active,
       ip_address: printer.ip_address ?? "",
     });
+  }
+
+  async function deletePrinter(printer: PrinterRow) {
+    const confirmed = window.confirm(`Excluir a impressora "${printer.name}" e os historicos vinculados a ela?`);
+    if (!confirmed) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setError(null);
+    try {
+      await apiFetch<{ status: string; deleted_jobs: number }>(`/printers/${printer.id}`, token, { method: "DELETE" });
+      if (editingId === printer.id) {
+        setEditingId(null);
+        setForm({
+          name: "",
+          location: "",
+          is_color: false,
+          cost_mono: "0.05",
+          cost_color: "0.25",
+          is_active: true,
+          ip_address: "",
+        });
+      }
+      if (selectedPrinter?.id === printer.id) {
+        setSelectedPrinter(null);
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao excluir impressora");
+    }
   }
 
   function tonerEntries(printer: PrinterRow) {
@@ -383,6 +412,9 @@ export default function PrintersPage() {
                     )}
                     <Button variant="ghost" onClick={(e) => { e.stopPropagation(); startEdit(printer); }} title="Editar" className="h-8 w-8 p-0">
                       <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    </Button>
+                    <Button variant="ghost" onClick={(e) => { e.stopPropagation(); deletePrinter(printer); }} title="Excluir" className="h-8 w-8 p-0">
+                      <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
                     </Button>
                   </div>
                 </td>

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Edit, Plus } from "lucide-react";
+import { Edit, Plus, Trash2 } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -93,6 +93,28 @@ export default function UsersPage() {
       monthly_balance: String(user.monthly_balance ?? 50.0),
       is_active: user.is_active
     });
+  }
+
+  async function deleteUser(user: UserRow) {
+    if (user.username === "admin" || user.username === "agent") {
+      setError("Usuarios tecnicos nao podem ser excluidos.");
+      return;
+    }
+    const confirmed = window.confirm(`Excluir o usuario "${user.full_name || user.username}" e os historicos vinculados a ele?`);
+    if (!confirmed) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setError(null);
+    try {
+      await apiFetch<{ status: string; deleted_jobs: number }>(`/users/${user.id}`, token, { method: "DELETE" });
+      if (editingId === user.id) {
+        setEditingId(null);
+        setForm({ username: "", full_name: "", department_name: "", monthly_limit: "500", monthly_balance: "50.00", is_active: true });
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao excluir usuario");
+    }
   }
 
   return (
@@ -210,9 +232,16 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td className="p-3 text-right">
-                    <Button variant="ghost" onClick={() => startEdit(user)} title="Editar">
-                      <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" onClick={() => startEdit(user)} title="Editar" className="h-8 w-8 p-0">
+                        <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                      </Button>
+                      {user.username !== "admin" && user.username !== "agent" ? (
+                        <Button variant="ghost" onClick={() => deleteUser(user)} title="Excluir" className="h-8 w-8 p-0">
+                          <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
+                        </Button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               );

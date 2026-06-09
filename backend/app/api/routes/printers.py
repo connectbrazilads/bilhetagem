@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_roles
+from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
+from app.models.quota import Quota
 from app.models.user import User, UserRole
 from app.repositories.printers import create_printer
 from app.schemas.printer import PrinterCreate, PrinterRead, PrinterStatusUpdate, PrinterUpdate
@@ -79,7 +81,7 @@ def update_printer_status_endpoint(
 ) -> Printer:
     printer = db.query(Printer).filter(Printer.id == printer_id).first()
     if not printer:
-        raise HTTPException(status_code=404, detail="Impressora nÃ£o encontrada")
+        raise HTTPException(status_code=404, detail="Impressora nao encontrada")
 
     printer.toner_level = payload.toner_level
     printer.toner_levels = payload.toner_levels
@@ -89,3 +91,46 @@ def update_printer_status_endpoint(
     db.commit()
     db.refresh(printer)
     return printer
+
+
+@router.delete("/{printer_id}")
+def delete_printer_endpoint(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> dict[str, str | int]:
+    printer = db.query(Printer).filter(Printer.id == printer_id).first()
+    if not printer:
+        raise HTTPException(status_code=404, detail="Impressora nao encontrada")
+
+    jobs = db.query(PrintJob).filter(PrintJob.printer_id == printer.id).all()
+    deleted_jobs = len(jobs)
+    for job in jobs:
+        if job.status not in (JobStatus.authorized, JobStatus.released):
+            continue
+        quota = (
+            db.query(Quota)
+            .filter(
+                Quota.user_id == job.user_id,
+                Quota.year == job.submitted_at.year,
+                Quota.month == job.submitted_at.month,
+            )
+            .first()
+        )
+        if quota:
+            quota.used_pages = max(quota.used_pages - job.pages, 0)
+            quota.used_balance = max(quota.used_balance - job.cost, 0.0)
+
+    for job in jobs:
+        db.delete(job)
+    write_audit(
+        db,
+        action="printer_deleted",
+        entity="printers",
+        entity_id=printer.id,
+        actor_user_id=actor.id,
+        metadata={"printer": printer.name, "deleted_jobs": deleted_jobs},
+    )
+    db.delete(printer)
+    db.commit()
+    return {"status": "deleted", "deleted_jobs": deleted_jobs}
