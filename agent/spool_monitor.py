@@ -42,6 +42,8 @@ class SpoolMonitor:
         self._seen_jobs: set[str] = set()
         self._paused_jobs: dict[str, tuple[str, int | None]] = {}
         self._last_snmp_poll = 0.0
+        self._last_settings_poll = 0.0
+        self._server_safe_release_enabled = True
         self._event_log_reader = PrintEventLogReader(agent_config=self.config)
 
     def run_forever(self, should_stop: Callable[[], bool] | None = None) -> None:
@@ -51,11 +53,13 @@ class SpoolMonitor:
 
         logger.info("PrintBilling Agent iniciado")
         while not should_stop():
-            for printer_name in self._enum_printers():
-                try:
-                    self._process_printer(printer_name)
-                except Exception:
-                    logger.exception("Falha ao processar fila da impressora %s", printer_name)
+            self._refresh_server_settings_if_due()
+            if self._should_process_spool_jobs():
+                for printer_name in self._enum_printers():
+                    try:
+                        self._process_printer(printer_name)
+                    except Exception:
+                        logger.exception("Falha ao processar fila da impressora %s", printer_name)
             self._check_paused_jobs_actions()
             try:
                 self._process_web_prints()
@@ -67,6 +71,23 @@ class SpoolMonitor:
                 logger.exception("Falha ao processar Event Log de impressao")
             self._process_printer_statuses_if_due()
             self.sleep(self.config.poll_interval_seconds)
+
+    def _should_process_spool_jobs(self) -> bool:
+        return not (self.config.use_print_event_log and not self._server_safe_release_enabled)
+
+    def _refresh_server_settings_if_due(self) -> None:
+        now = time.monotonic()
+        if now - self._last_settings_poll < 15:
+            return
+        self._last_settings_poll = now
+        try:
+            settings = self.api_client.get_settings()
+            safe_release_enabled = bool(settings.get("safe_release_enabled", True))
+            if safe_release_enabled != self._server_safe_release_enabled:
+                logger.info("Follow-Me no servidor: %s", "ativado" if safe_release_enabled else "desativado")
+            self._server_safe_release_enabled = safe_release_enabled
+        except Exception:
+            logger.exception("Falha ao buscar configuracoes do servidor")
 
     def _enum_printers(self) -> Iterable[str]:
         flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS

@@ -110,6 +110,7 @@ export default function DashboardPage() {
     const interval = setInterval(() => {
       loadJobs();
       loadMetrics();
+      loadSettings();
     }, 15000);
     return () => clearInterval(interval);
   }, []);

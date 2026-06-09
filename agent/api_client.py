@@ -156,6 +156,23 @@ class BillingApiClient:
         return response.json()
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    def get_settings(self) -> dict:
+        response = self.session.get(
+            f"{self.config.api_base_url}/settings",
+            headers={**self._headers()},
+            timeout=10,
+        )
+        if response.status_code == 401:
+            self._token = None
+            response = self.session.get(
+                f"{self.config.api_base_url}/settings",
+                headers={**self._headers()},
+                timeout=10,
+            )
+        response.raise_for_status()
+        return response.json()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
     def update_printer_status(self, printer_id: int, status: dict) -> dict:
         response = self.session.put(
             f"{self.config.api_base_url}/printers/{printer_id}/status",
