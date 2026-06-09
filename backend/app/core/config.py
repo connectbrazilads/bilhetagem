@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Any, Union
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +12,7 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="change-me-in-production", min_length=16)
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: Union[str, list[str]] = ["http://localhost:3000"]
     default_monthly_quota: int = 500
     auto_create_users: bool = True
     auto_create_printers: bool = True
@@ -20,6 +21,22 @@ class Settings(BaseSettings):
     initial_admin_password: str = "admin12345"
     initial_agent_username: str = "agent"
     initial_agent_password: str = "agent12345"
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Any) -> Union[str, list[str]]:
+        if isinstance(v, str):
+            import json
+            v_stripped = v.strip()
+            if not v_stripped:
+                return []
+            if v_stripped.startswith("[") and v_stripped.endswith("]"):
+                try:
+                    return json.loads(v_stripped)
+                except Exception:
+                    pass
+            return [i.strip() for i in v_stripped.split(",") if i.strip()]
+        return v
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
