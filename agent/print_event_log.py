@@ -52,10 +52,14 @@ class PrintEventLogReader:
 
         new_events = [event for event in events if event.record_id > (self._last_record_id or 0)]
         if new_events:
-            self._last_record_id = max(event.record_id for event in new_events)
-            self._save_last_record_id()
             logger.info("PrintService Event Log: %s evento(s) novo(s) encontrados", len(new_events))
         return new_events
+
+    def mark_processed(self, record_id: int) -> None:
+        if self._last_record_id is None or record_id > self._last_record_id:
+            self._last_record_id = record_id
+            self._initialized = True
+            self._save_last_record_id()
 
     def _query_recent_print_events(self) -> list[PrintEvent]:
         query = f"*[System[(EventID={PRINTED_EVENT_ID})]]"
@@ -94,9 +98,8 @@ class PrintEventLogReader:
             document_name = self._first_value(by_name, ordered, ("Document", "DocumentName", "Param2", "Param1"), (1, 0))
             event_username = self._clean_username(self._first_value(by_name, ordered, ("User", "Owner", "Param3", "Param2"), (2, 1)))
             username = self._preferred_username(event_username)
-            printer_name = self._first_value(by_name, ordered, ("Printer", "PrinterName", "Param4", "Param3"), (3, 2))
-            pages_text = self._first_value(by_name, ordered, ("Pages", "PagesPrinted", "Param7", "Param6", "Param8"), (6, 5, 7))
-            pages = max(int(pages_text), 1) if pages_text and str(pages_text).isdigit() else 1
+            printer_name = self._event_printer_name(by_name, ordered)
+            pages = self._event_pages(by_name, ordered)
 
             if not username or not printer_name:
                 logger.warning("Evento PrintService sem usuario/impressora reconhecidos. record_id=%s campos=%s", record_id, values)
@@ -150,6 +153,60 @@ class PrintEventLogReader:
             values.append((tag, text))
         return values
 
+    def _event_printer_name(self, by_name: dict[str, str], ordered: list[str]) -> str | None:
+        candidates = [
+            by_name.get("Printer"),
+            by_name.get("PrinterName"),
+            by_name.get("Param5"),
+            by_name.get("Param4"),
+            self._value_at(ordered, 4),
+            self._value_at(ordered, 3),
+        ]
+        for candidate in candidates:
+            if self._looks_like_printer_name(candidate):
+                return candidate
+        return self._first_value(by_name, ordered, ("Printer", "PrinterName", "Param5", "Param4"), (4, 3))
+
+    @staticmethod
+    def _looks_like_printer_name(value: str | None) -> bool:
+        if not value:
+            return False
+        candidate = value.strip()
+        if not candidate:
+            return False
+        if candidate.startswith("\\\\") and candidate.count("\\") <= 2:
+            return False
+        lower_candidate = candidate.lower()
+        if lower_candidate.startswith(("winspool", "ne", "usb", "lpt", "com", "ip_", "wsd", "nul")):
+            return False
+        return not candidate.replace(".", "").isdigit()
+
+    def _event_pages(self, by_name: dict[str, str], ordered: list[str]) -> int:
+        for value in (
+            by_name.get("Pages"),
+            by_name.get("PagesPrinted"),
+            by_name.get("Param8"),
+            by_name.get("Param7"),
+            by_name.get("Param6"),
+            *reversed(ordered),
+        ):
+            pages = self._parse_page_count(value)
+            if pages is not None:
+                return pages
+        return 1
+
+    @staticmethod
+    def _parse_page_count(value: str | None) -> int | None:
+        if not value:
+            return None
+        text = str(value).strip()
+        if not text.isdigit():
+            return None
+        pages = int(text)
+        if 1 <= pages <= 10000:
+            return pages
+        return None
+
     @staticmethod
     def _parse_windows_datetime(value: str) -> datetime:
         normalized = value.strip()
@@ -177,6 +234,10 @@ class PrintEventLogReader:
             if len(ordered) > index and ordered[index]:
                 return ordered[index]
         return None
+
+    @staticmethod
+    def _value_at(values: list[str], index: int) -> str | None:
+        return values[index] if len(values) > index and values[index] else None
 
     @staticmethod
     def _clean_username(value: str | None) -> str | None:

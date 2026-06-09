@@ -24,6 +24,10 @@ import tempfile
 
 logger = logging.getLogger("printbilling.agent.spool")
 
+JOB_CONTROL_PAUSE = getattr(win32print, "JOB_CONTROL_PAUSE", 1)
+JOB_CONTROL_RESUME = getattr(win32print, "JOB_CONTROL_RESUME", 2)
+JOB_CONTROL_DELETE = getattr(win32print, "JOB_CONTROL_DELETE", 5)
+
 
 class SpoolMonitor:
     def __init__(
@@ -83,7 +87,7 @@ class SpoolMonitor:
 
                 if job_id is not None:
                     logger.info("Pausando trabalho ate decisao do servidor: %s", key)
-                    win32print.SetJob(handle, job_id, 0, None, win32con.JOB_CONTROL_PAUSE)
+                    win32print.SetJob(handle, job_id, 0, None, JOB_CONTROL_PAUSE)
 
                 try:
                     decision = self.api_client.submit_job(captured)
@@ -108,7 +112,7 @@ class SpoolMonitor:
                     self._paused_jobs[key] = (printer_name, job_id)
                 elif job_id is not None:
                     logger.info("Servidor autorizou trabalho, retomando spooler: %s", key)
-                    win32print.SetJob(handle, job_id, 0, None, win32con.JOB_CONTROL_RESUME)
+                    win32print.SetJob(handle, job_id, 0, None, JOB_CONTROL_RESUME)
         finally:
             win32print.ClosePrinter(handle)
 
@@ -127,7 +131,7 @@ class SpoolMonitor:
                     logger.info("Liberando trabalho suspenso no spooler: %s", key)
                     handle = win32print.OpenPrinter(printer_name)
                     try:
-                        win32print.SetJob(handle, job_id, 0, None, win32con.JOB_CONTROL_RESUME)
+                        win32print.SetJob(handle, job_id, 0, None, JOB_CONTROL_RESUME)
                     finally:
                         win32print.ClosePrinter(handle)
                     del self._paused_jobs[key]
@@ -135,7 +139,7 @@ class SpoolMonitor:
                     logger.info("Cancelando/excluindo trabalho suspenso no spooler: %s", key)
                     handle = win32print.OpenPrinter(printer_name)
                     try:
-                        win32print.SetJob(handle, job_id, 0, None, win32con.JOB_CONTROL_DELETE)
+                        win32print.SetJob(handle, job_id, 0, None, JOB_CONTROL_DELETE)
                     finally:
                         win32print.ClosePrinter(handle)
                     del self._paused_jobs[key]
@@ -253,7 +257,7 @@ class SpoolMonitor:
         if job_id is None:
             return
         logger.warning("Cancelando trabalho bloqueado no spooler: %s", job_id)
-        win32print.SetJob(printer_handle, job_id, 0, None, win32con.JOB_CONTROL_DELETE)
+        win32print.SetJob(printer_handle, job_id, 0, None, JOB_CONTROL_DELETE)
 
     def _process_web_prints(self) -> None:
         try:
@@ -349,5 +353,6 @@ class SpoolMonitor:
                     event.job.pages,
                     decision.get("status"),
                 )
+                self._event_log_reader.mark_processed(event.record_id)
             except Exception:
                 logger.exception("Falha ao enviar evento PrintService record_id=%s para API", event.record_id)

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+import logging
 
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from config import AgentConfig, config
+
+logger = logging.getLogger("printbilling.agent.api")
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,8 @@ class BillingApiClient:
                 headers={**self._headers()},
                 timeout=15,
             )
+        if response.status_code >= 400:
+            logger.error("API recusou job de impressao (%s): %s", response.status_code, response.text[:1000])
         response.raise_for_status()
         return response.json()
 
