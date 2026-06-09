@@ -48,7 +48,8 @@ def export_report(
         y = 770
         for job in jobs[:45]:
             doc = (job.document_name[:30] + "...") if (job.document_name and len(job.document_name) > 30) else (job.document_name or "N/A")
-            pdf.drawString(40, y, f"{job.submitted_at:%Y-%m-%d %H:%M} | {job.user.username} | {job.printer.name} | {doc} | {job.pages} pág.")
+            user_name = job.user.full_name or job.user.username
+            pdf.drawString(40, y, f"{job.submitted_at:%Y-%m-%d %H:%M} | {user_name} | {job.printer.name} | {doc} | {job.pages} pág.")
             y -= 16
         pdf.save()
         return Response(
@@ -62,7 +63,7 @@ def export_report(
     sheet.title = "Impressões"
     sheet.append(["Data", "Usuário", "Impressora", "Documento", "Páginas", "Cor", "Status"])
     for job in jobs:
-        sheet.append([job.submitted_at.isoformat(), job.user.username, job.printer.name, job.document_name or "", job.pages, job.is_color, job.status.value])
+        sheet.append([job.submitted_at.isoformat(), job.user.full_name or job.user.username, job.printer.name, job.document_name or "", job.pages, job.is_color, job.status.value])
     buffer = BytesIO()
     workbook.save(buffer)
     return Response(

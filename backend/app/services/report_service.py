@@ -25,11 +25,11 @@ def dashboard_metrics(db: Session) -> dict:
     ).scalar() or 0
 
     top_users = [
-        {"username": username, "pages": pages}
-        for username, pages in db.query(User.username, func.sum(PrintJob.pages))
+        {"username": full_name or username, "pages": pages}
+        for username, full_name, pages in db.query(User.username, User.full_name, func.sum(PrintJob.pages))
         .join(PrintJob, PrintJob.user_id == User.id)
         .filter(authorized, PrintJob.submitted_at >= month_start)
-        .group_by(User.username)
+        .group_by(User.username, User.full_name)
         .order_by(func.sum(PrintJob.pages).desc())
         .limit(5)
         .all()

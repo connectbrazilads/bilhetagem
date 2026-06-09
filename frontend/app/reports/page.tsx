@@ -10,6 +10,7 @@ import { apiFetch, API_URL } from "@/lib/api";
 type JobRow = {
   id: number;
   username: string;
+  user_full_name: string | null;
   printer_name: string;
   document_name: string | null;
   pages: number;
@@ -60,7 +61,8 @@ export default function ReportsPage() {
   }
 
   const filteredJobs = jobs.filter((job) => {
-    const matchUser = job.username.toLowerCase().includes(userQuery.toLowerCase());
+    const userDisplayName = job.user_full_name || job.username;
+    const matchUser = `${job.username} ${userDisplayName}`.toLowerCase().includes(userQuery.toLowerCase());
     const matchPrinter = job.printer_name.toLowerCase().includes(printerQuery.toLowerCase());
     const matchDate = dateQuery ? job.submitted_at.startsWith(dateQuery) : true;
     return matchUser && matchPrinter && matchDate;
@@ -126,7 +128,7 @@ export default function ReportsPage() {
                     <td className="p-3 text-muted-foreground whitespace-nowrap">
                       {new Date(job.submitted_at).toLocaleString("pt-BR")}
                     </td>
-                    <td className="p-3 font-medium whitespace-nowrap">{job.username}</td>
+                    <td className="p-3 font-medium whitespace-nowrap">{job.user_full_name || job.username}</td>
                     <td className="p-3 whitespace-nowrap">{job.printer_name}</td>
                     <td className="p-3 max-w-[200px] truncate" title={job.document_name ?? "N/A"}>
                       {job.document_name ?? "N/A"}

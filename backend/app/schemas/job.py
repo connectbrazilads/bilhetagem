@@ -27,6 +27,7 @@ class PrintJobDecision(BaseModel):
 class PrintJobRead(BaseModel):
     id: int
     username: str
+    user_full_name: str | None = None
     printer_name: str
     pages: int
     is_color: bool

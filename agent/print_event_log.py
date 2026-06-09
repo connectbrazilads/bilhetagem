@@ -91,14 +91,12 @@ class PrintEventLogReader:
             by_name = {name: value for name, value in values}
             ordered = [value for _, value in values]
 
-            document_name = self._first_value(by_name, ordered, ("Document", "Param1", "Param2"), (0, 1))
-            username = self._clean_username(self._first_value(by_name, ordered, ("User", "Owner", "Param2", "Param3"), (1, 2)))
-            printer_name = self._first_value(by_name, ordered, ("Printer", "PrinterName", "Param3", "Param4"), (2, 3))
-            pages_text = self._first_value(by_name, ordered, ("Pages", "PagesPrinted", "Param6", "Param7", "Param8"), (5, 6, 7))
+            document_name = self._first_value(by_name, ordered, ("Document", "DocumentName", "Param2", "Param1"), (1, 0))
+            event_username = self._clean_username(self._first_value(by_name, ordered, ("User", "Owner", "Param3", "Param2"), (2, 1)))
+            username = self._preferred_username(event_username)
+            printer_name = self._first_value(by_name, ordered, ("Printer", "PrinterName", "Param4", "Param3"), (3, 2))
+            pages_text = self._first_value(by_name, ordered, ("Pages", "PagesPrinted", "Param7", "Param6", "Param8"), (6, 5, 7))
             pages = max(int(pages_text), 1) if pages_text and str(pages_text).isdigit() else 1
-
-            if not username:
-                username = self._clean_username(self.config.default_username)
 
             if not username or not printer_name:
                 logger.warning("Evento PrintService sem usuario/impressora reconhecidos. record_id=%s campos=%s", record_id, values)
@@ -190,6 +188,12 @@ class PrintEventLogReader:
         if "@" in username:
             username = username.split("@", 1)[0]
         return username.strip() or None
+
+    def _preferred_username(self, event_username: str | None) -> str | None:
+        configured = self._clean_username(self.config.default_username)
+        if configured and (not event_username or event_username.lower() in {"user", "usuario", "usuário", "unknown", "system", "localsystem"}):
+            return configured
+        return event_username or configured
 
     def _load_last_record_id(self) -> int | None:
         try:

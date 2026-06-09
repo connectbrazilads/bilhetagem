@@ -161,17 +161,17 @@ class SpoolMonitor:
         )
 
     def _extract_username(self, printer_name: str, raw_job: dict) -> str:
+        configured = self._clean_username(self.config.default_username)
         candidate_fields = ("pUserName", "UserName", "pNotifyName", "NotifyName", "Owner")
         for field in candidate_fields:
             username = self._clean_username(raw_job.get(field))
             if username:
-                return username
+                return self._preferred_username(username, configured)
 
         username = self._lookup_print_job_owner(printer_name, raw_job.get("JobId"))
         if username:
-            return username
+            return self._preferred_username(username, configured)
 
-        configured = self._clean_username(self.config.default_username)
         if configured:
             return configured
 
@@ -189,6 +189,12 @@ class SpoolMonitor:
             {field: raw_job.get(field) for field in candidate_fields if raw_job.get(field)}
         )
         return "unknown"
+
+    @staticmethod
+    def _preferred_username(username: str, configured: str | None) -> str:
+        if configured and username.lower() in {"user", "usuario", "usuário", "unknown", "system", "localsystem"}:
+            return configured
+        return username
 
     def _lookup_print_job_owner(self, printer_name: str, job_id: object) -> str | None:
         try:

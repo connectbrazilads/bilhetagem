@@ -48,6 +48,7 @@ def list_jobs(
         PrintJobRead(
             id=job.id,
             username=job.user.username,
+            user_full_name=job.user.full_name,
             printer_name=job.printer.name,
             pages=job.pages,
             is_color=job.is_color,
