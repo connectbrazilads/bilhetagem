@@ -9,11 +9,11 @@ from app.services.audit_service import write_audit
 from app.services.quota_service import can_consume, get_or_create_current_quota
 
 
-def _resolve_user(db: Session, username: str) -> User:
+def _resolve_user(db: Session, username: str, auto_create_users: bool) -> User:
     user = db.query(User).filter(User.username == username).first()
     if user:
         return user
-    if not settings.auto_create_users:
+    if not auto_create_users:
         raise ValueError(f"Usuário '{username}' não cadastrado")
     user = User(username=username, full_name=username, role=UserRole.user, is_active=True)
     db.add(user)
@@ -34,7 +34,10 @@ def _resolve_printer(db: Session, printer_name: str, is_color: bool) -> Printer:
 
 
 def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision:
-    user = _resolve_user(db, payload.username)
+    from app.services.settings_service import get_system_settings_dict
+    sys_settings = get_system_settings_dict(db)
+
+    user = _resolve_user(db, payload.username, sys_settings["auto_create_users"])
     printer = _resolve_printer(db, payload.printer_name, payload.is_color)
     quota = get_or_create_current_quota(db, user, payload.submitted_at)
 
@@ -58,7 +61,11 @@ def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision
 
     authorized_pages = effective_remaining_pages >= payload.pages
     authorized_balance = effective_remaining_balance >= cost
-    authorized = authorized_pages and authorized_balance
+
+    if sys_settings["blocking_enabled"]:
+        authorized = authorized_pages and authorized_balance
+    else:
+        authorized = True
 
     reason = None
     if not authorized:
@@ -68,7 +75,7 @@ def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision
         else:
             reason = "Saldo mensal insuficiente (fila de liberação inclusa)"
     else:
-        if settings.safe_release_enabled:
+        if sys_settings["safe_release_enabled"]:
             status = JobStatus.pending_release
         else:
             status = JobStatus.authorized

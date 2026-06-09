@@ -19,7 +19,9 @@ def get_or_create_current_quota(db: Session, user: User, moment: datetime | None
         return quota
 
     latest_quota = db.query(Quota).filter(Quota.user_id == user.id).order_by(Quota.id.desc()).first()
-    monthly_limit = latest_quota.monthly_limit if latest_quota else settings.default_monthly_quota
+    from app.services.settings_service import get_system_settings_dict
+    sys_settings = get_system_settings_dict(db)
+    monthly_limit = latest_quota.monthly_limit if latest_quota else sys_settings["default_monthly_quota"]
     monthly_balance = latest_quota.monthly_balance if latest_quota else 50.0
     quota = Quota(
         user_id=user.id,

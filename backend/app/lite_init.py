@@ -1,5 +1,5 @@
 from app.core.database import SessionLocal, engine
-from app.models import audit_log, department, print_job, printer, quota, user  # noqa: F401
+from app.models import audit_log, department, print_job, printer, quota, user, system_setting  # noqa: F401
 from app.models.base import Base
 from app.models.user import UserRole
 from app.seed import ensure_user

@@ -4,11 +4,30 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.user import User, UserRole
-from app.schemas.settings import LDAPSettings
+from app.schemas.settings import LDAPSettings, GeneralSettings
 from app.services.ldap_service import test_ldap_connection, sync_ldap_users
+from app.services.settings_service import get_system_settings_dict, update_system_settings
 from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+
+@router.get("", response_model=GeneralSettings)
+def get_general_settings(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin)),
+) -> GeneralSettings:
+    return GeneralSettings(**get_system_settings_dict(db))
+
+
+@router.put("", response_model=GeneralSettings)
+def update_general_settings(
+    payload: GeneralSettings,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin)),
+) -> GeneralSettings:
+    updated = update_system_settings(db, payload.model_dump())
+    return GeneralSettings(**updated)
 
 @router.post("/ldap/test")
 def test_ldap_endpoint(

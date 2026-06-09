@@ -12,6 +12,8 @@ export default function SettingsPage() {
   const [defaultQuota, setDefaultQuota] = useState(500);
   const [apiUrl, setApiUrl] = useState("http://localhost:8000");
   const [autoCreateUsers, setAutoCreateUsers] = useState(true);
+  const [blockingEnabled, setBlockingEnabled] = useState(true);
+  const [showBalance, setShowBalance] = useState(true);
 
   // LDAP configurations
   const [ldapServer, setLdapServer] = useState("ldap://localhost:389");
@@ -23,15 +25,31 @@ export default function SettingsPage() {
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Load from localStorage
+  // Load from backend & localStorage
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      apiFetch<{
+        default_monthly_quota: number;
+        auto_create_users: boolean;
+        blocking_enabled: boolean;
+        show_balance: boolean;
+        safe_release_enabled: boolean;
+      }>("/settings", token)
+        .then((data) => {
+          setDefaultQuota(data.default_monthly_quota);
+          setAutoCreateUsers(data.auto_create_users);
+          setBlockingEnabled(data.blocking_enabled);
+          setShowBalance(data.show_balance);
+        })
+        .catch((err) => {
+          console.error("Erro ao buscar configurações no servidor:", err);
+        });
+    }
+
     if (typeof window !== "undefined") {
-      const q = localStorage.getItem("settings_defaultQuota");
-      if (q) setDefaultQuota(parseInt(q));
       const url = localStorage.getItem("settings_apiUrl");
       if (url) setApiUrl(url);
-      const auto = localStorage.getItem("settings_autoCreateUsers");
-      if (auto !== null) setAutoCreateUsers(auto === "true");
 
       const srv = localStorage.getItem("settings_ldapServer");
       if (srv) setLdapServer(srv);
@@ -44,19 +62,42 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const saveGeneralSettings = () => {
+  const saveGeneralSettings = async () => {
+    setLoading(true);
+    setStatusMsg(null);
+    const token = localStorage.getItem("token") || "";
+
     if (typeof window !== "undefined") {
-      localStorage.setItem("settings_defaultQuota", defaultQuota.toString());
       localStorage.setItem("settings_apiUrl", apiUrl);
-      localStorage.setItem("settings_autoCreateUsers", autoCreateUsers.toString());
-      
       localStorage.setItem("settings_ldapServer", ldapServer);
       localStorage.setItem("settings_ldapBindDn", ldapBindDn);
       localStorage.setItem("settings_ldapBindPassword", ldapBindPassword);
       localStorage.setItem("settings_ldapSearchBase", ldapSearchBase);
     }
-    setStatusMsg({ text: "Configurações salvas localmente com sucesso!", type: "success" });
-    setTimeout(() => setStatusMsg(null), 3000);
+
+    try {
+      await apiFetch("/settings", token, {
+        method: "PUT",
+        body: JSON.stringify({
+          default_monthly_quota: defaultQuota,
+          auto_create_users: autoCreateUsers,
+          blocking_enabled: blockingEnabled,
+          show_balance: showBalance,
+          safe_release_enabled: true
+        })
+      });
+      setStatusMsg({ text: "Configurações salvas com sucesso no servidor!", type: "success" });
+      setTimeout(() => setStatusMsg(null), 3000);
+    } catch (err: any) {
+      let errorText = err.message || "";
+      try {
+        const parsed = JSON.parse(err.message);
+        if (parsed.detail) errorText = parsed.detail;
+      } catch {}
+      setStatusMsg({ text: `Erro ao salvar configurações no servidor: ${errorText}`, type: "error" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const testLdap = async () => {
@@ -186,12 +227,36 @@ export default function SettingsPage() {
               <input
                 type="checkbox"
                 id="autoCreate"
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
                 checked={autoCreateUsers}
                 onChange={(e) => setAutoCreateUsers(e.target.checked)}
               />
               <label htmlFor="autoCreate" className="text-sm font-medium cursor-pointer">
                 Criar usuários automaticamente ao receber trabalhos de impressão
+              </label>
+            </div>
+            <div className="flex items-center gap-2.5 mt-2 py-1">
+              <input
+                type="checkbox"
+                id="blockingEnabled"
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                checked={blockingEnabled}
+                onChange={(e) => setBlockingEnabled(e.target.checked)}
+              />
+              <label htmlFor="blockingEnabled" className="text-sm font-medium cursor-pointer">
+                Habilitar Bloqueio de Impressões (bloquear se saldo/cota for insuficiente)
+              </label>
+            </div>
+            <div className="flex items-center gap-2.5 mt-2 py-1">
+              <input
+                type="checkbox"
+                id="showBalance"
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                checked={showBalance}
+                onChange={(e) => setShowBalance(e.target.checked)}
+              />
+              <label htmlFor="showBalance" className="text-sm font-medium cursor-pointer">
+                Exibir Saldo Mensal nas Telas (tabelas e formulários)
               </label>
             </div>
           </div>

@@ -24,11 +24,20 @@ export default function UsersPage() {
   const [form, setForm] = useState({ username: "", full_name: "", department_name: "", monthly_limit: "500", monthly_balance: "50.00", is_active: true });
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [showBalance, setShowBalance] = useState(true);
 
   async function load() {
     const token = localStorage.getItem("token");
     if (!token) return;
     await apiFetch<UserRow[]>("/users", token).then(setUsers).catch(() => setUsers([]));
+    
+    try {
+      const settingsData = await apiFetch<{ show_balance: boolean }>("/settings", token);
+      setShowBalance(settingsData.show_balance);
+    } catch {
+      // Fallback a exibir por padrão
+      setShowBalance(true);
+    }
   }
 
   useEffect(() => {
@@ -120,14 +129,16 @@ export default function UsersPage() {
           value={form.monthly_limit}
           onChange={(event) => setForm({ ...form, monthly_limit: event.target.value })}
         />
-        <Input
-          className="w-full sm:w-32"
-          placeholder="Saldo Limite (R$)"
-          type="number"
-          step="0.01"
-          value={form.monthly_balance}
-          onChange={(event) => setForm({ ...form, monthly_balance: event.target.value })}
-        />
+        {showBalance && (
+          <Input
+            className="w-full sm:w-32"
+            placeholder="Saldo Limite (R$)"
+            type="number"
+            step="0.01"
+            value={form.monthly_balance}
+            onChange={(event) => setForm({ ...form, monthly_balance: event.target.value })}
+          />
+        )}
         {editingId ? (
           <label className="flex items-center gap-2 text-sm select-none px-2 cursor-pointer">
             <input
@@ -166,8 +177,8 @@ export default function UsersPage() {
               <th className="p-3">Nome</th>
               <th className="p-3">Departamento</th>
               <th className="p-3">Limite Páginas</th>
-              <th className="p-3">Saldo Mensal</th>
-              <th className="p-3">Saldo Gasto</th>
+              {showBalance && <th className="p-3">Saldo Mensal</th>}
+              {showBalance && <th className="p-3">Saldo Gasto</th>}
               <th className="p-3">Perfil</th>
               <th className="p-3">Status</th>
               <th className="p-3 text-right">Ações</th>
@@ -182,12 +193,16 @@ export default function UsersPage() {
                   <td className="p-3">{user.full_name}</td>
                   <td className="p-3">{user.department_name ?? "-"}</td>
                   <td className="p-3">{user.monthly_limit !== null ? `${user.monthly_limit} pag.` : "-"}</td>
-                  <td className="p-3">
-                    {user.monthly_balance !== null ? `R$ ${user.monthly_balance.toFixed(2)}` : "-"}
-                  </td>
-                  <td className="p-3 text-muted-foreground">
-                    {user.used_balance !== null ? `R$ ${user.used_balance.toFixed(2)}` : "R$ 0,00"}
-                  </td>
+                  {showBalance && (
+                    <td className="p-3">
+                      {user.monthly_balance !== null ? `R$ ${user.monthly_balance.toFixed(2)}` : "-"}
+                    </td>
+                  )}
+                  {showBalance && (
+                    <td className="p-3 text-muted-foreground">
+                      {user.used_balance !== null ? `R$ ${user.used_balance.toFixed(2)}` : "R$ 0,00"}
+                    </td>
+                  )}
                   <td className="p-3">{user.role}</td>
                   <td className="p-3">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${user.is_active ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>

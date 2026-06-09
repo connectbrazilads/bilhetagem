@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 import os
 import shutil
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
 from app.models.department import Department
-from app.models.print_job import PrintJob
+from app.models.print_job import PrintJob, JobStatus
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate, PrintJobDecision, PrintJobRead
@@ -124,12 +124,16 @@ def release_job(
         raise HTTPException(status_code=400, detail="Trabalho não está pendente de liberação")
         
     from app.services.quota_service import get_or_create_current_quota, can_consume
+    from app.services.settings_service import get_system_settings_dict
+    
     quota = get_or_create_current_quota(db, job.user, job.submitted_at)
+    sys_settings = get_system_settings_dict(db)
+    blocking_enabled = sys_settings["blocking_enabled"]
     
     authorized_pages = can_consume(quota, job.pages)
     authorized_balance = quota.remaining_balance >= job.cost
     
-    if not authorized_pages or not authorized_balance:
+    if blocking_enabled and (not authorized_pages or not authorized_balance):
         job.status = JobStatus.blocked
         job.reason = "Cota ou saldo insuficientes no momento da liberação"
         db.commit()
