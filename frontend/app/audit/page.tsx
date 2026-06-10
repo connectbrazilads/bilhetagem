@@ -24,15 +24,19 @@ type AuditFacets = {
 };
 
 const ACTION_LABELS: Record<string, string> = {
+  agent_queue_action_cancelled: "Acao remota cancelada",
   agent_queue_action_created: "Acao remota criada",
   agent_queue_action_dispatched: "Acao remota enviada",
   agent_queue_action_finished: "Acao remota finalizada",
+  agent_release_checksums_downloaded: "Checksums do agent baixados",
+  agent_release_downloaded: "Release do agent baixada",
   audit_logs_exported: "Auditoria exportada",
   department_created: "Departamento criado",
   department_deleted: "Departamento excluido",
   department_updated: "Departamento atualizado",
   ldap_settings_updated: "LDAP atualizado",
   ldap_sync_performed: "LDAP sincronizado",
+  monthly_closing_due_email_failed: "Falha no envio mensal",
   monthly_closing_due_email_sent: "Fechamento mensal enviado",
   monthly_closing_email_sent: "Fechamento mensal enviado manualmente",
   monthly_closing_exported: "Fechamento mensal exportado",
@@ -47,6 +51,8 @@ const ACTION_LABELS: Record<string, string> = {
   print_job_blocked: "Impressao bloqueada",
   print_job_cancelled: "Impressao cancelada",
   print_job_released: "Impressao liberada",
+  organization_created: "Empresa criada",
+  organization_updated: "Empresa atualizada",
   printer_created: "Impressora criada",
   printer_deleted: "Impressora excluida",
   printer_alias_bound: "Fila vinculada",
@@ -64,6 +70,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 const ENTITY_LABELS: Record<string, string> = {
   agent_queue_actions: "Acoes remotas",
+  agent_releases: "Releases do agent",
   audit_logs: "Auditoria",
   departments: "Departamentos",
   organizations: "Empresas",
@@ -77,17 +84,39 @@ const ENTITY_LABELS: Record<string, string> = {
 };
 
 const FIELD_LABELS: Record<string, string> = {
+  action_type: "Tipo da acao",
+  agent: "Agent",
+  agent_id: "ID do agent",
+  agent_uid: "UID do agent",
   billing_plan: "Plano",
   billing_status: "Status comercial",
+  bulk: "Em lote",
   contracted_printer_limit: "Limite contratado",
+  deleted_jobs: "Historico removido",
+  detached_queue_actions: "Acoes remotas desvinculadas",
   department_id: "Departamento",
   department_name: "Departamento",
+  file_count: "Arquivos",
+  filename: "Arquivo",
   full_name: "Nome",
   is_active: "Ativo",
+  kind: "Tipo de arquivo",
   monthly_balance: "Saldo mensal",
   monthly_limit: "Limite mensal",
   password: "Senha",
+  previous_dispatched_at: "Envio anterior",
+  previous_status: "Status anterior",
+  printer_id: "Impressora",
+  queue_name: "Fila",
+  redispatch: "Reenvio",
+  result_message: "Resultado",
   role: "Perfil",
+  sha256: "SHA256",
+  status: "Status",
+  target_organization_id: "Empresa alvo",
+  target_organization_name: "Nome da empresa alvo",
+  target_organization_slug: "Slug da empresa alvo",
+  version: "Versao",
 };
 
 export default function AuditPage() {
@@ -321,7 +350,7 @@ function formatMetadata(metadata: Record<string, unknown>) {
   parts.push(
     ...entries
       .filter(([key]) => key !== "changes")
-      .map(([key, value]) => `${humanizeKey(key)}: ${formatMetadataValue(value)}`)
+      .map(([key, value]) => `${fieldLabel(key)}: ${formatMetadataValue(value)}`)
   );
   return parts.filter(Boolean).join(" | ");
 }
@@ -362,6 +391,8 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 function isCriticalAuditAction(action: string) {
   return (
     action.startsWith("organization_") ||
+    action.startsWith("agent_queue_action_") ||
+    action.startsWith("agent_release_") ||
     action.startsWith("settings_") ||
     action.startsWith("monthly_report_email_settings_") ||
     action.startsWith("ldap_") ||
