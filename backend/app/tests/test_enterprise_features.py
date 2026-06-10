@@ -659,7 +659,7 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         "agents_total": 2,
         "agents_online": 1,
         "agents_offline": 1,
-        "agents_with_alerts": 1,
+        "agents_with_alerts": 2,
         "printers_total": 1,
         "printers_monitored": 1,
         "printers_unmonitored": 0,

@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta, timezone
+from collections import defaultdict
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -62,6 +63,34 @@ def _agent_is_online(agent: PrintAgent, now: datetime) -> bool:
     return now - last_seen <= AGENT_ONLINE_WINDOW
 
 
+def _alias_is_present(agent: PrintAgent, alias: PrinterAlias) -> bool:
+    if not agent.last_seen_at or not alias.last_seen_at:
+        return False
+    agent_seen = agent.last_seen_at
+    alias_seen = alias.last_seen_at
+    if agent_seen.tzinfo is None:
+        agent_seen = agent_seen.replace(tzinfo=timezone.utc)
+    if alias_seen.tzinfo is None:
+        alias_seen = alias_seen.replace(tzinfo=timezone.utc)
+    return alias_seen >= agent_seen
+
+
+def _agent_has_operational_alert(agent: PrintAgent, aliases: list[PrinterAlias], now: datetime) -> bool:
+    if not _agent_is_online(agent, now):
+        return True
+    if agent.last_error or agent.event_log_enabled is False:
+        return True
+
+    present_aliases = [alias for alias in aliases if _alias_is_present(agent, alias)]
+    if agent.last_seen_at and not present_aliases:
+        return True
+    if len(present_aliases) != len(aliases):
+        return True
+    if any(alias.printer_id is None for alias in present_aliases):
+        return True
+    return _duplicate_queue_alias_count(present_aliases) > 0
+
+
 def _toner_values(printer: Printer) -> list[int]:
     if isinstance(printer.toner_levels, dict):
         return [
@@ -78,7 +107,6 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization_id).all()
     printers = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.is_active.is_(True)).all()
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
-    agents_with_alerts = sum(1 for agent in agents if agent.last_error or agent.event_log_enabled is False)
     monitored_printers = sum(1 for printer in printers if printer.ip_address)
     low_toner_printers = sum(1 for printer in printers if any(value <= 10 for value in _toner_values(printer)))
     unbound_queues = (
@@ -99,6 +127,11 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         .all()
     )
     duplicate_queue_aliases = _duplicate_queue_alias_count(aliases_with_agent)
+    aliases_by_agent: dict[int, list[PrinterAlias]] = defaultdict(list)
+    for alias in aliases_with_agent:
+        if alias.agent_id is not None:
+            aliases_by_agent[alias.agent_id].append(alias)
+    agents_with_alerts = sum(1 for agent in agents if _agent_has_operational_alert(agent, aliases_by_agent.get(agent.id, []), now))
 
     return {
         "agents_total": len(agents),
