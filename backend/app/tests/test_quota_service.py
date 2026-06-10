@@ -379,6 +379,34 @@ def test_agent_cannot_download_pending_web_print_before_release(db_session):
     assert "download" in exc.value.detail
 
 
+def test_agent_cannot_download_regular_job_through_web_print_endpoint(db_session):
+    agent = User(username="agent-download-regular", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    user = User(username="regular-download-user", full_name="Regular Download", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_REGULAR_DOWNLOAD", is_color=False)
+    db_session.add_all([agent, user, printer])
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        external_job_id="eventlog:regular-download",
+        document_name="Regular.pdf",
+        pages=1,
+        is_color=False,
+        cost=0.05,
+        status=JobStatus.authorized,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        download_web_print_file(job.id, db=db_session, current_user=agent)
+
+    assert exc.value.status_code == 400
+    assert "Web Print" in exc.value.detail
+
+
 def test_regular_user_cannot_release_another_users_pending_job(db_session):
     owner = User(username="job-owner", full_name="Job Owner", role=UserRole.user, organization_id=1)
     other_user = User(username="other-user", full_name="Other User", role=UserRole.user, organization_id=1)
