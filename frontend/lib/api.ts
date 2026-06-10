@@ -5,10 +5,10 @@ export type DashboardMetrics = {
   prints_month: number;
   pages_today: number;
   pages_month: number;
-  top_users: { username: string; pages: number }[];
-  top_printers: { printer: string; pages: number }[];
-  department_usage: { department: string; pages: number }[];
-  color_usage: { type: string; pages: number }[];
+  top_users: { username: string; pages: number; cost?: number; cost_per_page?: number }[];
+  top_printers: { printer: string; pages: number; cost?: number; cost_per_page?: number }[];
+  department_usage: { department: string; pages: number; cost?: number; cost_per_page?: number }[];
+  color_usage: { type: string; pages: number; cost?: number; cost_per_page?: number }[];
   eco_metrics?: {
     pages_saved: number;
     co2_saved_g: number;

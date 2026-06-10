@@ -20,6 +20,17 @@ type JobRow = {
   cost?: number;
 };
 
+function MoneyLine({ cost, costPerPage }: { cost?: number; costPerPage?: number }) {
+  if (typeof cost !== "number" && typeof costPerPage !== "number") return null;
+  return (
+    <span className="mt-0.5 block text-xs text-muted-foreground">
+      {typeof cost === "number" ? `R$ ${cost.toFixed(2)}` : ""}
+      {typeof cost === "number" && typeof costPerPage === "number" ? " | " : ""}
+      {typeof costPerPage === "number" ? `R$ ${costPerPage.toFixed(2)}/pag.` : ""}
+    </span>
+  );
+}
+
 function Stat({ label, value, icon: Icon }: { label: string; value: number; icon: typeof FileText }) {
   return (
     <Surface className="p-5">
@@ -222,7 +233,10 @@ export default function DashboardPage() {
             {(data?.top_users ?? []).map((item) => (
               <div key={item.username} className="flex items-center justify-between border-b py-2 text-sm last:border-0">
                 <span className="font-medium">{item.username}</span>
-                <span className="text-muted-foreground">{item.pages} pag.</span>
+                <span className="text-right">
+                  <span className="font-medium text-foreground">{item.pages} pag.</span>
+                  <MoneyLine cost={item.cost} costPerPage={item.cost_per_page} />
+                </span>
               </div>
             ))}
           </div>
@@ -236,7 +250,10 @@ export default function DashboardPage() {
             {(data?.top_printers ?? []).map((item) => (
               <div key={item.printer} className="flex items-center justify-between border-b py-2 text-sm last:border-0">
                 <span className="font-medium">{item.printer}</span>
-                <span className="text-muted-foreground">{item.pages} pag.</span>
+                <span className="text-right">
+                  <span className="font-medium text-foreground">{item.pages} pag.</span>
+                  <MoneyLine cost={item.cost} costPerPage={item.cost_per_page} />
+                </span>
               </div>
             ))}
           </div>
@@ -250,7 +267,10 @@ export default function DashboardPage() {
             <div key={item.department} className="mb-4 last:mb-0">
               <div className="mb-1 flex justify-between text-sm">
                 <span className="font-medium">{item.department}</span>
-                <span className="text-muted-foreground">{item.pages} pag.</span>
+                <span className="text-right">
+                  <span className="font-medium text-foreground">{item.pages} pag.</span>
+                  <MoneyLine cost={item.cost} costPerPage={item.cost_per_page} />
+                </span>
               </div>
               <div className="h-2 overflow-hidden rounded bg-muted">
                 <div className="h-full rounded bg-primary transition-all duration-500" style={{ width: `${Math.min(item.pages, 100)}%` }} />
@@ -263,7 +283,10 @@ export default function DashboardPage() {
           {(data?.color_usage ?? []).map((item) => (
             <div key={item.type} className="flex items-center justify-between border-b py-2 text-sm last:border-0">
               <span className="font-medium">{item.type}</span>
-              <span className="text-muted-foreground">{item.pages} pag.</span>
+              <span className="text-right">
+                <span className="font-medium text-foreground">{item.pages} pag.</span>
+                <MoneyLine cost={item.cost} costPerPage={item.cost_per_page} />
+              </span>
             </div>
           ))}
         </Surface>

@@ -375,6 +375,15 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     assert jobs[0].department_name == "Financeiro"
     assert jobs[0].cost == 0.15
     assert metrics["pages_month"] == 3
+    assert metrics["top_users"] == [
+        {"username": "Org 1 User", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
+    ]
+    assert metrics["top_printers"] == [
+        {"printer": "Org 1 Printer", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
+    ]
+    assert metrics["department_usage"] == [
+        {"department": "Financeiro", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
+    ]
 
 
 def test_same_user_and_printer_names_can_exist_in_different_organizations(db_session: Session):

@@ -9,6 +9,16 @@ from app.models.printer import Printer
 from app.models.user import User
 
 
+def _round_money(value: float) -> float:
+    return round(float(value or 0.0), 2)
+
+
+def _cost_per_page(cost: float, pages: int) -> float:
+    if pages <= 0:
+        return 0.0
+    return _round_money(cost / pages)
+
+
 def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
     if organization_id is None:
         from app.services.organization_service import get_or_create_default_organization
@@ -29,8 +39,18 @@ def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
     ).scalar() or 0
 
     top_users = [
-        {"username": full_name or username, "pages": pages}
-        for username, full_name, pages in db.query(User.username, User.full_name, func.sum(PrintJob.pages))
+        {
+            "username": full_name or username,
+            "pages": int(pages or 0),
+            "cost": _round_money(cost),
+            "cost_per_page": _cost_per_page(cost, int(pages or 0)),
+        }
+        for username, full_name, pages, cost in db.query(
+            User.username,
+            User.full_name,
+            func.sum(PrintJob.pages),
+            func.coalesce(func.sum(PrintJob.cost), 0.0),
+        )
         .join(PrintJob, PrintJob.user_id == User.id)
         .filter(org_filter, authorized, PrintJob.submitted_at >= month_start)
         .group_by(User.username, User.full_name)
@@ -39,8 +59,17 @@ def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
         .all()
     ]
     top_printers = [
-        {"printer": printer, "pages": pages}
-        for printer, pages in db.query(Printer.name, func.sum(PrintJob.pages))
+        {
+            "printer": printer,
+            "pages": int(pages or 0),
+            "cost": _round_money(cost),
+            "cost_per_page": _cost_per_page(cost, int(pages or 0)),
+        }
+        for printer, pages, cost in db.query(
+            Printer.name,
+            func.sum(PrintJob.pages),
+            func.coalesce(func.sum(PrintJob.cost), 0.0),
+        )
         .join(PrintJob, PrintJob.printer_id == Printer.id)
         .filter(org_filter, authorized, PrintJob.submitted_at >= month_start)
         .group_by(Printer.name)
@@ -49,8 +78,17 @@ def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
         .all()
     ]
     department_usage = [
-        {"department": department or "Sem departamento", "pages": pages}
-        for department, pages in db.query(Department.name, func.sum(PrintJob.pages))
+        {
+            "department": department or "Sem departamento",
+            "pages": int(pages or 0),
+            "cost": _round_money(cost),
+            "cost_per_page": _cost_per_page(cost, int(pages or 0)),
+        }
+        for department, pages, cost in db.query(
+            Department.name,
+            func.sum(PrintJob.pages),
+            func.coalesce(func.sum(PrintJob.cost), 0.0),
+        )
         .select_from(PrintJob)
         .join(User, User.id == PrintJob.user_id)
         .outerjoin(Department, Department.id == User.department_id)
@@ -60,8 +98,17 @@ def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
         .all()
     ]
     color_usage = [
-        {"type": "Colorido" if is_color else "Preto e branco", "pages": pages}
-        for is_color, pages in db.query(PrintJob.is_color, func.coalesce(func.sum(PrintJob.pages), 0))
+        {
+            "type": "Colorido" if is_color else "Preto e branco",
+            "pages": int(pages or 0),
+            "cost": _round_money(cost),
+            "cost_per_page": _cost_per_page(cost, int(pages or 0)),
+        }
+        for is_color, pages, cost in db.query(
+            PrintJob.is_color,
+            func.coalesce(func.sum(PrintJob.pages), 0),
+            func.coalesce(func.sum(PrintJob.cost), 0.0),
+        )
         .filter(org_filter, authorized, PrintJob.submitted_at >= month_start)
         .group_by(PrintJob.is_color)
         .all()
