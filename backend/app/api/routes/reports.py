@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_roles
+from app.models.department import Department
 from app.models.monthly_closing import MonthlyClosing
 from app.models.print_job import PrintJob
+from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.report import (
     DashboardMetrics,
@@ -187,11 +189,24 @@ def export_report(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> Response:
-    query = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id).order_by(PrintJob.submitted_at.desc())
+    query = (
+        db.query(PrintJob)
+        .join(User, User.id == PrintJob.user_id)
+        .join(Printer, Printer.id == PrintJob.printer_id)
+        .filter(
+            PrintJob.organization_id == actor.organization_id,
+            User.organization_id == actor.organization_id,
+            Printer.organization_id == actor.organization_id,
+        )
+        .order_by(PrintJob.submitted_at.desc())
+    )
     if user_id:
         query = query.filter(PrintJob.user_id == user_id)
     if department_id:
-        query = query.filter(PrintJob.user.has(User.department_id == department_id))
+        query = query.outerjoin(Department, Department.id == User.department_id).filter(
+            User.department_id == department_id,
+            Department.organization_id == actor.organization_id,
+        )
     if printer_id:
         query = query.filter(PrintJob.printer_id == printer_id)
     if date_from:

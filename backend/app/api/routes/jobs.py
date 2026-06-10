@@ -32,7 +32,16 @@ def list_jobs(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> list[PrintJobRead]:
-    query = db.query(PrintJob).join(User).join(Printer).filter(PrintJob.organization_id == actor.organization_id)
+    query = (
+        db.query(PrintJob)
+        .join(User, User.id == PrintJob.user_id)
+        .join(Printer, Printer.id == PrintJob.printer_id)
+        .filter(
+            PrintJob.organization_id == actor.organization_id,
+            User.organization_id == actor.organization_id,
+            Printer.organization_id == actor.organization_id,
+        )
+    )
     if user_id:
         query = query.filter(PrintJob.user_id == user_id)
     if department_id:

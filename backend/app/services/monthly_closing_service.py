@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, timezone
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
@@ -42,6 +43,9 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
         .outerjoin(Department, Department.id == User.department_id)
         .filter(
             PrintJob.organization_id == organization_id,
+            User.organization_id == organization_id,
+            Printer.organization_id == organization_id,
+            or_(Department.id.is_(None), Department.organization_id == organization_id),
             PrintJob.submitted_at >= start,
             PrintJob.submitted_at < end,
         )

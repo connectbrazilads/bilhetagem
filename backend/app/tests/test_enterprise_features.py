@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 import pytest
 from fastapi import HTTPException
+from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
@@ -15,6 +17,7 @@ from app.models.quota import Quota
 from app.api.routes.auth import login
 from app.api.routes.audit_logs import export_audit_logs, list_audit_logs
 from app.api.routes.organizations import create_organization, list_organizations, update_organization
+from app.api.routes.reports import export_report
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
 from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
@@ -27,6 +30,7 @@ from app.schemas.department import DepartmentCreate, DepartmentUpdate
 from app.schemas.auth import LoginRequest
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.report_service import dashboard_metrics
+from app.services.monthly_closing_service import build_monthly_snapshot
 from app.services.audit_service import write_audit
 from app.services.snmp_service import SnmpPrinterStatus, poll_printers_once
 from app.services.ldap_service import sync_ldap_users, test_ldap_connection as check_ldap_connection
@@ -377,6 +381,16 @@ def test_organization_scope_isolates_core_views(db_session: Session):
                 submitted_at=datetime.now(timezone.utc),
             ),
             PrintJob(
+                organization_id=1,
+                user_id=org_two_user.id,
+                printer_id=org_two_printer.id,
+                pages=99,
+                is_color=False,
+                cost=9.90,
+                status=JobStatus.authorized,
+                submitted_at=datetime.now(timezone.utc),
+            ),
+            PrintJob(
                 organization_id=other_org.id,
                 user_id=org_two_user.id,
                 printer_id=org_two_printer.id,
@@ -403,6 +417,10 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         actor=org_one_admin,
     )
     metrics = dashboard_metrics(db_session, organization_id=1)
+    export_response = export_report(format="xlsx", db=db_session, actor=org_one_admin)
+    workbook = load_workbook(BytesIO(export_response.body), data_only=True)
+    exported_users = [row[1].value for row in workbook["Impressoes"].iter_rows(min_row=2)]
+    snapshot = build_monthly_snapshot(db_session, organization_id=1, year=datetime.now(timezone.utc).year, month=datetime.now(timezone.utc).month)
 
     assert {user.username for user in users} == {"org1-admin", "org1-user"}
     assert [department.name for department in departments] == ["Financeiro"]
@@ -423,6 +441,12 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     ]
     assert metrics["department_usage"] == [
         {"department": "Financeiro", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
+    ]
+    assert exported_users == ["Org 1 User"]
+    assert snapshot["totals"]["total_jobs"] == 1
+    assert snapshot["totals"]["total_pages"] == 3
+    assert snapshot["by_user"] == [
+        {"name": "Org 1 User", "jobs": 1, "pages": 3, "mono_pages": 3, "color_pages": 0, "cost": 0.15, "cost_per_page": 0.05},
     ]
 
 
