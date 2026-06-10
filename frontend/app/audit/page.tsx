@@ -71,20 +71,27 @@ export default function AuditPage() {
     setError(null);
     const params = buildParams("5000");
     try {
-      const response = await fetch(`${API_URL}/audit-logs/export?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!response.ok) throw new Error(await response.text());
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "auditoria.csv";
-      link.click();
-      window.URL.revokeObjectURL(url);
+      await downloadBlob(`/audit-logs/export?${params.toString()}`, "auditoria.csv", token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao exportar auditoria");
     }
+  }
+
+  async function downloadBlob(path: string, filename: string, token: string) {
+    const response = await fetch(`${API_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Falha ao baixar ${filename}: ${readError({ message: detail }) || `HTTP ${response.status}`}`);
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(url);
   }
 
   useEffect(() => {
@@ -233,4 +240,13 @@ function formatMetadataValue(value: unknown) {
     return JSON.stringify(value);
   }
   return String(value);
+}
+
+function readError(err: { message?: string }) {
+  let errorText = err.message || "";
+  try {
+    const parsed = JSON.parse(errorText);
+    if (parsed.detail) errorText = parsed.detail;
+  } catch {}
+  return errorText || "Erro desconhecido";
 }
