@@ -23,7 +23,38 @@ def _resolve_organization_id(db: Session, organization_id: int | None) -> int:
 def _parse_bool(val: str | None, default: bool) -> bool:
     if val is None:
         return default
-    return val.lower() in ("true", "1", "yes")
+    normalized = val.strip().lower()
+    if normalized in ("true", "1", "yes", "sim"):
+        return True
+    if normalized in ("false", "0", "no", "nao", "não"):
+        return False
+    return default
+
+
+def _parse_int(val: str | None, default: int, *, min_value: int | None = None, max_value: int | None = None) -> int:
+    if val is None:
+        return default
+    try:
+        parsed = int(str(val).strip())
+    except (TypeError, ValueError):
+        return default
+    if min_value is not None and parsed < min_value:
+        return default
+    if max_value is not None and parsed > max_value:
+        return default
+    return parsed
+
+
+def _parse_float(val: str | None, default: float, *, min_value: float | None = None) -> float:
+    if val is None:
+        return default
+    try:
+        parsed = float(str(val).strip().replace(",", "."))
+    except (TypeError, ValueError):
+        return default
+    if min_value is not None and parsed < min_value:
+        return default
+    return parsed
 
 
 def get_system_settings_dict(db: Session, organization_id: int | None = None) -> dict[str, Any]:
@@ -33,9 +64,9 @@ def get_system_settings_dict(db: Session, organization_id: int | None = None) ->
     settings_dict = {s.key: s.value for s in db_settings}
 
     return {
-        "default_monthly_quota": int(settings_dict.get("default_monthly_quota", str(settings.default_monthly_quota))),
-        "default_printer_cost_mono": float(settings_dict.get("default_printer_cost_mono", "0.05")),
-        "default_printer_cost_color": float(settings_dict.get("default_printer_cost_color", "0.25")),
+        "default_monthly_quota": _parse_int(settings_dict.get("default_monthly_quota"), settings.default_monthly_quota, min_value=0),
+        "default_printer_cost_mono": _parse_float(settings_dict.get("default_printer_cost_mono"), 0.05, min_value=0),
+        "default_printer_cost_color": _parse_float(settings_dict.get("default_printer_cost_color"), 0.25, min_value=0),
         "auto_create_users": _parse_bool(settings_dict.get("auto_create_users", None), settings.auto_create_users),
         "blocking_enabled": _parse_bool(settings_dict.get("blocking_enabled", None), True),
         "show_balance": _parse_bool(settings_dict.get("show_balance", None), True),
@@ -74,7 +105,12 @@ def get_monthly_report_email_settings(db: Session, organization_id: int | None =
     return {
         "enabled": _parse_bool(settings_dict.get(f"{prefix}enabled"), MONTHLY_REPORT_EMAIL_DEFAULTS["enabled"]),
         "recipients": settings_dict.get(f"{prefix}recipients", MONTHLY_REPORT_EMAIL_DEFAULTS["recipients"]),
-        "day_of_month": int(settings_dict.get(f"{prefix}day_of_month", str(MONTHLY_REPORT_EMAIL_DEFAULTS["day_of_month"]))),
+        "day_of_month": _parse_int(
+            settings_dict.get(f"{prefix}day_of_month"),
+            MONTHLY_REPORT_EMAIL_DEFAULTS["day_of_month"],
+            min_value=1,
+            max_value=28,
+        ),
         "include_pdf": _parse_bool(settings_dict.get(f"{prefix}include_pdf"), MONTHLY_REPORT_EMAIL_DEFAULTS["include_pdf"]),
         "include_xlsx": _parse_bool(settings_dict.get(f"{prefix}include_xlsx"), MONTHLY_REPORT_EMAIL_DEFAULTS["include_xlsx"]),
     }

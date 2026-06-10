@@ -8,6 +8,7 @@ from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.models.print_job import PrintJob, JobStatus
 from app.models.quota import Quota
+from app.models.system_setting import SystemSetting
 from app.services.settings_service import update_system_settings
 from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
@@ -63,6 +64,31 @@ def test_general_settings_api(db_session: Session):
     assert res_verified.web_print_enabled is False
     assert res_verified.default_printer_cost_mono == 0.07
     assert res_verified.default_printer_cost_color == 0.32
+
+
+def test_general_settings_fall_back_when_stored_values_are_invalid(db_session: Session):
+    actor = User(username="admin-invalid-settings", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.add_all(
+        [
+            SystemSetting(organization_id=1, key="default_monthly_quota", value="-10"),
+            SystemSetting(organization_id=1, key="default_printer_cost_mono", value="abc"),
+            SystemSetting(organization_id=1, key="default_printer_cost_color", value="-0.25"),
+            SystemSetting(organization_id=1, key="blocking_enabled", value="talvez"),
+            SystemSetting(organization_id=1, key="show_balance", value="nao"),
+            SystemSetting(organization_id=1, key="web_print_enabled", value="sim"),
+        ]
+    )
+    db_session.commit()
+
+    settings = get_general_settings(db=db_session, actor=actor)
+
+    assert settings.default_monthly_quota == 500
+    assert settings.default_printer_cost_mono == 0.05
+    assert settings.default_printer_cost_color == 0.25
+    assert settings.blocking_enabled is True
+    assert settings.show_balance is False
+    assert settings.web_print_enabled is True
 
 
 def test_settings_updates_are_audited(db_session: Session):
@@ -210,6 +236,38 @@ def test_monthly_report_email_settings_updates_are_audited(db_session: Session):
     assert log.log_metadata["changes"]["recipients"]["after"] == "financeiro@empresa.com"
     assert log.log_metadata["changes"]["day_of_month"] == {"before": 1, "after": 5}
     assert log.log_metadata["changes"]["include_xlsx"] == {"before": True, "after": False}
+
+
+def test_monthly_report_email_settings_fall_back_when_stored_values_are_invalid(db_session: Session):
+    actor = User(username="admin-invalid-email-settings", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.add_all(
+        [
+            SystemSetting(organization_id=1, key="monthly_report_email_enabled", value="talvez"),
+            SystemSetting(organization_id=1, key="monthly_report_email_recipients", value="financeiro@empresa.com"),
+            SystemSetting(organization_id=1, key="monthly_report_email_day_of_month", value="31"),
+            SystemSetting(organization_id=1, key="monthly_report_email_include_pdf", value="sim"),
+            SystemSetting(organization_id=1, key="monthly_report_email_include_xlsx", value="nao"),
+        ]
+    )
+    db_session.commit()
+
+    settings = update_monthly_report_email_settings_endpoint(
+        payload=MonthlyReportEmailSettings(
+            enabled=True,
+            recipients="financeiro@empresa.com",
+            day_of_month=5,
+            include_pdf=True,
+            include_xlsx=False,
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert settings.enabled is True
+    assert settings.day_of_month == 5
+    assert settings.include_pdf is True
+    assert settings.include_xlsx is False
 
 
 def test_web_print_module_can_be_disabled(db_session: Session):
