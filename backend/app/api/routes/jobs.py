@@ -4,6 +4,7 @@ import os
 import shutil
 import time
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
@@ -318,7 +319,7 @@ def web_print_endpoint(
         printer_name=printer.name,
         pages=page_count,
         is_color=is_color,
-        external_job_id="webprint_pending",
+        external_job_id=f"webprint_pending_{uuid4().hex}",
         document_name=file.filename,
         submitted_at=datetime.now(timezone.utc),
     )

@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
+from io import BytesIO
+from types import SimpleNamespace
 
 from fastapi import HTTPException
 import pytest
 
-from app.api.routes.jobs import cancel_job, confirm_web_printed, download_web_print_file, get_agent_actions, release_job
+from app.api.routes.jobs import cancel_job, confirm_web_printed, download_web_print_file, get_agent_actions, release_job, web_print_endpoint
 from app.models.audit_log import AuditLog
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
@@ -405,6 +407,38 @@ def test_agent_cannot_download_regular_job_through_web_print_endpoint(db_session
 
     assert exc.value.status_code == 400
     assert "Web Print" in exc.value.detail
+
+
+def test_blocked_web_print_submissions_create_distinct_jobs(db_session):
+    user = User(username="webprint-blocked-user", full_name="WebPrint Blocked", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_WEBPRINT_BLOCKED", is_color=False, cost_mono=0.05, cost_color=0.25)
+    db_session.add_all([user, printer])
+    db_session.flush()
+    db_session.add(
+        Quota(
+            organization_id=1,
+            user_id=user.id,
+            year=2026,
+            month=6,
+            monthly_limit=0,
+            used_pages=0,
+            monthly_balance=0.0,
+            used_balance=0.0,
+        )
+    )
+    db_session.commit()
+
+    def upload(name: str):
+        return SimpleNamespace(filename=name, file=BytesIO(b"%PDF-1.4\n1 0 obj\n<< /Type /Page >>\nendobj"))
+
+    first = web_print_endpoint(file=upload("Primeiro.pdf"), printer_id=printer.id, is_color=False, db=db_session, current_user=user)
+    second = web_print_endpoint(file=upload("Segundo.pdf"), printer_id=printer.id, is_color=False, db=db_session, current_user=user)
+
+    jobs = db_session.query(PrintJob).filter(PrintJob.printer_id == printer.id).order_by(PrintJob.id).all()
+    assert first.job_id != second.job_id
+    assert [job.document_name for job in jobs] == ["Primeiro.pdf", "Segundo.pdf"]
+    assert [job.status for job in jobs] == [JobStatus.blocked, JobStatus.blocked]
+    assert all(job.external_job_id.startswith("webprint_pending_") for job in jobs)
 
 
 def test_regular_user_cannot_release_another_users_pending_job(db_session):
