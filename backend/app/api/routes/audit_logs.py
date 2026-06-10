@@ -60,6 +60,13 @@ def _to_read_model(log: AuditLog, username: str | None) -> AuditLogRead:
     )
 
 
+def _csv_safe(value) -> str:
+    text = "" if value is None else str(value)
+    if text[:1] in {"=", "+", "-", "@"}:
+        return "'" + text
+    return text
+
+
 @router.get("", response_model=list[AuditLogRead])
 def list_audit_logs(
     action: str | None = Query(default=None, max_length=80),
@@ -133,12 +140,12 @@ def export_audit_logs(
     for log, username in rows:
         writer.writerow(
             [
-                log.created_at.isoformat(),
-                username or "Sistema",
-                log.action,
-                log.entity,
-                log.entity_id or "",
-                json.dumps(log.log_metadata or {}, ensure_ascii=False),
+                _csv_safe(log.created_at.isoformat()),
+                _csv_safe(username or "Sistema"),
+                _csv_safe(log.action),
+                _csv_safe(log.entity),
+                _csv_safe(log.entity_id or ""),
+                _csv_safe(json.dumps(log.log_metadata or {}, ensure_ascii=False)),
             ]
         )
 

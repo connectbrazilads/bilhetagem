@@ -2090,7 +2090,7 @@ def test_audit_log_facets_are_scoped_by_organization(db_session: Session):
 
 
 def test_audit_log_filters_by_date_and_exports_csv(db_session: Session):
-    admin = User(username="audit-export", full_name="Audit Export", role=UserRole.admin, is_active=True, organization_id=1)
+    admin = User(username="=audit-export", full_name="Audit Export", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add(admin)
     db_session.flush()
 
@@ -2136,7 +2136,8 @@ def test_audit_log_filters_by_date_and_exports_csv(db_session: Session):
     )
     body = response.body.decode("utf-8")
     assert "data_hora,ator,acao,entidade,id_entidade,detalhes" in body
-    assert "audit-export,printer_updated,printers,2" in body
+    assert "'=audit-export,printer_updated,printers,2" in body
+    assert "\n=audit-export" not in body
     assert "KONICA" in body
     assert "antigo" not in body
     assert "audit_logs_exported" not in body
