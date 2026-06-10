@@ -21,6 +21,7 @@ from app.api.routes.agent_updates import (
     poll_queue_actions,
 )
 from app.core.config import settings
+from app.services.agent_release_service import published_agent_version
 from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
 from app.models.agent_log import AgentLog
 from app.models.audit_log import AuditLog
@@ -130,6 +131,53 @@ def test_agent_releases_ignore_manifest_entries_without_safe_filename(db_session
     assert version.latest_version == "0.3.0"
     assert version.update_available is True
     assert version.sha256 == hashlib.sha256(b"agent-v3").hexdigest()
+
+
+def test_agent_releases_ignore_unsafe_versions_and_malformed_entries(db_session: Session, monkeypatch, tmp_path: Path):
+    safe_dir = tmp_path / "0.5.0"
+    safe_dir.mkdir()
+    (safe_dir / "PrintBillingAgent.exe").write_bytes(b"agent-v5")
+    (tmp_path / "manifest.json").write_text(
+        """
+        {
+          "versions": [
+            "bad-entry",
+            {
+              "version": "../0.6.0",
+              "published_at": "2026-06-01T00:00:00Z",
+              "files": [{"kind": "agent", "filename": "PrintBillingAgent.exe"}]
+            },
+            {
+              "version": "0.5.1",
+              "published_at": "2026-05-02T00:00:00Z",
+              "files": {"kind": "agent", "filename": "PrintBillingAgent.exe"}
+            },
+            {
+              "version": "0.5.0",
+              "published_at": "2026-05-01T00:00:00Z",
+              "files": [{"kind": "agent", "filename": "PrintBillingAgent.exe"}]
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_latest_version", "0.2.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    actor = User(username="unsafe-version-admin", full_name="Release Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    releases = list_agent_releases(_=actor)
+    version = agent_version(current_version="0.2.0", _=actor)
+
+    assert [release.version for release in releases] == ["0.5.1", "0.5.0"]
+    assert releases[0].files == []
+    assert releases[1].files[0].download_url == "/agent/releases/0.5.0/download?filename=PrintBillingAgent.exe"
+    assert published_agent_version() == "0.5.0"
+    assert version.latest_version == "0.5.0"
+    assert version.update_available is True
+    assert version.sha256 == hashlib.sha256(b"agent-v5").hexdigest()
 
 
 def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypatch, tmp_path: Path):

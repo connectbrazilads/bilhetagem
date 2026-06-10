@@ -31,6 +31,10 @@ def _release_file(version: str, filename: str) -> Path:
     return root / filename
 
 
+def _is_safe_release_version(version: str) -> bool:
+    return bool(version) and Path(version).name == version and "/" not in version and "\\" not in version
+
+
 def _is_safe_release_filename(filename: str) -> bool:
     return bool(filename) and Path(filename).name == filename and "/" not in filename and "\\" not in filename
 
@@ -44,12 +48,18 @@ def published_agent_version() -> str:
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
-            releases = sorted(data.get("versions", []), key=_release_sort_key, reverse=True)
+            raw_releases = data.get("versions", []) if isinstance(data, dict) else []
+            releases = sorted([release for release in raw_releases if isinstance(release, dict)], key=_release_sort_key, reverse=True)
             for release in releases:
                 version = str(release.get("version") or "")
-                if not version:
+                if not _is_safe_release_version(version):
                     continue
-                for file in release.get("files", []):
+                raw_files = release.get("files", [])
+                if not isinstance(raw_files, list):
+                    continue
+                for file in raw_files:
+                    if not isinstance(file, dict):
+                        continue
                     filename = str(file.get("filename") or "")
                     if file.get("kind") == "agent" and _is_safe_release_filename(filename) and _release_file(version, filename).is_file():
                         return version

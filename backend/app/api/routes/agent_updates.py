@@ -74,6 +74,10 @@ def _is_safe_release_filename(filename: str) -> bool:
     return bool(filename) and Path(filename).name == filename and "/" not in filename and "\\" not in filename
 
 
+def _is_safe_release_version(version: str) -> bool:
+    return bool(version) and Path(version).name == version and "/" not in version and "\\" not in version
+
+
 def _manifest_str(value, default: str | None = None) -> str | None:
     if value is None:
         return default
@@ -114,10 +118,13 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
             if not isinstance(raw_release, dict):
                 continue
             version = str(raw_release.get("version") or "")
-            if not version:
+            if not _is_safe_release_version(version):
                 continue
             files = []
-            for raw_file in raw_release.get("files", []):
+            raw_files = raw_release.get("files", [])
+            if not isinstance(raw_files, list):
+                raw_files = []
+            for raw_file in raw_files:
                 if not isinstance(raw_file, dict):
                     continue
                 filename = str(raw_file.get("filename") or "")
