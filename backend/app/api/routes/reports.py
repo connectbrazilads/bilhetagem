@@ -151,6 +151,7 @@ def _report_filter_summary(
     *,
     user_id: int | None,
     department_id: int | None,
+    cost_center: str | None,
     printer_id: int | None,
     date_from: datetime | None,
     date_to: datetime | None,
@@ -162,6 +163,8 @@ def _report_filter_summary(
     if department_id:
         department = db.query(Department).filter(Department.organization_id == organization_id, Department.id == department_id).first()
         filters["Departamento"] = department.name if department else f"ID {department_id}"
+    if cost_center:
+        filters["Centro de Custo"] = cost_center
     if printer_id:
         printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.id == printer_id).first()
         filters["Impressora"] = printer.name if printer else f"ID {printer_id}"
@@ -178,12 +181,15 @@ def _validate_report_filters(
     *,
     user_id: int | None,
     department_id: int | None,
+    cost_center: str | None,
     printer_id: int | None,
 ) -> None:
     if user_id is not None and not db.query(User.id).filter(User.organization_id == organization_id, User.id == user_id).first():
         raise HTTPException(status_code=404, detail="Usuario do filtro nao encontrado")
     if department_id is not None and not db.query(Department.id).filter(Department.organization_id == organization_id, Department.id == department_id).first():
         raise HTTPException(status_code=404, detail="Departamento do filtro nao encontrado")
+    if cost_center is not None and not db.query(Department.id).filter(Department.organization_id == organization_id, Department.cost_center == cost_center).first():
+        raise HTTPException(status_code=404, detail="Centro de custo do filtro nao encontrado")
     if printer_id is not None and not db.query(Printer.id).filter(Printer.organization_id == organization_id, Printer.id == printer_id).first():
         raise HTTPException(status_code=404, detail="Impressora do filtro nao encontrada")
 
@@ -191,6 +197,15 @@ def _validate_report_filters(
 def _validate_date_range(date_from: datetime | None, date_to: datetime | None) -> None:
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=400, detail="Periodo invalido: data inicial maior que data final")
+
+
+def _clean_cost_center_filter(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if len(cleaned) > 120:
+        raise HTTPException(status_code=422, detail="Centro de custo deve ter ate 120 caracteres")
+    return cleaned or None
 
 
 @router.get("/monthly-closings/{closing_id}/export")
@@ -231,17 +246,20 @@ def export_report(
     format: str = Query(default="xlsx", pattern="^(xlsx|pdf)$"),
     user_id: int | None = None,
     department_id: int | None = None,
+    cost_center: str | None = None,
     printer_id: int | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> Response:
+    cost_center = _clean_cost_center_filter(cost_center)
     _validate_report_filters(
         db,
         actor.organization_id,
         user_id=user_id,
         department_id=department_id,
+        cost_center=cost_center,
         printer_id=printer_id,
     )
     _validate_date_range(date_from, date_to)
@@ -258,11 +276,12 @@ def export_report(
     )
     if user_id:
         query = query.filter(PrintJob.user_id == user_id)
+    if department_id or cost_center:
+        query = query.outerjoin(Department, Department.id == User.department_id)
     if department_id:
-        query = query.outerjoin(Department, Department.id == User.department_id).filter(
-            User.department_id == department_id,
-            Department.organization_id == actor.organization_id,
-        )
+        query = query.filter(User.department_id == department_id, Department.organization_id == actor.organization_id)
+    if cost_center:
+        query = query.filter(Department.organization_id == actor.organization_id, Department.cost_center == cost_center)
     if printer_id:
         query = query.filter(PrintJob.printer_id == printer_id)
     if date_from:
@@ -275,6 +294,7 @@ def export_report(
         actor.organization_id,
         user_id=user_id,
         department_id=department_id,
+        cost_center=cost_center,
         printer_id=printer_id,
         date_from=date_from,
         date_to=date_to,
@@ -290,6 +310,7 @@ def export_report(
             "filters": {
                 "user_id": user_id,
                 "department_id": department_id,
+                "cost_center": cost_center,
                 "printer_id": printer_id,
                 "date_from": date_from.isoformat() if date_from else None,
                 "date_to": date_to.isoformat() if date_to else None,

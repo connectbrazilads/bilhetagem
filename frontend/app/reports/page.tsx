@@ -37,6 +37,7 @@ type UserRow = {
 type DepartmentRow = {
   id: number;
   name: string;
+  cost_center: string | null;
 };
 
 type PrinterRow = {
@@ -117,6 +118,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  const [costCenter, setCostCenter] = useState("");
   const [printerId, setPrinterId] = useState("");
   const [dateQuery, setDateQuery] = useState("");
   const now = new Date();
@@ -132,13 +134,14 @@ export default function ReportsPage() {
     const params = new URLSearchParams();
     if (userId) params.set("user_id", userId);
     if (departmentId) params.set("department_id", departmentId);
+    if (costCenter) params.set("cost_center", costCenter);
     if (printerId) params.set("printer_id", printerId);
     if (dateQuery) {
       params.set("date_from", `${dateQuery}T00:00:00`);
       params.set("date_to", `${dateQuery}T23:59:59`);
     }
     return params.toString();
-  }, [dateQuery, departmentId, printerId, userId]);
+  }, [costCenter, dateQuery, departmentId, printerId, userId]);
 
   const loadJobs = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -331,6 +334,10 @@ export default function ReportsPage() {
       }
     );
   }, [closings]);
+  const costCenters = useMemo(
+    () => Array.from(new Set(departments.map((department) => department.cost_center).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b)),
+    [departments]
+  );
 
   return (
     <ProtectedPage>
@@ -363,7 +370,7 @@ export default function ReportsPage() {
         <Summary label="Custo cobravel" value={`R$ ${summary.cost.toFixed(2)}`} icon={FileText} />
       </div>
 
-      <Surface className="mb-4 grid gap-3 p-4 md:grid-cols-[1fr_1fr_1fr_180px_auto]">
+      <Surface className="mb-4 grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_180px_auto]">
         <select className="h-9 rounded-md border bg-white px-3 text-sm" value={userId} onChange={(event) => setUserId(event.target.value)}>
           <option value="">Todos usuarios</option>
           {users.map((user) => (
@@ -377,6 +384,14 @@ export default function ReportsPage() {
           {departments.map((department) => (
             <option key={department.id} value={department.id}>
               {department.name}
+            </option>
+          ))}
+        </select>
+        <select className="h-9 rounded-md border bg-white px-3 text-sm" value={costCenter} onChange={(event) => setCostCenter(event.target.value)}>
+          <option value="">Todos centros de custo</option>
+          {costCenters.map((item) => (
+            <option key={item} value={item}>
+              {item}
             </option>
           ))}
         </select>

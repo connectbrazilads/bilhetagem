@@ -76,6 +76,7 @@ class PrintJobRead(BaseModel):
 class JobFilter(BaseModel):
     user_id: int | None = None
     department_id: int | None = None
+    cost_center: str | None = None
     printer_id: int | None = None
     date_from: datetime | None = None
     date_to: datetime | None = None

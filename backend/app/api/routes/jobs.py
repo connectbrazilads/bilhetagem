@@ -38,12 +38,15 @@ def _validate_job_filters(
     *,
     user_id: int | None,
     department_id: int | None,
+    cost_center: str | None,
     printer_id: int | None,
 ) -> None:
     if user_id is not None and not db.query(User.id).filter(User.organization_id == organization_id, User.id == user_id).first():
         raise HTTPException(status_code=404, detail="Usuario do filtro nao encontrado")
     if department_id is not None and not db.query(Department.id).filter(Department.organization_id == organization_id, Department.id == department_id).first():
         raise HTTPException(status_code=404, detail="Departamento do filtro nao encontrado")
+    if cost_center is not None and not db.query(Department.id).filter(Department.organization_id == organization_id, Department.cost_center == cost_center).first():
+        raise HTTPException(status_code=404, detail="Centro de custo do filtro nao encontrado")
     if printer_id is not None and not db.query(Printer.id).filter(Printer.organization_id == organization_id, Printer.id == printer_id).first():
         raise HTTPException(status_code=404, detail="Impressora do filtro nao encontrada")
 
@@ -53,21 +56,33 @@ def _validate_date_range(date_from: datetime | None, date_to: datetime | None) -
         raise HTTPException(status_code=400, detail="Periodo invalido: data inicial maior que data final")
 
 
+def _clean_cost_center_filter(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if len(cleaned) > 120:
+        raise HTTPException(status_code=422, detail="Centro de custo deve ter ate 120 caracteres")
+    return cleaned or None
+
+
 @router.get("", response_model=list[PrintJobRead])
 def list_jobs(
     user_id: int | None = Query(default=None),
     department_id: int | None = Query(default=None),
+    cost_center: str | None = None,
     printer_id: int | None = Query(default=None),
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> list[PrintJobRead]:
+    cost_center = _clean_cost_center_filter(cost_center)
     _validate_job_filters(
         db,
         actor.organization_id,
         user_id=user_id,
         department_id=department_id,
+        cost_center=cost_center,
         printer_id=printer_id,
     )
     _validate_date_range(date_from, date_to)
@@ -83,8 +98,12 @@ def list_jobs(
     )
     if user_id:
         query = query.filter(PrintJob.user_id == user_id)
+    if department_id or cost_center:
+        query = query.outerjoin(Department, Department.id == User.department_id)
     if department_id:
-        query = query.outerjoin(Department).filter(User.department_id == department_id)
+        query = query.filter(User.department_id == department_id)
+    if cost_center:
+        query = query.filter(Department.organization_id == actor.organization_id, Department.cost_center == cost_center)
     if printer_id:
         query = query.filter(PrintJob.printer_id == printer_id)
     if date_from:

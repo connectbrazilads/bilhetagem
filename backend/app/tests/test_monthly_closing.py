@@ -382,6 +382,45 @@ def test_report_export_applies_department_filter(db_session: Session):
     assert audit.log_metadata["filter_summary"] == {"Departamento": "Financeiro"}
 
 
+def test_report_export_applies_cost_center_filter(db_session: Session):
+    _seed_job_data(db_session)
+    other_department = Department(organization_id=1, name="Juridico", cost_center="CC-JUR")
+    other_user = User(username="bia-cc", full_name="Bia Juridico", role=UserRole.user, department=other_department, is_active=True, organization_id=1)
+    other_printer = Printer(organization_id=1, name="HP_JURIDICO_CC", is_color=False, cost_mono=0.05, cost_color=0.25)
+    db_session.add_all([other_department, other_user, other_printer])
+    db_session.flush()
+    db_session.add(
+        PrintJob(
+            organization_id=1,
+            user_id=other_user.id,
+            printer_id=other_printer.id,
+            pages=2,
+            is_color=False,
+            cost=0.10,
+            status=JobStatus.authorized,
+            submitted_at=datetime(2026, 5, 13, 10, tzinfo=timezone.utc),
+        )
+    )
+    actor = User(username="report-cost-center-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    response = export_report(format="xlsx", cost_center="CC-FIN", db=db_session, actor=actor)
+
+    workbook = load_workbook(BytesIO(response.body), data_only=True)
+    sheet = workbook["Impressoes"]
+    exported_users = [row[1].value for row in sheet.iter_rows(min_row=2)]
+    assert set(exported_users) == {"Ana Financeiro"}
+    assert len(exported_users) == 5
+    assert {row[3].value for row in sheet.iter_rows(min_row=2)} == {"CC-FIN"}
+    assert workbook["Resumo"]["A11"].value == "Centro de Custo"
+    assert workbook["Resumo"]["B11"].value == "CC-FIN"
+
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "report_exported").one()
+    assert audit.log_metadata["filters"]["cost_center"] == "CC-FIN"
+    assert audit.log_metadata["filter_summary"] == {"Centro de Custo": "CC-FIN"}
+
+
 def test_report_export_xlsx_escapes_formula_like_text(db_session: Session):
     department = Department(organization_id=1, name="+Financeiro", cost_center="-CC")
     user = User(username="formula-user", full_name="=Ana Financeiro", role=UserRole.user, department=department, is_active=True, organization_id=1)
@@ -424,7 +463,7 @@ def test_report_export_xlsx_escapes_formula_like_text(db_session: Session):
 def test_report_export_rejects_filters_from_other_organization(db_session: Session):
     other_org = Organization(name="Cliente Relatorio B", slug="cliente-relatorio-b", is_active=True)
     actor = User(username="report-scope-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
-    other_department = Department(organization=other_org, name="Financeiro")
+    other_department = Department(organization=other_org, name="Financeiro", cost_center="CC-OUTRO")
     other_user = User(username="report-scope-user", full_name="Outro Usuario", role=UserRole.user, is_active=True, organization=other_org, department=other_department)
     other_printer = Printer(organization=other_org, name="KONICA OUTRA EMPRESA", is_color=True)
     db_session.add_all([other_org, actor, other_department, other_user, other_printer])
@@ -437,6 +476,10 @@ def test_report_export_rejects_filters_from_other_organization(db_session: Sessi
     with pytest.raises(HTTPException) as department_exc:
         export_report(format="xlsx", department_id=other_department.id, db=db_session, actor=actor)
     assert department_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as cost_center_exc:
+        export_report(format="xlsx", cost_center="CC-OUTRO", db=db_session, actor=actor)
+    assert cost_center_exc.value.status_code == 404
 
     with pytest.raises(HTTPException) as printer_exc:
         export_report(format="xlsx", printer_id=other_printer.id, db=db_session, actor=actor)

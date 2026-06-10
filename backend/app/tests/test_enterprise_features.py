@@ -1072,6 +1072,16 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         db=db_session,
         actor=org_one_admin,
     )
+    cost_center_jobs = list_jobs(
+        user_id=None,
+        department_id=None,
+        cost_center="CC-FIN",
+        printer_id=None,
+        date_from=None,
+        date_to=None,
+        db=db_session,
+        actor=org_one_admin,
+    )
     metrics = dashboard_metrics(db_session, organization_id=1)
     agents = list_agents(db=db_session, actor=org_one_admin)
     export_response = export_report(format="xlsx", db=db_session, actor=org_one_admin)
@@ -1092,6 +1102,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert conflict_by_name["Org 1 Printer"].identity_conflict_count == 1
     assert conflict_by_name["Org 1 Printer"].identity_conflict_printer_ids == [org_one_duplicate_printer.id]
     assert [job.username for job in jobs] == ["org1-user"]
+    assert [job.username for job in cost_center_jobs] == ["org1-user"]
     assert jobs[0].department_id == org_one_department.id
     assert jobs[0].department_name == "Financeiro"
     assert jobs[0].department_cost_center == "CC-FIN"
@@ -1189,7 +1200,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
 def test_job_listing_rejects_filters_from_other_organization(db_session: Session):
     other_org = Organization(name="Cliente Jobs B", slug="cliente-jobs-b", is_active=True)
     actor = User(username="jobs-scope-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
-    other_department = Department(organization=other_org, name="Financeiro")
+    other_department = Department(organization=other_org, name="Financeiro", cost_center="CC-OUTRO")
     other_user = User(username="jobs-scope-user", full_name="Outro Usuario", role=UserRole.user, is_active=True, organization=other_org, department=other_department)
     other_printer = Printer(organization=other_org, name="KONICA OUTRA JOBS", is_color=True)
     db_session.add_all([other_org, actor, other_department, other_user, other_printer])
@@ -1202,6 +1213,10 @@ def test_job_listing_rejects_filters_from_other_organization(db_session: Session
     with pytest.raises(HTTPException) as department_exc:
         list_jobs(user_id=None, department_id=other_department.id, printer_id=None, date_from=None, date_to=None, db=db_session, actor=actor)
     assert department_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as cost_center_exc:
+        list_jobs(user_id=None, department_id=None, cost_center="CC-OUTRO", printer_id=None, date_from=None, date_to=None, db=db_session, actor=actor)
+    assert cost_center_exc.value.status_code == 404
 
     with pytest.raises(HTTPException) as printer_exc:
         list_jobs(user_id=None, department_id=None, printer_id=other_printer.id, date_from=None, date_to=None, db=db_session, actor=actor)
