@@ -1530,6 +1530,15 @@ def test_queue_action_result_requires_running_status(db_session: Session):
     assert persisted.result_message == "concluida"
 
 
+def test_failed_queue_action_result_requires_message():
+    with pytest.raises(ValidationError):
+        AgentQueueActionResult(status=AgentQueueActionStatus.failed, result_message="  ")
+
+    result = AgentQueueActionResult(status=AgentQueueActionStatus.failed, result_message="Driver nao encontrado")
+
+    assert result.result_message == "Driver nao encontrado"
+
+
 def test_restore_queue_action_rebinds_physical_printer(db_session: Session):
     actor = User(username="queue-restore-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="KONICA RESTAURAR", ip_address="192.168.1.126", is_color=True)

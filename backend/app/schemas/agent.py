@@ -164,6 +164,12 @@ class AgentQueueActionResult(BaseModel):
     result_message: str | None = Field(default=None, max_length=500)
     agent_uid: str | None = Field(default=None, min_length=1, max_length=120)
 
+    @model_validator(mode="after")
+    def failed_actions_require_message(self):
+        if self.status == AgentQueueActionStatus.failed and not (self.result_message or "").strip():
+            raise ValueError("Informe o motivo da falha da acao remota")
+        return self
+
 
 class AgentQueueActionRead(BaseModel):
     id: int
