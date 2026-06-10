@@ -44,8 +44,9 @@ Depois que as dependencias dos tres projetos estiverem instaladas, rode a esteir
 .\\verify.ps1
 ```
 
-Esse comando executa testes do backend, testes do agent, lint do frontend e build do frontend.
-Para validar tambem os artefatos versionados do agent:
+Esse comando executa testes do backend, testes do agent, lint do frontend e build do frontend. Se existir
+`agent/releases/manifest.json`, ele tambem valida os artefatos versionados do agent.
+Para forcar essa validacao mesmo em um fluxo explicito:
 
 ```powershell
 .\\verify.ps1 -VerifyAgentRelease
@@ -58,6 +59,7 @@ Para uma release comercial com instalador EXE e MSI obrigatorios:
 ```
 
 Quando o certificado real estiver configurado, use `-RequireAgentSignature` para exigir assinatura valida.
+Use `-SkipAgentRelease` quando quiser validar apenas codigo em um ambiente sem interesse nos artefatos locais.
 
 ## Endpoints principais
 

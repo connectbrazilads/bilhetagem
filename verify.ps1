@@ -2,6 +2,7 @@ param(
     [switch]$SkipBackend,
     [switch]$SkipAgent,
     [switch]$SkipFrontend,
+    [switch]$SkipAgentRelease,
     [switch]$VerifyAgentRelease,
     [switch]$RequireAgentSignature,
     [switch]$RequireAgentMsi,
@@ -115,7 +116,8 @@ if (-not $SkipFrontend) {
     }
 }
 
-if ($VerifyAgentRelease) {
+$agentReleaseManifest = Join-Path $Root "agent\releases\manifest.json"
+if (-not $SkipAgentRelease -and ($VerifyAgentRelease -or (Test-Path $agentReleaseManifest))) {
     Invoke-Step "Agent release artifacts" {
         $verifyScript = Join-Path $Root "agent\verify_release.ps1"
         $releaseArgs = @{}
