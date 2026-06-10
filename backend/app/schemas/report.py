@@ -130,6 +130,8 @@ class MonthlyClosingUsageSnapshot(BaseModel):
     color_pages: int = 0
     cost: float = 0.0
     cost_per_page: float = 0.0
+    page_share_percent: float = 0.0
+    cost_share_percent: float = 0.0
 
 
 class MonthlyClosingPolicySnapshot(BaseModel):

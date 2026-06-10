@@ -43,6 +43,12 @@ def _cost_per_page(cost: float, pages: int) -> float:
     return _round_money(cost / pages)
 
 
+def _percent_share(value: float, total: float) -> float:
+    if total <= 0:
+        return 0.0
+    return round((float(value or 0.0) / total) * 100, 1)
+
+
 def _empty_policy_bucket(name: str, action: str | None) -> dict:
     return {
         "name": name,
@@ -163,6 +169,8 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
                 "color_pages": data["color_pages"],
                 "cost": _round_money(data["cost"]),
                 "cost_per_page": _cost_per_page(data["cost"], data["pages"]),
+                "page_share_percent": _percent_share(data["pages"], totals["total_pages"]),
+                "cost_share_percent": _percent_share(data["cost"], totals["total_cost"]),
             }
             for name, data in sorted(mapping.items(), key=lambda item: (-item[1]["pages"], item[0].lower()))
         ]

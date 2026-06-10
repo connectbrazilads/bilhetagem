@@ -122,6 +122,8 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
     assert closing.snapshot["by_printer"][0]["cost_per_page"] == 0.11
+    assert closing.snapshot["by_printer"][0]["page_share_percent"] == 100.0
+    assert closing.snapshot["by_printer"][0]["cost_share_percent"] == 100.0
     assert closing.snapshot["by_policy"] == [
         {
             "name": "Bloquear colorido",
@@ -194,6 +196,8 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert validated_closing.snapshot.totals.blocked_cost == 0.75
     assert validated_closing.snapshot.by_policy[0].name == "Bloquear colorido"
     assert validated_closing.snapshot.by_policy[0].blocked_cost == 0.75
+    assert validated_closing.snapshot.by_printer[0].page_share_percent == 100.0
+    assert validated_closing.snapshot.by_printer[0].cost_share_percent == 100.0
     assert validated_closing.snapshot.eco.pages_saved == 3
 
     user.full_name = "Ana Renomeada"
@@ -293,6 +297,10 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"
     assert workbook["Impressoras"]["G1"].value == "Custo/Pag."
     assert workbook["Impressoras"]["G2"].value == 0.11
+    assert workbook["Impressoras"]["H1"].value == "% Paginas"
+    assert workbook["Impressoras"]["H2"].value == 100
+    assert workbook["Impressoras"]["I1"].value == "% Custo"
+    assert workbook["Impressoras"]["I2"].value == 100
     assert workbook["Politicas"]["A1"].value == "Politica"
     assert workbook["Politicas"]["A2"].value == "Bloquear colorido"
     assert workbook["Politicas"]["B2"].value == "Bloqueio"

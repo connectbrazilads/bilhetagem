@@ -77,6 +77,8 @@ type ClosingSnapshotRow = {
   pages: number;
   cost: number;
   cost_per_page?: number;
+  page_share_percent?: number;
+  cost_share_percent?: number;
 };
 
 type ClosingPolicySnapshotRow = {
@@ -601,6 +603,7 @@ function SnapshotList({ title, rows }: { title: string; rows: ClosingSnapshotRow
               <span className="whitespace-nowrap text-right text-muted-foreground">
                 {row.pages.toLocaleString("pt-BR")} pag. | R$ {row.cost.toFixed(2)}
                 {typeof row.cost_per_page === "number" ? ` | R$ ${row.cost_per_page.toFixed(2)}/pag.` : ""}
+                {typeof row.page_share_percent === "number" ? ` | ${row.page_share_percent.toFixed(1)}%` : ""}
               </span>
             </div>
           ))}

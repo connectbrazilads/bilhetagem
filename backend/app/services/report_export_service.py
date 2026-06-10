@@ -195,7 +195,7 @@ def _draw_section(pdf: canvas.Canvas, closing: MonthlyClosing, y: float, title: 
     pdf.drawRightString(330, y - 10, "Paginas")
     pdf.drawRightString(385, y - 10, "P&B")
     pdf.drawRightString(435, y - 10, "Cor")
-    pdf.drawRightString(500, y - 10, "Custo/Pag.")
+    pdf.drawRightString(492, y - 10, "% Pag.")
     pdf.drawRightString(PAGE_WIDTH - 48, y - 10, "Custo")
     y -= 24
     pdf.setFont("Helvetica", 8)
@@ -210,7 +210,7 @@ def _draw_section(pdf: canvas.Canvas, closing: MonthlyClosing, y: float, title: 
         pdf.drawRightString(330, y, str(row.get("pages", 0)))
         pdf.drawRightString(385, y, str(row.get("mono_pages", 0)))
         pdf.drawRightString(435, y, str(row.get("color_pages", 0)))
-        pdf.drawRightString(500, y, _money(float(row.get("cost_per_page", 0))))
+        pdf.drawRightString(492, y, f"{float(row.get('page_share_percent', 0)):.1f}%")
         pdf.drawRightString(PAGE_WIDTH - 48, y, _money(float(row.get("cost", 0))))
         y -= 16
     return y - 12
@@ -426,9 +426,21 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
 
     for sheet_name, key in (("Usuarios", "by_user"), ("Departamentos", "by_department"), ("Impressoras", "by_printer"), ("Tipo", "by_type")):
         sheet = workbook.create_sheet(sheet_name)
-        sheet.append(["Nome", "Trabalhos", "Paginas", "P&B", "Coloridas", "Custo", "Custo/Pag."])
+        sheet.append(["Nome", "Trabalhos", "Paginas", "P&B", "Coloridas", "Custo", "Custo/Pag.", "% Paginas", "% Custo"])
         for row in closing.snapshot.get(key, []):
-            sheet.append([_xlsx_safe(row["name"]), row["jobs"], row["pages"], row["mono_pages"], row["color_pages"], row["cost"], row.get("cost_per_page", 0)])
+            sheet.append(
+                [
+                    _xlsx_safe(row["name"]),
+                    row["jobs"],
+                    row["pages"],
+                    row["mono_pages"],
+                    row["color_pages"],
+                    row["cost"],
+                    row.get("cost_per_page", 0),
+                    row.get("page_share_percent", 0),
+                    row.get("cost_share_percent", 0),
+                ]
+            )
         for row in sheet.iter_rows(min_row=2, min_col=6, max_col=7):
             for cell in row:
                 cell.number_format = '"R$" #,##0.00'

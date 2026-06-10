@@ -1158,7 +1158,17 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert snapshot["totals"]["total_jobs"] == 1
     assert snapshot["totals"]["total_pages"] == 3
     assert snapshot["by_user"] == [
-        {"name": "Org 1 User", "jobs": 1, "pages": 3, "mono_pages": 3, "color_pages": 0, "cost": 0.15, "cost_per_page": 0.05},
+        {
+            "name": "Org 1 User",
+            "jobs": 1,
+            "pages": 3,
+            "mono_pages": 3,
+            "color_pages": 0,
+            "cost": 0.15,
+            "cost_per_page": 0.05,
+            "page_share_percent": 100.0,
+            "cost_share_percent": 100.0,
+        },
     ]
 
 
