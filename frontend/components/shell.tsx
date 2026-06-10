@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BarChart3, Building2, Download, Gauge, History, LogOut, MonitorCog, Printer, Settings, ShieldCheck, Users, WalletCards } from "lucide-react";
@@ -25,6 +26,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const activeItem = navItems.find((item) => item.href === pathname);
+  const [organizationSlug, setOrganizationSlug] = useState("");
+
+  useEffect(() => {
+    setOrganizationSlug(localStorage.getItem("organization_slug") || "");
+  }, []);
 
   function logout() {
     localStorage.removeItem("token");
@@ -67,10 +73,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bilhetagem de Impressao</div>
             <div className="text-sm font-semibold">{activeItem?.label ?? "Painel"}</div>
           </div>
-          <Button variant="outline" onClick={logout} title="Sair">
-            <LogOut className="h-4 w-4" />
-            Sair
-          </Button>
+          <div className="flex items-center gap-2">
+            {organizationSlug ? (
+              <div className="hidden items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs font-semibold text-muted-foreground sm:flex">
+                <Building2 className="h-3.5 w-3.5" />
+                {organizationSlug}
+              </div>
+            ) : null}
+            <Button variant="outline" onClick={logout} title="Sair">
+              <LogOut className="h-4 w-4" />
+              Sair
+            </Button>
+          </div>
         </header>
         <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">{children}</div>
       </main>
