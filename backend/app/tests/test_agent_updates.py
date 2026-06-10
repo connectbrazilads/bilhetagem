@@ -1143,6 +1143,97 @@ def test_remote_queue_action_lifecycle(db_session: Session):
     assert result_audit.log_metadata["printer_id"] == printer.id
 
 
+def test_successful_queue_action_reuses_alias_by_normalized_name(db_session: Session):
+    actor = User(username="queue-normalized-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA NORMALIZADA", ip_address="192.168.1.135", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="agent-queue-normalized",
+            computer_name="PC-NORMALIZED",
+            queues=[
+                {
+                    "queue_name": "KONICA   Financeiro",
+                    "driver_name": "KONICA Driver Antigo",
+                    "ip_address": "192.168.1.135",
+                }
+            ],
+        ),
+        request=_request("10.0.0.35"),
+        db=db_session,
+        actor=actor,
+    )
+
+    action = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="konica financeiro",
+            printer_id=printer.id,
+            driver_name="KONICA Driver Novo",
+            ip_address="192.168.1.135",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+    poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor)
+    finish_queue_action(
+        action_id=action.id,
+        payload=AgentQueueActionResult(status=AgentQueueActionStatus.succeeded, result_message="Fila criada"),
+        db=db_session,
+        actor=actor,
+    )
+
+    aliases = db_session.query(PrinterAlias).filter(PrinterAlias.agent_id == agent.id).all()
+    assert len(aliases) == 1
+    assert aliases[0].printer_id == printer.id
+    assert aliases[0].normalized_queue_name == "konica financeiro"
+    assert aliases[0].driver_name == "KONICA Driver Novo"
+
+
+def test_remove_queue_action_reuses_alias_by_normalized_name(db_session: Session):
+    actor = User(username="queue-normalized-remove", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA REMOVER NORMALIZADA", ip_address="192.168.1.136", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="agent-queue-normalized-remove",
+            computer_name="PC-NORMALIZED-REMOVE",
+            queues=[
+                {
+                    "queue_name": "KONICA   Financeiro",
+                    "driver_name": "KONICA Driver",
+                    "ip_address": "192.168.1.136",
+                }
+            ],
+        ),
+        request=_request("10.0.0.36"),
+        db=db_session,
+        actor=actor,
+    )
+    alias = db_session.query(PrinterAlias).filter(PrinterAlias.agent_id == agent.id).one()
+    assert alias.printer_id == printer.id
+
+    action = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(action_type=AgentQueueActionType.remove_queue, queue_name="konica financeiro"),
+        db=db_session,
+        actor=actor,
+    )
+    poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor)
+    finish_queue_action(
+        action_id=action.id,
+        payload=AgentQueueActionResult(status=AgentQueueActionStatus.succeeded, result_message="Fila removida"),
+        db=db_session,
+        actor=actor,
+    )
+
+    db_session.refresh(alias)
+    assert alias.printer_id is None
+
+
 def test_remote_queue_action_rejects_blank_queue_name():
     with pytest.raises(ValidationError):
         AgentQueueActionCreate(

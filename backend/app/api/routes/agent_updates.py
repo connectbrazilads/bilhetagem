@@ -606,6 +606,7 @@ def _bind_successful_queue_action(db: Session, action: AgentQueueAction) -> None
         return
 
     queue_name = action.queue_name.strip()
+    normalized_queue_name = _normalize_alias_name(queue_name)
     if action.action_type in (AgentQueueActionType.create_queue, AgentQueueActionType.restore_queue):
         if not action.printer_id:
             return
@@ -614,7 +615,10 @@ def _bind_successful_queue_action(db: Session, action: AgentQueueAction) -> None
             .filter(
                 PrinterAlias.organization_id == action.organization_id,
                 PrinterAlias.agent_id == action.agent_id,
-                PrinterAlias.queue_name == queue_name,
+                or_(
+                    PrinterAlias.queue_name == queue_name,
+                    PrinterAlias.normalized_queue_name == normalized_queue_name,
+                ),
             )
             .first()
         )
@@ -627,7 +631,7 @@ def _bind_successful_queue_action(db: Session, action: AgentQueueAction) -> None
             db.add(alias)
             db.flush()
         alias.printer_id = action.printer_id
-        alias.normalized_queue_name = _normalize_alias_name(queue_name)
+        alias.normalized_queue_name = normalized_queue_name
         alias.driver_name = _clean_optional(action.driver_name) or alias.driver_name
         alias.port_name = _clean_optional(action.port_name) or alias.port_name
         alias.ip_address = _clean_optional(action.ip_address) or alias.ip_address
@@ -641,7 +645,10 @@ def _bind_successful_queue_action(db: Session, action: AgentQueueAction) -> None
             .filter(
                 PrinterAlias.organization_id == action.organization_id,
                 PrinterAlias.agent_id == action.agent_id,
-                PrinterAlias.queue_name == queue_name,
+                or_(
+                    PrinterAlias.queue_name == queue_name,
+                    PrinterAlias.normalized_queue_name == normalized_queue_name,
+                ),
             )
             .first()
         )
