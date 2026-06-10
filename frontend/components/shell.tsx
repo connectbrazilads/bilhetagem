@@ -6,21 +6,21 @@ import { usePathname, useRouter } from "next/navigation";
 import { BarChart3, Building2, Download, Gauge, History, LogOut, MonitorCog, Printer, Settings, ShieldCheck, Users, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getCurrentRole } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: Gauge },
-  { href: "/organizations", label: "Empresas", icon: Building2 },
-  { href: "/users", label: "Usuarios", icon: Users },
-  { href: "/agents", label: "Agents", icon: MonitorCog },
-  { href: "/printers", label: "Impressoras", icon: Printer },
-  { href: "/policies", label: "Politicas", icon: ShieldCheck },
-  { href: "/quotas", label: "Cotas", icon: WalletCards },
-  { href: "/reports", label: "Relatorios", icon: BarChart3 },
-  { href: "/audit", label: "Auditoria", icon: History },
-  { href: "/downloads", label: "Downloads", icon: Download },
-  { href: "/settings", label: "Configuracoes", icon: Settings }
+  { href: "/dashboard", label: "Dashboard", icon: Gauge, roles: ["admin", "manager"] },
+  { href: "/organizations", label: "Empresas", icon: Building2, roles: ["admin"] },
+  { href: "/users", label: "Usuarios", icon: Users, roles: ["admin", "manager"] },
+  { href: "/agents", label: "Agents", icon: MonitorCog, roles: ["admin", "manager"] },
+  { href: "/printers", label: "Impressoras", icon: Printer, roles: ["admin", "manager"] },
+  { href: "/policies", label: "Politicas", icon: ShieldCheck, roles: ["admin", "manager"] },
+  { href: "/quotas", label: "Cotas", icon: WalletCards, roles: ["admin", "manager"] },
+  { href: "/reports", label: "Relatorios", icon: BarChart3, roles: ["admin", "manager"] },
+  { href: "/audit", label: "Auditoria", icon: History, roles: ["admin", "manager"] },
+  { href: "/downloads", label: "Downloads", icon: Download, roles: ["admin", "manager"] },
+  { href: "/settings", label: "Configuracoes", icon: Settings, roles: ["admin"] }
 ];
 
 type AuthContext = {
@@ -38,18 +38,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const activeItem = navItems.find((item) => item.href === pathname);
   const [organizationSlug, setOrganizationSlug] = useState("");
   const [organizationName, setOrganizationName] = useState("");
+  const [role, setRole] = useState("");
+  const visibleNavItems = navItems.filter((item) => !role || item.roles.includes(role));
 
   useEffect(() => {
     setOrganizationSlug(localStorage.getItem("organization_slug") || "");
     setOrganizationName(localStorage.getItem("organization_name") || "");
     const token = localStorage.getItem("token");
     if (!token) return;
+    setRole(getCurrentRole(token) || "");
     let active = true;
     apiFetch<AuthContext>("/auth/me", token)
       .then((context) => {
         if (!active) return;
         setOrganizationSlug(context.organization_slug);
         setOrganizationName(context.organization_name);
+        setRole(context.role);
         localStorage.setItem("organization_slug", context.organization_slug);
         localStorage.setItem("organization_name", context.organization_name);
       })
@@ -75,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="space-y-1 p-3">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
             return (
