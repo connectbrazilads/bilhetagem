@@ -76,6 +76,20 @@ const ENTITY_LABELS: Record<string, string> = {
   users: "Usuarios",
 };
 
+const FIELD_LABELS: Record<string, string> = {
+  billing_plan: "Plano",
+  billing_status: "Status comercial",
+  contracted_printer_limit: "Limite contratado",
+  department_id: "Departamento",
+  department_name: "Departamento",
+  full_name: "Nome",
+  is_active: "Ativo",
+  monthly_balance: "Saldo mensal",
+  monthly_limit: "Limite mensal",
+  password: "Senha",
+  role: "Perfil",
+};
+
 export default function AuditPage() {
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [facets, setFacets] = useState<AuditFacets>({ actions: [], entities: [] });
@@ -324,11 +338,17 @@ function formatChanges(changes: Record<string, unknown>) {
   return Object.entries(changes)
     .map(([key, value]) => {
       if (isPlainRecord(value) && ("before" in value || "after" in value)) {
-        return `${humanizeKey(key)}: ${formatMetadataValue(value.before)} -> ${formatMetadataValue(value.after)}`;
+        if (key === "password" && value.after === true) return "Senha alterada";
+        return `${fieldLabel(key)}: ${formatMetadataValue(value.before)} -> ${formatMetadataValue(value.after)}`;
       }
-      return `${humanizeKey(key)}: ${formatMetadataValue(value)}`;
+      return `${fieldLabel(key)}: ${formatMetadataValue(value)}`;
     })
     .join(" | ");
+}
+
+function fieldLabel(value: string) {
+  if (FIELD_LABELS[value]) return FIELD_LABELS[value];
+  return humanizeKey(value);
 }
 
 function humanizeKey(value: string) {
