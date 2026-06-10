@@ -433,12 +433,12 @@ export default function UsersPage() {
                       </td>
                       {showBalance ? (
                         <td className="whitespace-nowrap p-4 text-right font-medium">
-                          {user.monthly_balance !== null ? `R$ ${user.monthly_balance.toFixed(2)}` : "-"}
+                          {user.monthly_balance !== null ? money(user.monthly_balance) : "-"}
                         </td>
                       ) : null}
                       {showBalance ? (
                         <td className="whitespace-nowrap p-4 text-right text-muted-foreground">
-                          {user.used_balance !== null ? `R$ ${user.used_balance.toFixed(2)}` : "R$ 0.00"}
+                          {user.used_balance !== null ? money(user.used_balance) : money(0)}
                         </td>
                       ) : null}
                       <td className="p-4">
@@ -509,4 +509,8 @@ function roleBadgeClass(role: string) {
     agent: "border-amber-200 bg-amber-50 text-amber-700",
   };
   return classes[role] ?? "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function money(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

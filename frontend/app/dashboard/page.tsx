@@ -26,11 +26,15 @@ function MoneyLine({ cost, costPerPage }: { cost?: number; costPerPage?: number 
   if (typeof cost !== "number" && typeof costPerPage !== "number") return null;
   return (
     <span className="mt-0.5 block text-xs text-muted-foreground">
-      {typeof cost === "number" ? `R$ ${cost.toFixed(2)}` : ""}
+      {typeof cost === "number" ? money(cost) : ""}
       {typeof cost === "number" && typeof costPerPage === "number" ? " | " : ""}
-      {typeof costPerPage === "number" ? `R$ ${costPerPage.toFixed(2)}/pag.` : ""}
+      {typeof costPerPage === "number" ? `${money(costPerPage)}/pag.` : ""}
     </span>
   );
+}
+
+function money(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function Stat({ label, value, icon: Icon }: { label: string; value: number; icon: typeof FileText }) {
