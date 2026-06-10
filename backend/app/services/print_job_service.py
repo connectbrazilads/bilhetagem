@@ -38,7 +38,7 @@ def _normalize_username(username: str) -> str:
         normalized = normalized.rsplit("\\", 1)[-1]
     if "@" in normalized:
         normalized = normalized.split("@", 1)[0]
-    return normalized.strip().lower() or "unknown"
+    return "_".join(normalized.strip().lower().split()) or "unknown"
 
 
 def _resolve_printer(db: Session, printer_name: str, is_color: bool, organization_id: int, sys_settings: dict | None = None) -> Printer:

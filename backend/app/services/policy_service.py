@@ -40,7 +40,7 @@ def _normalize_username(username: str) -> str:
         normalized = normalized.rsplit("\\", 1)[-1]
     if "@" in normalized:
         normalized = normalized.split("@", 1)[0]
-    return normalized.strip().lower() or "unknown"
+    return "_".join(normalized.strip().lower().split()) or "unknown"
 
 
 def _clean_optional(value: str | None) -> str | None:

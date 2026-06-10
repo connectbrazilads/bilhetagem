@@ -85,6 +85,26 @@ def test_auto_creates_normalized_windows_user(db_session):
     assert user.full_name == "maria.silva"
 
 
+def test_auto_created_windows_user_replaces_spaces_with_underscores(db_session):
+    printer = Printer(name="Canon Diretoria", is_color=False)
+    db_session.add(printer)
+    db_session.commit()
+
+    register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="EMPRESA\\DIEGO   LCD",
+            printer_name="Canon Diretoria",
+            pages=1,
+            is_color=False,
+            submitted_at=datetime(2026, 6, 8, tzinfo=timezone.utc),
+        ),
+    )
+
+    user = db_session.query(User).filter(User.username == "diego_lcd").one()
+    assert user.full_name == "diego_lcd"
+
+
 def test_reuses_existing_spool_job(db_session):
     user = User(username="ana", full_name="Ana", role=UserRole.user)
     printer = Printer(name="Ricoh Fiscal", is_color=False)
