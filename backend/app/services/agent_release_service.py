@@ -31,6 +31,10 @@ def _release_file(version: str, filename: str) -> Path:
     return root / filename
 
 
+def _is_safe_release_filename(filename: str) -> bool:
+    return bool(filename) and Path(filename).name == filename and "/" not in filename and "\\" not in filename
+
+
 def _release_sort_key(release: dict) -> tuple[str, tuple[int, ...]]:
     return (str(release.get("published_at") or ""), version_tuple(str(release.get("version") or "")))
 
@@ -46,7 +50,8 @@ def published_agent_version() -> str:
                 if not version:
                     continue
                 for file in release.get("files", []):
-                    if file.get("kind") == "agent" and _release_file(version, str(file.get("filename") or "")).exists():
+                    filename = str(file.get("filename") or "")
+                    if file.get("kind") == "agent" and _is_safe_release_filename(filename) and _release_file(version, filename).is_file():
                         return version
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             pass

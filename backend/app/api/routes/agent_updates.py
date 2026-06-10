@@ -71,7 +71,7 @@ def _release_file(version: str, filename: str) -> Path:
 
 
 def _is_safe_release_filename(filename: str) -> bool:
-    return Path(filename).name == filename and "/" not in filename and "\\" not in filename
+    return bool(filename) and Path(filename).name == filename and "/" not in filename and "\\" not in filename
 
 
 def _release_signature_summary(files: list[AgentReleaseFileRead]) -> tuple[str, str]:
@@ -115,7 +115,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                 if not _is_safe_release_filename(filename):
                     continue
                 path = _release_file(version, filename)
-                if not path.exists():
+                if not path.is_file():
                     continue
                 actual_sha256 = _sha256(path)
                 actual_size = path.stat().st_size
@@ -146,7 +146,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
         return sorted(releases, key=_release_sort_key, reverse=True)
 
     path = _agent_file()
-    if path.exists():
+    if path.is_file():
         releases.append(
             AgentReleaseRead(
                 version=settings.agent_latest_version,

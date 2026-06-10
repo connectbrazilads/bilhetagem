@@ -84,6 +84,48 @@ def test_agent_releases_fall_back_to_legacy_file_when_manifest_is_invalid(db_ses
     assert version.sha256 == hashlib.sha256(b"legacy-agent").hexdigest()
 
 
+def test_agent_releases_ignore_manifest_entries_without_safe_filename(db_session: Session, monkeypatch, tmp_path: Path):
+    broken_dir = tmp_path / "0.4.0"
+    broken_dir.mkdir()
+    valid_dir = tmp_path / "0.3.0"
+    valid_dir.mkdir()
+    (valid_dir / "PrintBillingAgent.exe").write_bytes(b"agent-v3")
+    (tmp_path / "manifest.json").write_text(
+        """
+        {
+          "versions": [
+            {
+              "version": "0.4.0",
+              "published_at": "2026-04-01T00:00:00Z",
+              "files": [{"kind": "agent"}]
+            },
+            {
+              "version": "0.3.0",
+              "published_at": "2026-03-01T00:00:00Z",
+              "files": [{"kind": "agent", "filename": "PrintBillingAgent.exe"}]
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_latest_version", "0.2.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    actor = User(username="unsafe-manifest-admin", full_name="Release Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    releases = list_agent_releases(_=actor)
+    version = agent_version(current_version="0.2.0", _=actor)
+
+    assert [release.version for release in releases] == ["0.4.0", "0.3.0"]
+    assert releases[0].files == []
+    assert releases[0].signature_status == "empty"
+    assert version.latest_version == "0.3.0"
+    assert version.update_available is True
+    assert version.sha256 == hashlib.sha256(b"agent-v3").hexdigest()
+
+
 def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypatch, tmp_path: Path):
     old_release_dir = tmp_path / "0.2.0"
     old_release_dir.mkdir()
