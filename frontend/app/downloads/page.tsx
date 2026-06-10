@@ -33,6 +33,7 @@ type OrganizationOption = {
   name: string;
   slug: string;
   is_active: boolean;
+  billing_status: "trial" | "active" | "past_due" | "suspended";
 };
 
 function formatBytes(value: number) {
@@ -66,6 +67,13 @@ function releaseSignatureLabel(status: string) {
   if (status === "unsigned") return "Sem assinatura";
   if (status === "empty") return "Sem arquivos";
   return "Assinatura com alerta";
+}
+
+function billingStatusSuffix(status: OrganizationOption["billing_status"]) {
+  if (status === "past_due") return " - em atraso";
+  if (status === "trial") return " - teste";
+  if (status === "suspended") return " - suspensa";
+  return "";
 }
 
 function maskSecret(command: string, secret: string) {
@@ -233,7 +241,7 @@ export default function DownloadsPage() {
                 >
                   {organizations.map((organization) => (
                     <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
-                      {organization.name} ({organization.slug}){organization.is_active ? "" : " - inativa"}
+                      {organization.name} ({organization.slug}){organization.is_active ? billingStatusSuffix(organization.billing_status) : " - inativa"}
                     </option>
                   ))}
                 </select>

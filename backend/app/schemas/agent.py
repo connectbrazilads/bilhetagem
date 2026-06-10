@@ -39,6 +39,7 @@ class AgentDeploymentOrganizationRead(BaseModel):
     name: str
     slug: str
     is_active: bool
+    billing_status: str = "trial"
 
     model_config = {"from_attributes": True}
 

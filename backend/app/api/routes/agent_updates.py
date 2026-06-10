@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.deps import require_roles
+from app.core.deps import organization_allows_access, require_roles
 from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus, AgentQueueActionType
 from app.models.agent_log import AgentLog
 from app.models.organization import Organization
@@ -729,8 +729,13 @@ def list_agent_deployment_organizations(
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> list[Organization]:
     if _can_manage_all_organizations(actor):
-        return db.query(Organization).filter(Organization.is_active.is_(True)).order_by(Organization.name).all()
-    return [actor.organization] if actor.organization and actor.organization.is_active else []
+        return (
+            db.query(Organization)
+            .filter(Organization.is_active.is_(True), Organization.billing_status != "suspended")
+            .order_by(Organization.name)
+            .all()
+        )
+    return [actor.organization] if organization_allows_access(actor.organization) else []
 
 
 @router.get("/releases/{version}/download")

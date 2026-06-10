@@ -367,17 +367,25 @@ def test_agent_version_uses_newest_published_manifest_release(db_session: Sessio
 def test_deployment_organizations_are_scoped_for_download_commands(db_session: Session):
     other_org = Organization(name="Cliente Download", slug="cliente-download", is_active=True)
     third_org = Organization(name="Cliente Inativo Download", slug="cliente-inativo-download", is_active=False)
+    suspended_org = Organization(name="Cliente Suspenso Download", slug="cliente-suspenso-download", is_active=True, billing_status="suspended")
+    past_due_org = Organization(name="Cliente Atrasado Download", slug="cliente-atrasado-download", is_active=True, billing_status="past_due")
     platform_admin = User(username="platform-download-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     tenant_admin = User(username="tenant-download-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization=other_org)
-    db_session.add_all([other_org, third_org, platform_admin, tenant_admin])
+    suspended_admin = User(username="tenant-suspended-download-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization=suspended_org)
+    db_session.add_all([other_org, third_org, suspended_org, past_due_org, platform_admin, tenant_admin, suspended_admin])
     db_session.commit()
 
     platform_options = list_agent_deployment_organizations(db=db_session, actor=platform_admin)
     tenant_options = list_agent_deployment_organizations(db=db_session, actor=tenant_admin)
+    suspended_tenant_options = list_agent_deployment_organizations(db=db_session, actor=suspended_admin)
+    platform_slugs = {organization.slug for organization in platform_options}
 
-    assert {organization.slug for organization in platform_options} >= {"default", "cliente-download"}
-    assert "cliente-inativo-download" not in {organization.slug for organization in platform_options}
+    assert platform_slugs >= {"default", "cliente-download", "cliente-atrasado-download"}
+    assert "cliente-inativo-download" not in platform_slugs
+    assert "cliente-suspenso-download" not in platform_slugs
+    assert next(organization for organization in platform_options if organization.slug == "cliente-atrasado-download").billing_status == "past_due"
     assert [organization.slug for organization in tenant_options] == ["cliente-download"]
+    assert suspended_tenant_options == []
 
 
 def _request(ip_address: str = "10.0.0.10") -> Request:
