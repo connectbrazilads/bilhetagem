@@ -14,6 +14,7 @@ from app.api.routes.agent_updates import (
     cancel_queue_action,
     create_bulk_queue_actions,
     create_queue_action,
+    download_agent_update,
     download_agent_release_file,
     download_agent_release_checksums,
     finish_queue_action,
@@ -66,6 +67,28 @@ def test_agent_version_reports_update_when_file_exists(db_session: Session, monk
     assert response.update_available is True
     assert response.download_url == "/agent/download"
     assert response.sha256 is not None
+
+
+def test_agent_version_ignores_empty_legacy_release_file(db_session: Session, monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(settings, "agent_latest_version", "0.2.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "agent_download_filename", "PrintBillingAgent.exe")
+    (tmp_path / "PrintBillingAgent.exe").write_bytes(b"")
+    actor = User(username="empty-legacy-agent-admin", full_name="Release Admin", role=UserRole.admin, is_active=True)
+    db_session.add(actor)
+    db_session.commit()
+
+    releases = list_agent_releases(_=actor)
+    version = agent_version(current_version="0.1.0", _=actor)
+    with pytest.raises(HTTPException) as download_exc:
+        download_agent_update(_=actor)
+
+    assert releases == []
+    assert version.latest_version == "0.2.0"
+    assert version.update_available is False
+    assert version.download_url is None
+    assert version.sha256 is None
+    assert download_exc.value.status_code == 404
 
 
 def test_agent_releases_fall_back_to_legacy_file_when_manifest_is_invalid(db_session: Session, monkeypatch, tmp_path: Path):
@@ -373,6 +396,59 @@ def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_sessio
     assert version.sha256 is None
     assert checksums.body.decode("utf-8") == ""
     assert download_exc.value.status_code == 404
+
+
+def test_agent_releases_skip_empty_manifest_artifacts(db_session: Session, monkeypatch, tmp_path: Path):
+    release_dir = tmp_path / "0.8.0"
+    release_dir.mkdir()
+    release_file = release_dir / "PrintBillingAgent.exe"
+    release_file.write_bytes(b"")
+    empty_sha256 = hashlib.sha256(b"").hexdigest()
+    (tmp_path / "manifest.json").write_text(
+        f"""
+        {{
+          "versions": [
+            {{
+              "version": "0.8.0",
+              "published_at": "2026-08-01T00:00:00Z",
+              "files": [
+                {{
+                  "kind": "agent",
+                  "filename": "PrintBillingAgent.exe",
+                  "size_bytes": 0,
+                  "sha256": "{empty_sha256}"
+                }}
+              ]
+            }}
+          ]
+        }}
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_latest_version", "0.7.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    actor = User(username="empty-manifest-agent-admin", full_name="Release Admin", role=UserRole.admin, is_active=True)
+    db_session.add(actor)
+    db_session.commit()
+
+    release = list_agent_releases(_=actor)[0]
+    version = agent_version(current_version="0.7.0", _=actor)
+    checksums = download_agent_release_checksums(version="0.8.0", db=db_session, actor=actor)
+    with pytest.raises(HTTPException) as agent_download_exc:
+        download_agent_update(_=actor)
+    with pytest.raises(HTTPException) as file_download_exc:
+        download_agent_release_file(version="0.8.0", filename="PrintBillingAgent.exe", db=db_session, actor=actor)
+
+    assert release.files == []
+    assert release.signature_status == "empty"
+    assert release.signature_summary == "Nenhum arquivo publicado"
+    assert published_agent_version() == "0.7.0"
+    assert version.latest_version == "0.7.0"
+    assert version.update_available is False
+    assert version.sha256 is None
+    assert checksums.body.decode("utf-8") == ""
+    assert agent_download_exc.value.status_code == 404
+    assert file_download_exc.value.status_code == 404
 
 
 def test_agent_releases_reject_version_when_published_checksums_diverge(db_session: Session, monkeypatch, tmp_path: Path):

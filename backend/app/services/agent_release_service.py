@@ -48,6 +48,16 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _publishable_file_size(path: Path) -> int | None:
+    try:
+        if not path.is_file():
+            return None
+        size = path.stat().st_size
+    except OSError:
+        return None
+    return size if size > 0 else None
+
+
 def _manifest_sha256(value) -> str | None:
     if value is None:
         return None
@@ -142,11 +152,12 @@ def published_agent_version() -> str:
                         continue
                     filename = str(file.get("filename") or "")
                     path = _release_file(version, filename)
+                    actual_size = _publishable_file_size(path)
                     if (
                         file.get("kind") == "agent"
                         and _is_safe_release_filename(filename)
                         and not checksums_mismatch
-                        and path.is_file()
+                        and actual_size is not None
                         and _release_file_matches_manifest(path, file)
                         and (
                             published_checksums is None

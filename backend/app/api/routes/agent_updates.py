@@ -54,6 +54,16 @@ def _agent_file() -> Path:
     return Path(settings.agent_download_dir) / settings.agent_download_filename
 
 
+def _publishable_file_size(path: Path) -> int | None:
+    try:
+        if not path.is_file():
+            return None
+        size = path.stat().st_size
+    except OSError:
+        return None
+    return size if size > 0 else None
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as file:
@@ -199,10 +209,10 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                 if checksums_mismatch:
                     continue
                 path = _release_file(version, filename)
-                if not path.is_file():
+                actual_size = _publishable_file_size(path)
+                if actual_size is None:
                     continue
                 actual_sha256 = _sha256(path)
-                actual_size = path.stat().st_size
                 expected_sha256 = _manifest_sha256(raw_file.get("sha256"))
                 expected_size = _manifest_int(raw_file.get("size_bytes"))
                 expected_published_sha256 = published_checksums.get(filename) if published_checksums is not None else None
@@ -239,7 +249,8 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
         return sorted(releases, key=_release_sort_key, reverse=True)
 
     path = _agent_file()
-    if path.is_file():
+    legacy_size = _publishable_file_size(path)
+    if legacy_size is not None:
         releases.append(
             AgentReleaseRead(
                 version=settings.agent_latest_version,
@@ -250,7 +261,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                     AgentReleaseFileRead(
                         kind="agent",
                         filename=path.name,
-                        size_bytes=path.stat().st_size,
+                        size_bytes=legacy_size,
                         sha256=_sha256(path),
                         signature_status=None,
                         signer_subject=None,
@@ -898,8 +909,10 @@ def agent_version(
 @router.get("/download")
 def download_agent_update(_: User = Depends(require_roles(UserRole.agent, UserRole.admin))) -> FileResponse:
     latest = _latest_agent_release_file()
-    path = _release_file(latest[0].version, latest[1].filename) if latest else _agent_file()
-    if not path.exists():
+    if not latest:
+        raise HTTPException(status_code=404, detail="Atualizacao do agent nao publicada")
+    path = _release_file(latest[0].version, latest[1].filename)
+    if _publishable_file_size(path) is None:
         raise HTTPException(status_code=404, detail="Atualizacao do agent nao publicada")
     return FileResponse(
         path=str(path),
@@ -943,7 +956,7 @@ def download_agent_release_file(
     if not file_entry:
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
     path = _release_file(version, filename)
-    if not path.exists():
+    if _publishable_file_size(path) is None:
         raise HTTPException(status_code=404, detail="Arquivo nao publicado")
     write_audit(
         db,
