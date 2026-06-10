@@ -58,6 +58,9 @@ def test_agent_version_reports_update_when_file_exists(db_session: Session, monk
 
 
 def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypatch, tmp_path: Path):
+    old_release_dir = tmp_path / "0.2.0"
+    old_release_dir.mkdir()
+    (old_release_dir / "PrintBillingAgent.exe").write_bytes(b"agent-v2")
     release_dir = tmp_path / "0.3.0"
     release_dir.mkdir()
     (release_dir / "PrintBillingAgent.exe").write_bytes(b"agent-v3")
@@ -67,8 +70,18 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
         {
           "versions": [
             {
+              "version": "0.2.0",
+              "channel": "stable",
+              "published_at": "2026-01-01T00:00:00Z",
+              "notes": "Antiga",
+              "files": [
+                {"kind": "agent", "filename": "PrintBillingAgent.exe", "signature_status": "NotSigned"}
+              ]
+            },
+            {
               "version": "0.3.0",
               "channel": "stable",
+              "published_at": "2026-02-01T00:00:00Z",
               "notes": "Teste",
               "files": [
                 {"kind": "agent", "filename": "PrintBillingAgent.exe", "signature_status": "Valid", "signer_subject": "CN=PrintBilling"},
@@ -89,7 +102,7 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     releases = list_agent_releases(_=actor)
     version = agent_version(current_version="0.2.0", _=actor)
 
-    assert releases[0].version == "0.3.0"
+    assert [release.version for release in releases] == ["0.3.0", "0.2.0"]
     assert releases[0].checksums_url == "/agent/releases/0.3.0/checksums"
     assert {file.kind for file in releases[0].files} == {"agent", "installer"}
     assert releases[0].files[0].sha256

@@ -120,7 +120,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                     files=files,
                 )
             )
-        return releases
+        return sorted(releases, key=_release_sort_key, reverse=True)
 
     path = _agent_file()
     if path.exists():
@@ -142,6 +142,10 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
             )
         )
     return releases
+
+
+def _release_sort_key(release: AgentReleaseRead) -> tuple[str, tuple[int, ...]]:
+    return (release.published_at or "", _version_tuple(release.version))
 
 
 def _latest_agent_release_file() -> tuple[AgentReleaseRead, AgentReleaseFileRead] | None:
