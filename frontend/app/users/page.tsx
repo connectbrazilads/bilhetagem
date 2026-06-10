@@ -62,6 +62,10 @@ export default function UsersPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const editingUser = useMemo(() => users.find((user) => user.id === editingId) ?? null, [users, editingId]);
   const editingAgent = editingUser?.role === "agent";
+  const creatingPanelUser = editingId === null && ["admin", "manager"].includes(form.role);
+  const editingPanelTarget = editingId !== null && !editingAgent && ["admin", "manager"].includes(form.role);
+  const editingPasswordUser = editingId !== null && (editingAgent || editingPanelTarget);
+  const showPasswordField = creatingPanelUser || editingPasswordUser;
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -100,13 +104,21 @@ export default function UsersPage() {
     const token = localStorage.getItem("token");
     if (!token) return;
     setError(null);
+    if (!editingId && ["admin", "manager"].includes(form.role) && !form.password.trim()) {
+      setError("Informe uma senha para usuarios com acesso ao painel.");
+      return;
+    }
+    if (editingId && editingUser?.role === "user" && ["admin", "manager"].includes(form.role) && !form.password.trim()) {
+      setError("Informe uma senha para promover o usuario ao painel.");
+      return;
+    }
     try {
       if (editingId) {
         await apiFetch<UserRow>(`/users/${editingId}`, token, {
           method: "PUT",
           body: JSON.stringify({
             full_name: form.full_name,
-            ...(editingAgent && form.password.trim() ? { password: form.password.trim() } : {}),
+            ...(form.password.trim() ? { password: form.password.trim() } : {}),
             ...(!editingAgent ? { role: form.role } : {}),
             department_id: form.department_id ? Number(form.department_id) : null,
             monthly_limit: Number(form.monthly_limit),
@@ -125,6 +137,7 @@ export default function UsersPage() {
             monthly_limit: Number(form.monthly_limit),
             monthly_balance: Number(form.monthly_balance),
             role: form.role,
+            ...(form.password.trim() ? { password: form.password.trim() } : {}),
           }),
         });
       }
@@ -246,7 +259,7 @@ export default function UsersPage() {
       </div>
 
       {isAdmin ? (
-        <Surface as="form" className="mb-4 grid gap-3 p-4 xl:grid-cols-[160px_1fr_150px_190px_120px_auto]" onSubmit={submit}>
+        <Surface as="form" className="mb-4 grid gap-3 p-4 xl:grid-cols-[160px_minmax(180px,1fr)_150px_190px_150px_120px_auto]" onSubmit={submit}>
           <Input
             placeholder="Login"
             value={form.username}
@@ -273,16 +286,20 @@ export default function UsersPage() {
               </option>
             ))}
           </select>
-          {editingAgent ? (
-            <Input
-              placeholder="Nova senha do agent"
-              type="password"
-              value={form.password}
-              onChange={(event) => setForm({ ...form, password: event.target.value })}
-              minLength={8}
-              autoComplete="new-password"
-              title="Preencha apenas para trocar a senha usada no instalador e no agent"
-            />
+          {showPasswordField ? (
+            <div className="flex flex-col gap-1">
+              <Input
+                placeholder={editingId ? "Nova senha" : "Senha"}
+                type="password"
+                value={form.password}
+                onChange={(event) => setForm({ ...form, password: event.target.value })}
+                minLength={8}
+                autoComplete="new-password"
+                required={creatingPanelUser}
+                title={editingAgent ? "Troca a senha usada no instalador e no agent" : "Senha para acesso ao painel"}
+              />
+              <span className="text-[11px] text-muted-foreground">{editingId ? "Preencha para trocar" : "Obrigatoria para painel"}</span>
+            </div>
           ) : null}
           <select
             className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"

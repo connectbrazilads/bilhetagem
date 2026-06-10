@@ -17,6 +17,7 @@ from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/users", tags=["users"])
+PANEL_ACCESS_ROLES = {UserRole.admin, UserRole.manager}
 
 
 def _changed_values(before: dict, after: dict) -> dict:
@@ -34,6 +35,13 @@ def _ensure_human_role_change(current_role: UserRole | None, requested_role: Use
         raise HTTPException(status_code=400, detail="Perfil tecnico do agent deve ser criado pelo provisionamento da empresa")
     if current_role == UserRole.agent:
         raise HTTPException(status_code=400, detail="Perfil tecnico do agent nao pode ser alterado pela tela de usuarios")
+
+
+def _validate_password_for_role(role: UserRole, password: str | None, existing_password_hash: str | None = None) -> None:
+    if password is not None and is_unsafe_initial_password(password):
+        raise HTTPException(status_code=400, detail="Senha nao pode usar valor padrao ou placeholder")
+    if role in PANEL_ACCESS_ROLES and not password and not existing_password_hash:
+        raise HTTPException(status_code=422, detail="Senha obrigatoria para usuarios com acesso ao painel")
 
 
 def _read_user(user: User, db: Session) -> UserRead:
@@ -70,6 +78,7 @@ def create_user_endpoint(
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> UserRead:
     _ensure_human_role_change(None, payload.role)
+    _validate_password_for_role(payload.role, payload.password)
     try:
         user = create_user(db, payload, actor.organization_id)
         now = datetime.now(timezone.utc)
@@ -108,6 +117,8 @@ def update_user_endpoint(
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     
     _ensure_human_role_change(user.role, payload.role)
+    target_role = payload.role or user.role
+    _validate_password_for_role(target_role, payload.password, user.password_hash)
     from app.services.quota_service import get_or_create_current_quota
     quota = get_or_create_current_quota(db, user)
     before = {
@@ -124,8 +135,6 @@ def update_user_endpoint(
     if payload.full_name is not None:
         user.full_name = payload.full_name
     if payload.password is not None:
-        if is_unsafe_initial_password(payload.password):
-            raise HTTPException(status_code=400, detail="Senha nao pode usar valor padrao ou placeholder")
         user.password_hash = hash_password(payload.password)
         password_changed = True
     if payload.role is not None:

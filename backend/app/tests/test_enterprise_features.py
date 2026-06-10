@@ -2026,7 +2026,12 @@ def test_admin_can_manage_human_user_roles(db_session: Session):
     db_session.commit()
 
     created = create_user_endpoint(
-        UserCreate(username="gestor-financeiro", full_name="Gestor Financeiro", role=UserRole.manager),
+        UserCreate(
+            username="gestor-financeiro",
+            full_name="Gestor Financeiro",
+            role=UserRole.manager,
+            password="GestorFinanceiroPassword2026",
+        ),
         db=db_session,
         actor=admin,
     )
@@ -2034,6 +2039,91 @@ def test_admin_can_manage_human_user_roles(db_session: Session):
 
     updated = update_user_endpoint(created.id, UserUpdate(role=UserRole.admin), db=db_session, actor=admin)
     assert updated.role == UserRole.admin
+
+
+def test_panel_user_creation_requires_password(db_session: Session):
+    admin = User(username="panel-password-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        create_user_endpoint(
+            UserCreate(username="gestor-sem-senha", full_name="Gestor Sem Senha", role=UserRole.manager),
+            db=db_session,
+            actor=admin,
+        )
+
+    assert exc.value.status_code == 422
+    assert db_session.query(User).filter(User.username == "gestor-sem-senha").first() is None
+
+
+def test_panel_user_creation_rejects_unsafe_password(db_session: Session):
+    admin = User(username="panel-unsafe-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        create_user_endpoint(
+            UserCreate(
+                username="gestor-senha-fraca",
+                full_name="Gestor Senha Fraca",
+                role=UserRole.manager,
+                password="admin12345",
+            ),
+            db=db_session,
+            actor=admin,
+        )
+
+    assert exc.value.status_code == 400
+    assert db_session.query(User).filter(User.username == "gestor-senha-fraca").first() is None
+
+
+def test_panel_user_creation_hashes_password(db_session: Session):
+    admin = User(username="panel-hash-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.commit()
+
+    created = create_user_endpoint(
+        UserCreate(
+            username="gestor-com-senha",
+            full_name="Gestor Com Senha",
+            role=UserRole.manager,
+            password="GestorComSenhaPassword2026",
+        ),
+        db=db_session,
+        actor=admin,
+    )
+
+    saved_user = db_session.get(User, created.id)
+    assert saved_user is not None
+    assert saved_user.password_hash is not None
+    assert verify_password("GestorComSenhaPassword2026", saved_user.password_hash)
+
+
+def test_promoting_user_to_panel_role_requires_password_when_missing(db_session: Session):
+    admin = User(username="promote-panel-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="promote-panel-user", full_name="Promover Usuario", role=UserRole.user, is_active=True, organization_id=1)
+    db_session.add_all([admin, user])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        update_user_endpoint(user.id, UserUpdate(role=UserRole.manager), db=db_session, actor=admin)
+
+    assert exc.value.status_code == 422
+    db_session.refresh(user)
+    assert user.role == UserRole.user
+    assert user.password_hash is None
+
+    updated = update_user_endpoint(
+        user.id,
+        UserUpdate(role=UserRole.manager, password="PromotedUserPassword2026"),
+        db=db_session,
+        actor=admin,
+    )
+
+    assert updated.role == UserRole.manager
+    db_session.refresh(user)
+    assert verify_password("PromotedUserPassword2026", user.password_hash)
 
 
 def test_user_endpoint_rejects_agent_role_creation(db_session: Session):
