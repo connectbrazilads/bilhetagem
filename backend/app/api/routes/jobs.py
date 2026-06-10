@@ -165,6 +165,24 @@ def release_job(
     if blocking_enabled and (not authorized_pages or not authorized_balance):
         job.status = JobStatus.blocked
         job.reason = "Cota ou saldo insuficientes no momento da liberação"
+        write_audit(
+            db,
+            action="print_job_blocked",
+            entity="print_jobs",
+            entity_id=job.id,
+            actor_user_id=current_user.id,
+            metadata={
+                "job_username": job.user.username,
+                "actor_role": current_user.role.value,
+                "printer": job.printer.name,
+                "pages": job.pages,
+                "cost": job.cost,
+                "remaining_pages": quota.remaining_pages,
+                "remaining_balance": quota.remaining_balance,
+                "reason": job.reason,
+                "blocked_at_release": True,
+            },
+        )
         db.commit()
         db.refresh(job)
         return PrintJobDecision(

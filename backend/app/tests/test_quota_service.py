@@ -175,6 +175,54 @@ def test_manager_can_release_pending_job_for_same_organization(db_session):
     assert audit.log_metadata["pages"] == 10
 
 
+def test_release_blocks_and_audits_when_quota_is_insufficient_at_release(db_session):
+    manager = User(username="manager-release-block", full_name="Manager", role=UserRole.manager, organization_id=1)
+    user = User(username="release-block-user", full_name="Release Block User", role=UserRole.user, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_RELEASE_BLOCK", is_color=False, cost_mono=0.05, cost_color=0.25)
+    db_session.add_all([manager, user, printer])
+    db_session.flush()
+    quota = Quota(
+        organization_id=1,
+        user_id=user.id,
+        year=2026,
+        month=6,
+        monthly_limit=10,
+        used_pages=8,
+        monthly_balance=50.0,
+        used_balance=0.0,
+    )
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        document_name="Contrato.pdf",
+        pages=5,
+        is_color=False,
+        cost=0.25,
+        status=JobStatus.pending_release,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add_all([quota, job])
+    db_session.commit()
+
+    decision = release_job(job.id, db=db_session, current_user=manager)
+
+    db_session.refresh(job)
+    db_session.refresh(quota)
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "print_job_blocked", AuditLog.entity_id == job.id).one()
+    assert decision.authorized is False
+    assert decision.status == JobStatus.blocked
+    assert job.status == JobStatus.blocked
+    assert quota.used_pages == 8
+    assert audit.actor_user_id == manager.id
+    assert audit.log_metadata["job_username"] == "release-block-user"
+    assert audit.log_metadata["actor_role"] == "manager"
+    assert audit.log_metadata["printer"] == "KONICA_RELEASE_BLOCK"
+    assert audit.log_metadata["pages"] == 5
+    assert audit.log_metadata["remaining_pages"] == 2
+    assert audit.log_metadata["blocked_at_release"] is True
+
+
 def test_agent_actions_match_local_queue_name_when_physical_printer_name_differs(db_session):
     agent = User(username="agent-actions", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
     user = User(username="job-owner-actions", full_name="Job Owner", role=UserRole.user, is_active=True, organization_id=1)
