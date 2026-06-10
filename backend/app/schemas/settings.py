@@ -9,6 +9,8 @@ class LDAPSettings(BaseModel):
 
 class GeneralSettings(BaseModel):
     default_monthly_quota: int = Field(default=500, ge=0)
+    default_printer_cost_mono: float = Field(default=0.05, ge=0)
+    default_printer_cost_color: float = Field(default=0.25, ge=0)
     auto_create_users: bool = Field(default=True)
     blocking_enabled: bool = Field(default=True)
     show_balance: bool = Field(default=True)

@@ -40,13 +40,20 @@ def _normalize_username(username: str) -> str:
     return normalized.strip().lower() or "unknown"
 
 
-def _resolve_printer(db: Session, printer_name: str, is_color: bool, organization_id: int) -> Printer:
+def _resolve_printer(db: Session, printer_name: str, is_color: bool, organization_id: int, sys_settings: dict | None = None) -> Printer:
     printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.name == printer_name).first()
     if printer:
         return printer
     if not settings.auto_create_printers:
         raise ValueError(f"Impressora '{printer_name}' nao cadastrada")
-    printer = Printer(organization_id=organization_id, name=printer_name, is_color=is_color)
+    sys_settings = sys_settings or {}
+    printer = Printer(
+        organization_id=organization_id,
+        name=printer_name,
+        is_color=is_color,
+        cost_mono=float(sys_settings.get("default_printer_cost_mono", 0.05)),
+        cost_color=float(sys_settings.get("default_printer_cost_color", 0.25)),
+    )
     db.add(printer)
     db.flush()
     return printer
@@ -180,7 +187,13 @@ def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAge
     return db.query(Printer).filter(Printer.organization_id == organization_id, Printer.name == payload.printer_name).first()
 
 
-def _resolve_printer_for_job(db: Session, payload: PrintJobCreate, agent: PrintAgent | None, organization_id: int) -> Printer:
+def _resolve_printer_for_job(
+    db: Session,
+    payload: PrintJobCreate,
+    agent: PrintAgent | None,
+    organization_id: int,
+    sys_settings: dict | None = None,
+) -> Printer:
     printer = _find_existing_printer(db, payload, agent, organization_id)
     if printer:
         if payload.printer_serial and not printer.serial_number:
@@ -188,7 +201,7 @@ def _resolve_printer_for_job(db: Session, payload: PrintJobCreate, agent: PrintA
         if payload.printer_ip_address and not printer.ip_address:
             printer.ip_address = payload.printer_ip_address
         return printer
-    return _resolve_printer(db, payload.printer_name, payload.is_color, organization_id)
+    return _resolve_printer(db, payload.printer_name, payload.is_color, organization_id, sys_settings)
 
 
 def _upsert_printer_alias(db: Session, payload: PrintJobCreate, agent: PrintAgent | None, printer: Printer, organization_id: int) -> PrinterAlias | None:
@@ -240,7 +253,7 @@ def register_print_job(db: Session, payload: PrintJobCreate, organization_id: in
 
     user = _resolve_user(db, payload.username, sys_settings["auto_create_users"], organization_id)
     agent = _upsert_agent(db, payload, organization_id)
-    printer = _resolve_printer_for_job(db, payload, agent, organization_id)
+    printer = _resolve_printer_for_job(db, payload, agent, organization_id, sys_settings)
     alias = _upsert_printer_alias(db, payload, agent, printer, organization_id)
     policy_decision = evaluate_print_policies(db, payload, user, printer, alias, organization_id)
     quota = get_or_create_current_quota(db, user, payload.submitted_at)

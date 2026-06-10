@@ -24,6 +24,8 @@ type MonthlyReportEmailSettings = {
 
 export default function SettingsPage() {
   const [defaultQuota, setDefaultQuota] = useState(500);
+  const [defaultPrinterCostMono, setDefaultPrinterCostMono] = useState(0.05);
+  const [defaultPrinterCostColor, setDefaultPrinterCostColor] = useState(0.25);
   const [apiUrl, setApiUrl] = useState("http://localhost:8000");
   const [autoCreateUsers, setAutoCreateUsers] = useState(true);
   const [blockingEnabled, setBlockingEnabled] = useState(true);
@@ -56,6 +58,8 @@ export default function SettingsPage() {
     if (token) {
       apiFetch<{
         default_monthly_quota: number;
+        default_printer_cost_mono: number;
+        default_printer_cost_color: number;
         auto_create_users: boolean;
         blocking_enabled: boolean;
         show_balance: boolean;
@@ -64,6 +68,8 @@ export default function SettingsPage() {
       }>("/settings", token)
         .then((data) => {
           setDefaultQuota(data.default_monthly_quota);
+          setDefaultPrinterCostMono(data.default_printer_cost_mono);
+          setDefaultPrinterCostColor(data.default_printer_cost_color);
           setAutoCreateUsers(data.auto_create_users);
           setBlockingEnabled(data.blocking_enabled);
           setShowBalance(data.show_balance);
@@ -136,6 +142,8 @@ export default function SettingsPage() {
         method: "PUT",
         body: JSON.stringify({
           default_monthly_quota: defaultQuota,
+          default_printer_cost_mono: defaultPrinterCostMono,
+          default_printer_cost_color: defaultPrinterCostColor,
           auto_create_users: autoCreateUsers,
           blocking_enabled: blockingEnabled,
           show_balance: showBalance,
@@ -305,6 +313,30 @@ export default function SettingsPage() {
               Cota padrao mensal
               <Input className="mt-1.5" type="number" value={defaultQuota} onChange={(event) => setDefaultQuota(parseInt(event.target.value) || 0)} />
             </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm font-medium">
+                Custo padrao P&B
+                <Input
+                  className="mt-1.5"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={defaultPrinterCostMono}
+                  onChange={(event) => setDefaultPrinterCostMono(parseFloat(event.target.value) || 0)}
+                />
+              </label>
+              <label className="text-sm font-medium">
+                Custo padrao colorido
+                <Input
+                  className="mt-1.5"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={defaultPrinterCostColor}
+                  onChange={(event) => setDefaultPrinterCostColor(parseFloat(event.target.value) || 0)}
+                />
+              </label>
+            </div>
             <label className="text-sm font-medium">
               URL da API do servidor
               <Input className="mt-1.5" value={apiUrl} onChange={(event) => setApiUrl(event.target.value)} />

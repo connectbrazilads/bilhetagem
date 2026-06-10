@@ -32,10 +32,14 @@ def test_general_settings_api(db_session: Session):
     assert res.show_balance is True
     assert res.web_print_enabled is True
     assert res.default_monthly_quota == 500
+    assert res.default_printer_cost_mono == 0.05
+    assert res.default_printer_cost_color == 0.25
 
     # 2. PUT updated settings
     updated_payload = GeneralSettings(
         default_monthly_quota=200,
+        default_printer_cost_mono=0.07,
+        default_printer_cost_color=0.32,
         auto_create_users=False,
         blocking_enabled=False,
         show_balance=False,
@@ -47,12 +51,16 @@ def test_general_settings_api(db_session: Session):
     assert res_updated.show_balance is False
     assert res_updated.web_print_enabled is False
     assert res_updated.default_monthly_quota == 200
+    assert res_updated.default_printer_cost_mono == 0.07
+    assert res_updated.default_printer_cost_color == 0.32
 
     # 3. GET to verify persistence
     res_verified = get_general_settings(db=db_session, actor=actor)
     assert res_verified.blocking_enabled is False
     assert res_verified.show_balance is False
     assert res_verified.web_print_enabled is False
+    assert res_verified.default_printer_cost_mono == 0.07
+    assert res_verified.default_printer_cost_color == 0.32
 
 
 def test_settings_updates_are_audited(db_session: Session):
@@ -63,6 +71,8 @@ def test_settings_updates_are_audited(db_session: Session):
     update_general_settings(
         payload=GeneralSettings(
             default_monthly_quota=250,
+            default_printer_cost_mono=0.08,
+            default_printer_cost_color=0.35,
             auto_create_users=True,
             blocking_enabled=False,
             show_balance=True,
@@ -77,6 +87,8 @@ def test_settings_updates_are_audited(db_session: Session):
     assert log.organization_id == actor.organization_id
     assert log.actor_user_id == actor.id
     assert log.log_metadata["changes"]["default_monthly_quota"] == {"before": 500, "after": 250}
+    assert log.log_metadata["changes"]["default_printer_cost_mono"] == {"before": 0.05, "after": 0.08}
+    assert log.log_metadata["changes"]["default_printer_cost_color"] == {"before": 0.25, "after": 0.35}
     assert log.log_metadata["changes"]["blocking_enabled"] == {"before": True, "after": False}
     assert log.log_metadata["changes"]["safe_release_enabled"] == {"before": True, "after": False}
     assert log.log_metadata["changes"]["web_print_enabled"] == {"before": True, "after": False}
@@ -91,6 +103,39 @@ def test_manager_can_read_operational_settings(db_session: Session):
     settings = get_operational_settings(db=db_session, actor=manager)
 
     assert settings.safe_release_enabled is False
+
+
+def test_auto_created_printer_uses_organization_default_costs(db_session: Session):
+    actor = User(username="admin-cost-settings", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    update_system_settings(
+        db_session,
+        {
+            "default_printer_cost_mono": 0.09,
+            "default_printer_cost_color": 0.42,
+            "safe_release_enabled": False,
+        },
+        actor.organization_id,
+    )
+
+    decision = register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="usuario-custos",
+            printer_name="IMPRESSORA_AUTO_CUSTOS",
+            pages=10,
+            is_color=True,
+            submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+        ),
+        organization_id=actor.organization_id,
+    )
+
+    printer = db_session.query(Printer).filter(Printer.name == "IMPRESSORA_AUTO_CUSTOS").one()
+    job = db_session.query(PrintJob).filter(PrintJob.id == decision.job_id).one()
+    assert printer.cost_mono == 0.09
+    assert printer.cost_color == 0.42
+    assert job.cost == 4.2
 
 
 def test_monthly_report_email_settings_updates_are_audited(db_session: Session):

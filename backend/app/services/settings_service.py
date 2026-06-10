@@ -34,6 +34,8 @@ def get_system_settings_dict(db: Session, organization_id: int | None = None) ->
 
     return {
         "default_monthly_quota": int(settings_dict.get("default_monthly_quota", str(settings.default_monthly_quota))),
+        "default_printer_cost_mono": float(settings_dict.get("default_printer_cost_mono", "0.05")),
+        "default_printer_cost_color": float(settings_dict.get("default_printer_cost_color", "0.25")),
         "auto_create_users": _parse_bool(settings_dict.get("auto_create_users", None), settings.auto_create_users),
         "blocking_enabled": _parse_bool(settings_dict.get("blocking_enabled", None), True),
         "show_balance": _parse_bool(settings_dict.get("show_balance", None), True),
