@@ -82,6 +82,7 @@ export default function DownloadsPage() {
   const [deployUser, setDeployUser] = useState("agent");
   const [deployPassword, setDeployPassword] = useState("");
   const [defaultUsername, setDefaultUsername] = useState("");
+  const [spoolServer, setSpoolServer] = useState("");
   const [copiedCommand, setCopiedCommand] = useState<"exe" | "msi" | null>(null);
 
   async function load() {
@@ -163,10 +164,10 @@ export default function DownloadsPage() {
     ? "Informe empresa, usuario e senha do agent para gerar o comando."
     : "Empresa inativa: reative a empresa antes de gerar comando de instalacao.";
   const exeCommand = installerFile && commandReady
-    ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}"`
+    ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}" --spool-server "${spoolServer}"`
     : "";
   const msiCommand = msiFile && commandReady
-    ? `msiexec /i "${msiFile.filename}" APIURL="${API_URL}" AGENTUSER="${deployUser}" AGENTPASSWORD="${deployPassword}" ORGANIZATION="${deployOrg}" DEFAULTUSERNAME="${defaultUsername}" /qn`
+    ? `msiexec /i "${msiFile.filename}" APIURL="${API_URL}" AGENTUSER="${deployUser}" AGENTPASSWORD="${deployPassword}" ORGANIZATION="${deployOrg}" DEFAULTUSERNAME="${defaultUsername}" SPOOLSERVER="${spoolServer}" /qn`
     : "";
 
   return (
@@ -225,10 +226,16 @@ export default function DownloadsPage() {
               <Input type="password" value={deployPassword} onChange={(event) => setDeployPassword(event.target.value)} />
             </label>
           </div>
-          <label className="mb-4 grid max-w-md gap-1.5 text-xs font-semibold text-muted-foreground">
-            Usuario padrao do PC
-            <Input placeholder="Opcional" value={defaultUsername} onChange={(event) => setDefaultUsername(event.target.value)} />
-          </label>
+          <div className="mb-4 grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Usuario padrao do PC
+              <Input placeholder="Opcional" value={defaultUsername} onChange={(event) => setDefaultUsername(event.target.value)} />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Servidor de impressao
+              <Input placeholder="Opcional: \\SRV-PRINT01" value={spoolServer} onChange={(event) => setSpoolServer(event.target.value)} />
+            </label>
+          </div>
           <div className="grid gap-3 lg:grid-cols-2">
             <CommandBox
               title="EXE"

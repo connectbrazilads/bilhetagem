@@ -14,6 +14,7 @@
     <Property Id="AGENTPASSWORD" Secure="yes" Hidden="yes" />
     <Property Id="ORGANIZATION" Secure="yes" Value="default" />
     <Property Id="DEFAULTUSERNAME" Secure="yes" />
+    <Property Id="SPOOLSERVER" Secure="yes" />
 
     <StandardDirectory Id="ProgramFilesFolder">
       <Directory Id="INSTALLFOLDER" Name="PrintBillingAgentBootstrap">
@@ -27,7 +28,7 @@
     <CustomAction
       Id="RunAgentInstaller"
       BinaryRef="AgentInstallerExe"
-      ExeCommand="--silent --api-url &quot;[APIURL]&quot; --username &quot;[AGENTUSER]&quot; --password &quot;[AGENTPASSWORD]&quot; --organization &quot;[ORGANIZATION]&quot; --default-username &quot;[DEFAULTUSERNAME]&quot;"
+      ExeCommand="--silent --api-url &quot;[APIURL]&quot; --username &quot;[AGENTUSER]&quot; --password &quot;[AGENTPASSWORD]&quot; --organization &quot;[ORGANIZATION]&quot; --default-username &quot;[DEFAULTUSERNAME]&quot; --spool-server &quot;[SPOOLSERVER]&quot;"
       Execute="deferred"
       Return="check"
       Impersonate="no" />

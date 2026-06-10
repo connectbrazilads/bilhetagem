@@ -14,6 +14,7 @@ O agente deve ser instalado no servidor de impressao Windows ou em uma estacao q
 - `PRINTBILLING_UPDATE_CHECK_INTERVAL`: intervalo de checagem de update em segundos
 - `PRINTBILLING_HEARTBEAT_INTERVAL`: intervalo para enviar saude do PC e filas locais em segundos
 - `PRINTBILLING_QUEUE_ACTION_INTERVAL`: intervalo para buscar acoes remotas de filas em segundos
+- `PRINTBILLING_SPOOL_SERVER`: servidor de impressao remoto opcional, por exemplo `\\SRV-PRINT01`
 
 ## Instalacao
 
@@ -54,6 +55,7 @@ Para remover:
 
 Na instalacao silenciosa nova, informe `--api-url`, `--username`, `--password` e `--organization`.
 Na reinstalacao silenciosa, parametros omitidos reutilizam o `config.json` existente. Para remover um usuario padrao antigo do PC, envie explicitamente `--default-username ""`.
+Se o agent precisa monitorar filas de um servidor de impressao remoto, adicione `--spool-server "\\SRV-PRINT01"`.
 
 ## Auto-update
 
@@ -132,5 +134,5 @@ $env:PRINTBILLING_CERT_PASSWORD="senha"
 MSI silencioso:
 
 ```powershell
-msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="SENHA_FORTE_DO_AGENT" ORGANIZATION="default" /qn
+msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="SENHA_FORTE_DO_AGENT" ORGANIZATION="default" SPOOLSERVER="\\SRV-PRINT01" /qn
 ```

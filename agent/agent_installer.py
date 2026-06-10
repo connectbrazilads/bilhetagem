@@ -115,6 +115,7 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             "",
             allow_empty_arg=True,
         )
+        spool_server = pick_arg_or_config(args.spool_server, existing, template, "PRINTBILLING_SPOOL_SERVER", "")
         if not api_url or not username or not password or not organization_slug:
             raise RuntimeError("Modo silencioso requer --api-url, --username, --password e --organization em instalacoes novas.")
     else:
@@ -143,12 +144,17 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             "Usuario padrao deste PC, se o Windows nao informar",
             existing.get("PRINTBILLING_DEFAULT_USERNAME") or template.get("PRINTBILLING_DEFAULT_USERNAME", ""),
         )
+        spool_server = prompt_value(
+            "Servidor de impressao remoto (opcional)",
+            existing.get("PRINTBILLING_SPOOL_SERVER") or template.get("PRINTBILLING_SPOOL_SERVER", ""),
+        )
 
     api_url = normalize_text(api_url)
     username = normalize_text(username)
     password = normalize_text(password)
     organization_slug = normalize_text(organization_slug)
     default_username = normalize_text(default_username)
+    spool_server = normalize_text(spool_server)
     if not api_url or not username or not password or not organization_slug:
         raise RuntimeError("Configuracao do agent requer API URL, usuario, senha e slug da empresa.")
 
@@ -169,6 +175,7 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         "PRINTBILLING_UPDATE_CHECK_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600)),
         "PRINTBILLING_HEARTBEAT_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_HEARTBEAT_INTERVAL", 60)),
         "PRINTBILLING_QUEUE_ACTION_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_QUEUE_ACTION_INTERVAL", 30)),
+        "PRINTBILLING_SPOOL_SERVER": spool_server,
     }
 
 
@@ -233,6 +240,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--password", help="Senha do usuario tecnico")
     parser.add_argument("--organization", help="Slug da empresa")
     parser.add_argument("--default-username", help="Usuario padrao quando o Windows nao informar")
+    parser.add_argument("--spool-server", help="Servidor de impressao remoto opcional para enumerar filas")
     return parser.parse_args()
 
 

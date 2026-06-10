@@ -14,6 +14,7 @@ def args(**overrides):
         "password": None,
         "organization": None,
         "default_username": None,
+        "spool_server": None,
     }
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -26,6 +27,7 @@ def test_silent_install_preserves_existing_config_when_args_are_omitted():
         "PRINTBILLING_AGENT_PASSWORD": "secret",
         "PRINTBILLING_ORGANIZATION_SLUG": "cliente-a",
         "PRINTBILLING_DEFAULT_USERNAME": "usuario-padrao",
+        "PRINTBILLING_SPOOL_SERVER": r"\\PRINTSERVER",
     }
 
     config = build_config(existing, {}, args())
@@ -35,6 +37,7 @@ def test_silent_install_preserves_existing_config_when_args_are_omitted():
     assert config["PRINTBILLING_AGENT_PASSWORD"] == "secret"
     assert config["PRINTBILLING_ORGANIZATION_SLUG"] == "cliente-a"
     assert config["PRINTBILLING_DEFAULT_USERNAME"] == "usuario-padrao"
+    assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\PRINTSERVER"
 
 
 def test_silent_install_can_clear_existing_default_username():
@@ -61,6 +64,7 @@ def test_silent_install_trims_text_values_before_writing_config():
             password=" secret ",
             organization=" cliente-a ",
             default_username=" DIEGO LCD ",
+            spool_server=r" \\PRINTSERVER ",
         ),
     )
 
@@ -69,6 +73,7 @@ def test_silent_install_trims_text_values_before_writing_config():
     assert config["PRINTBILLING_AGENT_PASSWORD"] == "secret"
     assert config["PRINTBILLING_ORGANIZATION_SLUG"] == "cliente-a"
     assert config["PRINTBILLING_DEFAULT_USERNAME"] == "DIEGO LCD"
+    assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\PRINTSERVER"
 
 
 def test_silent_reinstall_preserves_capture_and_update_flags():
@@ -81,6 +86,7 @@ def test_silent_reinstall_preserves_capture_and_update_flags():
         "PRINTBILLING_USE_PRINT_EVENT_LOG": False,
         "PRINTBILLING_AUTO_UPDATE": False,
         "PRINTBILLING_HEARTBEAT_INTERVAL": 120,
+        "PRINTBILLING_SPOOL_SERVER": r"\\PRINTSERVER",
     }
 
     config = build_config(existing, {}, args(api_url="https://nova-api.example.com"))
@@ -91,6 +97,23 @@ def test_silent_reinstall_preserves_capture_and_update_flags():
     assert config["PRINTBILLING_USE_PRINT_EVENT_LOG"] is False
     assert config["PRINTBILLING_AUTO_UPDATE"] is False
     assert config["PRINTBILLING_HEARTBEAT_INTERVAL"] == 120
+    assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\PRINTSERVER"
+
+
+def test_silent_install_can_set_remote_spool_server():
+    config = build_config(
+        {},
+        {},
+        args(
+            api_url="https://billing.example.com",
+            username="agent",
+            password="secret",
+            organization="cliente-a",
+            spool_server=r"\\SRV-PRINT01",
+        ),
+    )
+
+    assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\SRV-PRINT01"
 
 
 def test_silent_new_install_requires_explicit_organization_slug():
