@@ -11,6 +11,7 @@ class OperationalHealth(BaseModel):
     agents_without_local_admin: int = 0
     agents_without_event_log: int = 0
     outdated_agents: int = 0
+    agents_with_recent_errors: int = 0
     printers_total: int = 0
     printers_monitored: int = 0
     printers_unmonitored: int = 0

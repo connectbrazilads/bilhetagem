@@ -208,6 +208,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
             .all()
         )
     }
+    agents_with_recent_errors = len(recent_error_agent_ids)
     latest_agent_version = published_agent_version()
     outdated_agents = sum(1 for agent in agents if is_newer_version(latest_agent_version, agent.version))
     agents_with_alerts = sum(
@@ -231,6 +232,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         "agents_without_local_admin": agents_without_local_admin,
         "agents_without_event_log": agents_without_event_log,
         "outdated_agents": outdated_agents,
+        "agents_with_recent_errors": agents_with_recent_errors,
         "printers_total": len(printers),
         "printers_monitored": monitored_printers,
         "printers_unmonitored": max(len(printers) - monitored_printers, 0),
