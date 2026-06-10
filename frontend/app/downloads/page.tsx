@@ -68,7 +68,7 @@ export default function DownloadsPage() {
     try {
       const data = await apiFetch<AgentRelease[]>("/agent/releases", token);
       setReleases(data);
-      const orgs = await apiFetch<OrganizationOption[]>("/organizations", token).catch(() => []);
+      const orgs = await apiFetch<OrganizationOption[]>("/agent/deployment-organizations", token).catch(() => []);
       setOrganizations(orgs);
       const currentSlug = localStorage.getItem("organization_slug") || "default";
       if (orgs.length > 0 && !orgs.some((organization) => organization.slug === deployOrg)) {

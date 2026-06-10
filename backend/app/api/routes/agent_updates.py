@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus, AgentQueueActionType
 from app.models.agent_log import AgentLog
+from app.models.organization import Organization
 from app.models.print_agent import PrintAgent
 from app.models.print_job import PrintJob
 from app.models.printer import Printer
@@ -19,6 +20,7 @@ from app.models.printer_alias import PrinterAlias
 from app.models.user import User
 from app.models.user import UserRole
 from app.schemas.agent import (
+    AgentDeploymentOrganizationRead,
     AgentHeartbeatPayload,
     AgentHealthAlertRead,
     AgentLogRead,
@@ -34,6 +36,7 @@ from app.schemas.agent import (
     PrintAgentRead,
 )
 from app.services.audit_service import write_audit
+from app.services.organization_service import DEFAULT_ORGANIZATION_SLUG
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -210,6 +213,10 @@ def _agent_status(agent: PrintAgent, now: datetime | None = None) -> tuple[bool,
             return True, "Online com alerta"
         return True, "Online"
     return False, "Offline"
+
+
+def _can_manage_all_organizations(actor: User) -> bool:
+    return bool(actor.organization and actor.organization.slug == DEFAULT_ORGANIZATION_SLUG and actor.role == UserRole.admin)
 
 
 def _recent_jobs(db: Session, agent: PrintAgent) -> list[AgentRecentJobRead]:
@@ -524,6 +531,16 @@ def download_agent_update(_: User = Depends(require_roles(UserRole.agent, UserRo
 @router.get("/releases", response_model=list[AgentReleaseRead])
 def list_agent_releases(_: User = Depends(require_roles(UserRole.admin, UserRole.manager))) -> list[AgentReleaseRead]:
     return _load_release_manifest()
+
+
+@router.get("/deployment-organizations", response_model=list[AgentDeploymentOrganizationRead])
+def list_agent_deployment_organizations(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+) -> list[Organization]:
+    if _can_manage_all_organizations(actor):
+        return db.query(Organization).order_by(Organization.name).all()
+    return [actor.organization]
 
 
 @router.get("/releases/{version}/download")

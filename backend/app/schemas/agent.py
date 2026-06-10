@@ -32,6 +32,15 @@ class AgentReleaseRead(BaseModel):
     files: list[AgentReleaseFileRead] = Field(default_factory=list)
 
 
+class AgentDeploymentOrganizationRead(BaseModel):
+    id: int
+    name: str
+    slug: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
 class AgentQueuePayload(BaseModel):
     queue_name: str = Field(min_length=1, max_length=180)
     driver_name: str | None = Field(default=None, max_length=180)

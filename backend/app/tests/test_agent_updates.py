@@ -11,6 +11,7 @@ from app.api.routes.agent_updates import (
     download_agent_release_checksums,
     finish_queue_action,
     get_agent_detail,
+    list_agent_deployment_organizations,
     list_agent_releases,
     list_agents,
     poll_queue_actions,
@@ -115,6 +116,21 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     assert "PrintBillingAgent.exe" in body
     assert "PrintBillingAgentInstaller.exe" in body
     assert checksums.headers["content-disposition"] == "attachment; filename=SHA256SUMS-0.3.0.txt"
+
+
+def test_deployment_organizations_are_scoped_for_download_commands(db_session: Session):
+    other_org = Organization(name="Cliente Download", slug="cliente-download", is_active=True)
+    third_org = Organization(name="Cliente Inativo Download", slug="cliente-inativo-download", is_active=False)
+    platform_admin = User(username="platform-download-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    tenant_manager = User(username="tenant-download-manager", full_name="Manager", role=UserRole.manager, is_active=True, organization=other_org)
+    db_session.add_all([other_org, third_org, platform_admin, tenant_manager])
+    db_session.commit()
+
+    platform_options = list_agent_deployment_organizations(db=db_session, actor=platform_admin)
+    tenant_options = list_agent_deployment_organizations(db=db_session, actor=tenant_manager)
+
+    assert {organization.slug for organization in platform_options} >= {"default", "cliente-download", "cliente-inativo-download"}
+    assert [organization.slug for organization in tenant_options] == ["cliente-download"]
 
 
 def _request(ip_address: str = "10.0.0.10") -> Request:
