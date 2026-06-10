@@ -4,10 +4,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.deps import require_roles
-from app.models.print_job import JobStatus, PrintJob
+from app.models.print_job import PrintJob
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
-from app.models.quota import Quota
 from app.models.user import User, UserRole
 from app.repositories.printers import create_printer
 from app.schemas.printer import PrinterAliasBind, PrinterAliasRead, PrinterCreate, PrinterRead, PrinterStatusUpdate, PrinterUpdate
@@ -193,26 +192,13 @@ def delete_printer_endpoint(
     if not printer:
         raise HTTPException(status_code=404, detail="Impressora nao encontrada")
 
-    jobs = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.printer_id == printer.id).all()
-    deleted_jobs = len(jobs)
-    for job in jobs:
-        if job.status not in (JobStatus.authorized, JobStatus.released):
-            continue
-        quota = (
-            db.query(Quota)
-            .filter(
-                Quota.user_id == job.user_id,
-                Quota.year == job.submitted_at.year,
-                Quota.month == job.submitted_at.month,
-            )
-            .first()
+    job_count = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.printer_id == printer.id).count()
+    if job_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Impressora possui historico de impressoes. Desative ou mescle a impressora para preservar relatorios e auditoria.",
         )
-        if quota:
-            quota.used_pages = max(quota.used_pages - job.pages, 0)
-            quota.used_balance = max(quota.used_balance - job.cost, 0.0)
 
-    for job in jobs:
-        db.delete(job)
     db.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.printer_id == printer.id).delete(synchronize_session=False)
     write_audit(
         db,
@@ -220,11 +206,11 @@ def delete_printer_endpoint(
         entity="printers",
         entity_id=printer.id,
         actor_user_id=actor.id,
-        metadata={"printer": printer.name, "deleted_jobs": deleted_jobs},
+        metadata={"printer": printer.name, "deleted_jobs": 0},
     )
     db.delete(printer)
     db.commit()
-    return {"status": "deleted", "deleted_jobs": deleted_jobs}
+    return {"status": "deleted", "deleted_jobs": 0}
 
 
 @router.post("/{source_printer_id}/merge/{target_printer_id}", response_model=PrinterRead)

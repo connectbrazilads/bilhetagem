@@ -183,7 +183,7 @@ export default function PrintersPage() {
 
   async function deletePrinter(printer: PrinterRow) {
     if (!isAdmin) return;
-    const confirmed = window.confirm(`Excluir a impressora "${printer.name}" e os historicos vinculados a ela?`);
+    const confirmed = window.confirm(`Excluir a impressora "${printer.name}"? Impressoras com historico devem ser desativadas ou mescladas para preservar relatorios.`);
     if (!confirmed) return;
     const token = localStorage.getItem("token");
     if (!token) return;

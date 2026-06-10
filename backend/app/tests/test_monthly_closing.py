@@ -1,11 +1,15 @@
 from datetime import datetime, timezone
 from io import BytesIO
 
+import pytest
+from fastapi import HTTPException
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
+from app.api.routes.printers import delete_printer_endpoint
 from app.api.routes.reports import export_monthly_closing, export_report, generate_monthly_closing
 from app.api.routes.settings import get_monthly_report_email_settings_endpoint, update_monthly_report_email_settings_endpoint
+from app.api.routes.users import delete_user_endpoint
 from app.models.department import Department
 from app.models.audit_log import AuditLog
 from app.models.organization import Organization
@@ -173,6 +177,34 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert same_closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert same_closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
     assert same_closing.snapshot["organization"] == {"id": 1, "name": "Cliente Fechamento", "slug": "cliente-fechamento"}
+
+
+def test_user_with_print_history_cannot_be_deleted(db_session: Session):
+    user, _ = _seed_job_data(db_session)
+    admin = User(username="delete-history-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        delete_user_endpoint(user.id, db=db_session, actor=admin)
+
+    assert exc.value.status_code == 409
+    assert db_session.get(User, user.id) is not None
+    assert db_session.query(PrintJob).filter(PrintJob.user_id == user.id).count() == 5
+
+
+def test_printer_with_print_history_cannot_be_deleted(db_session: Session):
+    _, printer = _seed_job_data(db_session)
+    admin = User(username="delete-printer-history-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        delete_printer_endpoint(printer.id, db=db_session, actor=admin)
+
+    assert exc.value.status_code == 409
+    assert db_session.get(Printer, printer.id) is not None
+    assert db_session.query(PrintJob).filter(PrintJob.printer_id == printer.id).count() == 5
 
 
 def test_monthly_closing_export_xlsx(db_session: Session):

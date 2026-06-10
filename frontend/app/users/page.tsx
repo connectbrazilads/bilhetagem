@@ -208,7 +208,7 @@ export default function UsersPage() {
       setError("Usuarios tecnicos nao podem ser excluidos.");
       return;
     }
-    const confirmed = window.confirm(`Excluir o usuario "${user.full_name || user.username}" e os historicos vinculados a ele?`);
+    const confirmed = window.confirm(`Excluir o usuario "${user.full_name || user.username}"? Usuarios com historico devem ser desativados para preservar relatorios.`);
     if (!confirmed) return;
     const token = localStorage.getItem("token");
     if (!token) return;

@@ -178,7 +178,13 @@ def delete_user_endpoint(
     if user.username.lower() in {"admin", "agent"} or user.role == UserRole.agent:
         raise HTTPException(status_code=400, detail="Usuario tecnico nao pode ser excluido")
 
-    deleted_jobs = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.user_id == user.id).delete(synchronize_session=False)
+    job_count = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.user_id == user.id).count()
+    if job_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Usuario possui historico de impressoes. Desative o usuario para preservar relatorios e auditoria.",
+        )
+
     db.query(AuditLog).filter(AuditLog.organization_id == actor.organization_id, AuditLog.actor_user_id == user.id).update(
         {AuditLog.actor_user_id: None},
         synchronize_session=False,
@@ -189,8 +195,8 @@ def delete_user_endpoint(
         entity="users",
         entity_id=user.id,
         actor_user_id=actor.id,
-        metadata={"username": user.username, "deleted_jobs": deleted_jobs},
+        metadata={"username": user.username, "deleted_jobs": 0},
     )
     db.delete(user)
     db.commit()
-    return {"status": "deleted", "deleted_jobs": deleted_jobs}
+    return {"status": "deleted", "deleted_jobs": 0}
