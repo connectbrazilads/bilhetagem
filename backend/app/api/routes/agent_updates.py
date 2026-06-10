@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.deps import get_current_user, require_roles
+from app.core.deps import require_roles
 from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus, AgentQueueActionType
 from app.models.agent_log import AgentLog
 from app.models.print_agent import PrintAgent
@@ -416,7 +416,7 @@ def _new_queue_action(
 @router.get("/version", response_model=AgentVersionRead)
 def agent_version(
     current_version: str | None = Query(default=None),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.agent, UserRole.admin)),
 ) -> AgentVersionRead:
     latest = _latest_agent_release_file()
     file_exists = latest is not None
@@ -430,7 +430,7 @@ def agent_version(
 
 
 @router.get("/download")
-def download_agent_update(_: User = Depends(get_current_user)) -> FileResponse:
+def download_agent_update(_: User = Depends(require_roles(UserRole.agent, UserRole.admin))) -> FileResponse:
     latest = _latest_agent_release_file()
     path = _release_file(latest[0].version, latest[1].filename) if latest else _agent_file()
     if not path.exists():
@@ -477,7 +477,7 @@ def agent_heartbeat(
     payload: AgentHeartbeatPayload,
     request: Request,
     db: Session = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_roles(UserRole.agent, UserRole.admin)),
 ) -> PrintAgentRead:
     now = datetime.now(timezone.utc)
     agent_uid = _clean_optional(payload.agent_uid)
@@ -680,7 +680,7 @@ def create_bulk_queue_actions(
 def poll_queue_actions(
     agent_uid: str = Query(min_length=1, max_length=120),
     db: Session = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_roles(UserRole.agent, UserRole.admin)),
 ) -> list[AgentQueueAction]:
     agent = db.query(PrintAgent).filter(PrintAgent.organization_id == actor.organization_id, PrintAgent.agent_uid == agent_uid).first()
     if not agent:
@@ -712,7 +712,7 @@ def finish_queue_action(
     action_id: int,
     payload: AgentQueueActionResult,
     db: Session = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_roles(UserRole.agent, UserRole.admin)),
 ) -> AgentQueueAction:
     if payload.status not in (AgentQueueActionStatus.succeeded, AgentQueueActionStatus.failed):
         raise HTTPException(status_code=422, detail="Resultado deve ser succeeded ou failed")

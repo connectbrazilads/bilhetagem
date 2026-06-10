@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, require_roles
+from app.core.deps import require_roles
 from app.models.department import Department
 from app.models.print_job import PrintJob, JobStatus
 from app.models.printer import Printer
@@ -73,7 +73,7 @@ def list_jobs(
 def create_job(
     payload: PrintJobCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.agent, UserRole.admin)),
 ) -> PrintJobDecision:
     try:
         return register_print_job(db, payload, current_user.organization_id)
@@ -86,7 +86,7 @@ def create_job(
 def get_agent_actions(
     job_keys: str = Query(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.agent, UserRole.admin)),
 ) -> dict[str, str]:
     actions = {}
     if not job_keys:
@@ -125,7 +125,7 @@ def get_agent_actions(
 def release_job(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.user)),
 ) -> PrintJobDecision:
     job = db.query(PrintJob).filter(PrintJob.organization_id == current_user.organization_id, PrintJob.id == job_id).first()
     if not job:
@@ -179,7 +179,7 @@ def release_job(
 def cancel_job(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.user)),
 ) -> dict:
     job = db.query(PrintJob).filter(PrintJob.organization_id == current_user.organization_id, PrintJob.id == job_id).first()
     if not job:
@@ -227,7 +227,7 @@ def web_print_endpoint(
     printer_id: int = Form(...),
     is_color: bool = Form(default=False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.user)),
 ) -> PrintJobDecision:
     _ensure_web_print_enabled(db, current_user.organization_id)
 
@@ -286,7 +286,7 @@ def web_print_endpoint(
 @router.get("/agent-web-prints")
 def get_agent_web_prints(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.agent, UserRole.admin)),
 ) -> list[dict]:
     if not _web_print_enabled(db, current_user.organization_id):
         return []
@@ -322,7 +322,7 @@ def get_agent_web_prints(
 def download_web_print_file(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.agent, UserRole.admin)),
 ) -> FileResponse:
     _ensure_web_print_enabled(db, current_user.organization_id)
 
@@ -345,7 +345,7 @@ def download_web_print_file(
 def confirm_web_printed(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.agent, UserRole.admin)),
 ) -> dict:
     _ensure_web_print_enabled(db, current_user.organization_id)
 

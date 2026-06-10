@@ -5,7 +5,7 @@ O agente deve ser instalado no servidor de impressao Windows ou em uma estacao q
 ## Variaveis de ambiente
 
 - `PRINTBILLING_API_URL`: URL da API, por exemplo `https://billing.empresa.local`
-- `PRINTBILLING_AGENT_USER`: usuario tecnico cadastrado na API
+- `PRINTBILLING_AGENT_USER`: usuario tecnico cadastrado na API com perfil `agent`
 - `PRINTBILLING_AGENT_PASSWORD`: senha do usuario tecnico
 - `PRINTBILLING_ORGANIZATION_SLUG`: slug da empresa no SaaS, por padrao `default`
 - `PRINTBILLING_CANCEL_BLOCKED`: `true` para cancelar trabalhos bloqueados
@@ -49,7 +49,7 @@ Para remover:
 ## Instalacao silenciosa
 
 ```powershell
-.\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "agent12345" --organization default --default-username ""
+.\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "SENHA_FORTE_DO_AGENT" --organization default --default-username ""
 ```
 
 ## Auto-update
@@ -122,5 +122,5 @@ $env:PRINTBILLING_CERT_PASSWORD="senha"
 MSI silencioso:
 
 ```powershell
-msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="agent12345" ORGANIZATION="default" /qn
+msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="SENHA_FORTE_DO_AGENT" ORGANIZATION="default" /qn
 ```

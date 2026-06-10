@@ -114,7 +114,7 @@ def create_organization(
                     username=payload.agent_username,
                     full_name="Agente Windows",
                     password_hash=hash_password(payload.agent_password),
-                    role=UserRole.admin,
+                    role=UserRole.agent,
                     is_active=True,
                 ),
             ]

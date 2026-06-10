@@ -20,8 +20,9 @@ from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
 from app.api.routes.departments import create_department, delete_department, list_departments, update_department
 from app.api.routes.printers import list_printers
-from app.api.routes.users import create_user_endpoint, list_users, update_user_endpoint
+from app.api.routes.users import create_user_endpoint, delete_user_endpoint, list_users, update_user_endpoint
 from app.core.security import hash_password
+from app.core.deps import require_roles
 from app.schemas.department import DepartmentCreate, DepartmentUpdate
 from app.schemas.auth import LoginRequest
 from app.schemas.user import UserCreate, UserUpdate
@@ -66,6 +67,18 @@ def test_seed_does_not_require_initial_password_for_existing_user(db_session: Se
     )
 
     assert db_session.query(User).filter(User.username == "admin").count() == 1
+
+
+def test_agent_role_can_use_agent_endpoints_but_not_admin_dependencies():
+    agent_user = User(username="agent-tech", full_name="Agent Tecnico", role=UserRole.agent, is_active=True, organization_id=1)
+
+    assert require_roles(UserRole.agent, UserRole.admin)(agent_user) == agent_user
+    with pytest.raises(HTTPException) as exc:
+        require_roles(UserRole.admin)(agent_user)
+    assert exc.value.status_code == 403
+    with pytest.raises(HTTPException) as human_exc:
+        require_roles(UserRole.admin, UserRole.manager, UserRole.user)(agent_user)
+    assert human_exc.value.status_code == 403
 
 
 def test_snmp_poll_uses_real_status_payload(db_session: Session, monkeypatch):
@@ -460,7 +473,7 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
 
     seeded_users = db_session.query(User).filter(User.organization_id == created.id).order_by(User.username).all()
     assert [user.username for user in seeded_users] == ["admin", "agent"]
-    assert all(user.role == UserRole.admin for user in seeded_users)
+    assert {user.username: user.role for user in seeded_users} == {"admin": UserRole.admin, "agent": UserRole.agent}
     assert created.users_count == 2
 
     token = login(
@@ -688,6 +701,19 @@ def test_user_department_id_assignment_is_scoped_and_clearable(db_session: Sessi
     cleared = update_user_endpoint(created.id, UserUpdate(department_id=None), db=db_session, actor=admin)
     assert cleared.department_id is None
     assert cleared.department_name is None
+
+
+def test_agent_role_user_cannot_be_deleted_by_accident(db_session: Session):
+    admin = User(username="delete-agent-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    custom_agent = User(username="coletor-filial", full_name="Agent Filial", role=UserRole.agent, is_active=True, organization_id=1)
+    db_session.add_all([admin, custom_agent])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        delete_user_endpoint(custom_agent.id, db=db_session, actor=admin)
+
+    assert exc.value.status_code == 400
+    assert db_session.get(User, custom_agent.id) is not None
 
 
 def test_audit_log_listing_is_scoped_by_organization(db_session: Session):

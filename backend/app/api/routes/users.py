@@ -127,7 +127,7 @@ def delete_user_endpoint(
         raise HTTPException(status_code=404, detail="Usuario nao encontrado")
     if user.id == actor.id:
         raise HTTPException(status_code=400, detail="Nao e possivel excluir o usuario logado")
-    if user.username.lower() in {"admin", "agent"}:
+    if user.username.lower() in {"admin", "agent"} or user.role == UserRole.agent:
         raise HTTPException(status_code=400, detail="Usuario tecnico nao pode ser excluido")
 
     deleted_jobs = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.user_id == user.id).delete(synchronize_session=False)

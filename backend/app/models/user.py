@@ -10,6 +10,7 @@ from app.models.base import Base
 class UserRole(str, enum.Enum):
     admin = "admin"
     manager = "manager"
+    agent = "agent"
     user = "user"
 
 

@@ -27,7 +27,7 @@ def initialize_lite_database() -> None:
             db,
             username=settings.initial_agent_username,
             password=settings.initial_agent_password,
-            role=UserRole.admin,
+            role=UserRole.agent,
             full_name="Agente Windows",
         )
         db.commit()
@@ -58,6 +58,11 @@ def _ensure_lite_schema() -> None:
             if "organization_id" not in columns:
                 conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN organization_id INTEGER")
                 conn.exec_driver_sql(f"UPDATE {table_name} SET organization_id = 1 WHERE organization_id IS NULL")
+        users_exists = conn.exec_driver_sql(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='users'"
+        ).scalar()
+        if users_exists:
+            conn.exec_driver_sql("UPDATE users SET role = 'agent' WHERE lower(username) = 'agent' OR full_name = 'Agente Windows'")
         existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(printers)").fetchall()}
         if "toner_levels" not in existing_columns:
             conn.exec_driver_sql("ALTER TABLE printers ADD COLUMN toner_levels JSON")

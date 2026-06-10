@@ -29,7 +29,7 @@ def _changed_values(before: dict, after: dict) -> dict:
 @router.get("", response_model=GeneralSettings)
 def get_general_settings(
     db: Session = Depends(get_db),
-    actor: User = Depends(require_roles(UserRole.admin)),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.agent)),
 ) -> GeneralSettings:
     return GeneralSettings(**get_system_settings_dict(db, actor.organization_id))
 

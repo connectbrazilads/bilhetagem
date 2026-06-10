@@ -93,7 +93,6 @@ export default function UsersPage() {
             department_id: form.department_id ? Number(form.department_id) : null,
             monthly_limit: Number(form.monthly_limit),
             monthly_balance: Number(form.monthly_balance),
-            role: "user",
             is_active: form.is_active,
           }),
         });
@@ -373,7 +372,7 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {users.map((user) => {
-                  const canDelete = user.username !== "admin" && user.username !== "agent";
+                  const canDelete = user.username !== "admin" && user.username !== "agent" && user.role !== "agent";
                   return (
                     <tr key={user.id} className="border-t bg-white transition-colors hover:bg-muted/30">
                       <td className="whitespace-nowrap p-4 font-semibold">{user.username}</td>

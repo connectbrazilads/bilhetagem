@@ -53,7 +53,7 @@ def main() -> None:
             db,
             username=settings.initial_agent_username,
             password=settings.initial_agent_password,
-            role=UserRole.admin,
+            role=UserRole.agent,
             full_name="Agente Windows",
         )
         db.commit()

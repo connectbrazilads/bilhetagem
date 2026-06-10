@@ -19,7 +19,7 @@ router = APIRouter(prefix="/printers", tags=["printers"])
 @router.get("", response_model=list[PrinterRead])
 def list_printers(
     db: Session = Depends(get_db),
-    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.agent)),
 ) -> list[Printer]:
     return (
         db.query(Printer)
@@ -84,7 +84,7 @@ def update_printer_status_endpoint(
     printer_id: int,
     payload: PrinterStatusUpdate,
     db: Session = Depends(get_db),
-    actor: User = Depends(require_roles(UserRole.admin)),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.agent)),
 ) -> Printer:
     printer = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == printer_id).first()
     if not printer:

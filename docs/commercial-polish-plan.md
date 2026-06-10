@@ -50,6 +50,7 @@ Entregaveis:
 - Provisionar admin inicial e usuario tecnico do agent ao criar uma nova empresa.
 - Exigir senhas proprias para admin inicial e agent, sem credenciais padrao em novos clientes.
 - Bloquear seed/bootstrap com senhas padrao ou placeholders ao criar usuarios iniciais.
+- Usar perfil tecnico `agent` sem permissao administrativa no painel para credenciais de captura.
 - Alterar JWT para carregar `organization_id`.
 - Filtrar todas as consultas por empresa.
 - Separar configuracoes por empresa: bloqueio, Follow-Me, Web Print, LDAP, custos padrao e criacao automatica.
