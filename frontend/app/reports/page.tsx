@@ -619,17 +619,22 @@ function PolicySnapshotList({ rows }: { rows: ClosingPolicySnapshotRow[] }) {
         <div className="text-sm text-muted-foreground">Sem politicas.</div>
       ) : (
         <div className="space-y-2">
-          {topRows.map((row) => (
-            <div key={`${row.action}:${row.name}`} className="grid grid-cols-[1fr_auto] gap-3 text-sm">
-              <span className="truncate font-medium" title={row.name}>
-                {row.name}
-              </span>
-              <span className="whitespace-nowrap text-right text-muted-foreground">
-                {policyActionLabel(row.action)} | {row.jobs.toLocaleString("pt-BR")} job(s)
-                {row.saved_pages ? ` | ${row.saved_pages.toLocaleString("pt-BR")} salvas` : ""}
-              </span>
-            </div>
-          ))}
+          {topRows.map((row) => {
+            const details = [
+              `${policyActionLabel(row.action)} | ${row.jobs.toLocaleString("pt-BR")} job(s)`,
+              row.pending_cost ? `R$ ${row.pending_cost.toFixed(2)} pendente` : null,
+              row.blocked_cost ? `R$ ${row.blocked_cost.toFixed(2)} bloqueado` : null,
+              row.saved_pages ? `${row.saved_pages.toLocaleString("pt-BR")} salvas` : null,
+            ].filter(Boolean);
+            return (
+              <div key={`${row.action}:${row.name}`} className="grid grid-cols-[1fr_auto] gap-3 text-sm">
+                <span className="truncate font-medium" title={row.name}>
+                  {row.name}
+                </span>
+                <span className="whitespace-nowrap text-right text-muted-foreground">{details.join(" | ")}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
