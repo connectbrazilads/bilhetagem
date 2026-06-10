@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+from io import BytesIO
 
+from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.api.routes.reports import export_monthly_closing
@@ -102,6 +104,24 @@ def test_monthly_closing_export_xlsx(db_session: Session):
 
     assert response.media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert response.body.startswith(b"PK")
+    workbook = load_workbook(BytesIO(response.body), data_only=True)
+    assert workbook.sheetnames == ["Resumo", "Usuarios", "Departamentos", "Impressoras", "Tipo"]
+    assert workbook["Resumo"]["A12"].value == "Custo total"
+    assert workbook["Resumo"]["B12"].value == 1.5
+    assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"
+
+
+def test_monthly_closing_export_pdf(db_session: Session):
+    _seed_job_data(db_session)
+    closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
+    actor = User(username="report-pdf-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    response = export_monthly_closing(closing_id=closing.id, format="pdf", db=db_session, actor=actor)
+
+    assert response.media_type == "application/pdf"
+    assert response.body.startswith(b"%PDF")
 
 
 def test_monthly_report_email_settings_api(db_session: Session):
