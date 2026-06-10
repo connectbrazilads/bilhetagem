@@ -1629,6 +1629,36 @@ def test_inactive_organization_cannot_issue_login_token(db_session: Session):
     assert no_slug_exc.value.status_code == 401
 
 
+def test_inactive_organization_rejects_existing_tokens_for_human_and_agent_users(db_session: Session):
+    inactive_org = Organization(name="Cliente Token Inativo", slug="cliente-token-inativo", is_active=False)
+    db_session.add(inactive_org)
+    db_session.flush()
+    admin = User(
+        organization_id=inactive_org.id,
+        username="admin-inativo-token",
+        full_name="Admin Inativo",
+        password_hash=hash_password("InactiveTokenAdminPassword2026"),
+        role=UserRole.admin,
+        is_active=True,
+    )
+    agent_user = User(
+        organization_id=inactive_org.id,
+        username="agent-inativo-token",
+        full_name="Agent Inativo",
+        password_hash=hash_password("InactiveTokenAgentPassword2026"),
+        role=UserRole.agent,
+        is_active=True,
+    )
+    db_session.add_all([admin, agent_user])
+    db_session.commit()
+
+    for user in [admin, agent_user]:
+        token = create_access_token(user.username, {"role": user.role.value, "organization_id": user.organization_id})
+        with pytest.raises(HTTPException) as token_exc:
+            get_current_user(token, db_session)
+        assert token_exc.value.status_code == 401
+
+
 def test_suspended_organization_cannot_login_or_use_existing_token(db_session: Session):
     suspended_org = Organization(name="Cliente Suspenso", slug="cliente-suspenso", is_active=True, billing_status="suspended")
     db_session.add(suspended_org)
@@ -1655,6 +1685,34 @@ def test_suspended_organization_cannot_login_or_use_existing_token(db_session: S
         suspended_user.username,
         {"role": suspended_user.role.value, "organization_id": suspended_user.organization_id},
     )
+    with pytest.raises(HTTPException) as token_exc:
+        get_current_user(token, db_session)
+    assert token_exc.value.status_code == 401
+
+
+def test_suspended_organization_rejects_agent_login_and_existing_token(db_session: Session):
+    suspended_org = Organization(name="Cliente Agent Suspenso", slug="cliente-agent-suspenso", is_active=True, billing_status="suspended")
+    db_session.add(suspended_org)
+    db_session.flush()
+    agent_user = User(
+        organization_id=suspended_org.id,
+        username="agent-suspenso",
+        full_name="Agent Suspenso",
+        password_hash=hash_password("SuspendedAgentPassword2026"),
+        role=UserRole.agent,
+        is_active=True,
+    )
+    db_session.add(agent_user)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as login_exc:
+        login(
+            LoginRequest(username="agent-suspenso", password="SuspendedAgentPassword2026", organization_slug="cliente-agent-suspenso"),
+            db=db_session,
+        )
+    assert login_exc.value.status_code == 401
+
+    token = create_access_token(agent_user.username, {"role": agent_user.role.value, "organization_id": agent_user.organization_id})
     with pytest.raises(HTTPException) as token_exc:
         get_current_user(token, db_session)
     assert token_exc.value.status_code == 401
