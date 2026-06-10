@@ -19,6 +19,7 @@ from app.models.user import User
 from app.models.user import UserRole
 from app.schemas.agent import (
     AgentHeartbeatPayload,
+    AgentQueueBulkActionCreate,
     AgentReleaseFileRead,
     AgentReleaseRead,
     AgentQueueActionCreate,
@@ -287,6 +288,51 @@ def _bind_successful_queue_action(db: Session, action: AgentQueueAction) -> None
             alias.printer_id = None
 
 
+def _validate_queue_action_payload(
+    db: Session,
+    payload: AgentQueueActionCreate,
+    organization_id: int,
+    *,
+    require_printer_for_create: bool = False,
+) -> Printer | None:
+    printer = None
+    if payload.printer_id is not None:
+        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.id == payload.printer_id).first()
+        if not printer:
+            raise HTTPException(status_code=404, detail="Impressora nao encontrada")
+    elif require_printer_for_create and payload.action_type == AgentQueueActionType.create_queue:
+        raise HTTPException(status_code=422, detail="Impressora fisica obrigatoria para criar fila em lote")
+
+    if payload.action_type == AgentQueueActionType.create_queue:
+        if not _clean_optional(payload.driver_name):
+            raise HTTPException(status_code=422, detail="Driver obrigatorio para criar fila")
+        if not _clean_optional(payload.port_name) and not _clean_optional(payload.ip_address):
+            raise HTTPException(status_code=422, detail="Informe IP ou porta para criar fila")
+    return printer
+
+
+def _new_queue_action(
+    *,
+    organization_id: int,
+    agent_id: int,
+    printer_id: int | None,
+    requested_by_user_id: int,
+    payload: AgentQueueActionCreate,
+) -> AgentQueueAction:
+    return AgentQueueAction(
+        organization_id=organization_id,
+        agent_id=agent_id,
+        printer_id=printer_id,
+        requested_by_user_id=requested_by_user_id,
+        action_type=payload.action_type,
+        queue_name=payload.queue_name.strip(),
+        driver_name=_clean_optional(payload.driver_name),
+        port_name=_clean_optional(payload.port_name),
+        ip_address=_clean_optional(payload.ip_address),
+        status=AgentQueueActionStatus.pending,
+    )
+
+
 @router.get("/version", response_model=AgentVersionRead)
 def agent_version(
     current_version: str | None = Query(default=None),
@@ -467,29 +513,13 @@ def create_queue_action(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent nao encontrado")
 
-    printer = None
-    if payload.printer_id is not None:
-        printer = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == payload.printer_id).first()
-        if not printer:
-            raise HTTPException(status_code=404, detail="Impressora nao encontrada")
-
-    if payload.action_type == AgentQueueActionType.create_queue:
-        if not _clean_optional(payload.driver_name):
-            raise HTTPException(status_code=422, detail="Driver obrigatorio para criar fila")
-        if not _clean_optional(payload.port_name) and not _clean_optional(payload.ip_address):
-            raise HTTPException(status_code=422, detail="Informe IP ou porta para criar fila")
-
-    action = AgentQueueAction(
+    printer = _validate_queue_action_payload(db, payload, actor.organization_id)
+    action = _new_queue_action(
         organization_id=actor.organization_id,
         agent_id=agent.id,
         printer_id=printer.id if printer else None,
         requested_by_user_id=actor.id,
-        action_type=payload.action_type,
-        queue_name=payload.queue_name.strip(),
-        driver_name=_clean_optional(payload.driver_name),
-        port_name=_clean_optional(payload.port_name),
-        ip_address=_clean_optional(payload.ip_address),
-        status=AgentQueueActionStatus.pending,
+        payload=payload,
     )
     db.add(action)
     db.flush()
@@ -509,6 +539,60 @@ def create_queue_action(
     db.commit()
     db.refresh(action)
     return action
+
+
+@router.post("/queue-actions/bulk", response_model=list[AgentQueueActionRead])
+def create_bulk_queue_actions(
+    payload: AgentQueueBulkActionCreate,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> list[AgentQueueAction]:
+    printer = _validate_queue_action_payload(db, payload, actor.organization_id, require_printer_for_create=True)
+
+    agents_query = db.query(PrintAgent).filter(PrintAgent.organization_id == actor.organization_id)
+    if payload.apply_to_all:
+        agents = agents_query.order_by(PrintAgent.computer_name, PrintAgent.id).all()
+    else:
+        agents = agents_query.filter(PrintAgent.id.in_(payload.agent_ids)).order_by(PrintAgent.computer_name, PrintAgent.id).all()
+        found_ids = {agent.id for agent in agents}
+        missing_ids = sorted(set(payload.agent_ids) - found_ids)
+        if missing_ids:
+            raise HTTPException(status_code=404, detail=f"Agent(s) nao encontrado(s): {missing_ids}")
+
+    if not agents:
+        raise HTTPException(status_code=404, detail="Nenhum agent encontrado para aplicar a fila")
+
+    actions = [
+        _new_queue_action(
+            organization_id=actor.organization_id,
+            agent_id=agent.id,
+            printer_id=printer.id if printer else None,
+            requested_by_user_id=actor.id,
+            payload=payload,
+        )
+        for agent in agents
+    ]
+    db.add_all(actions)
+    db.flush()
+    for action in actions:
+        write_audit(
+            db,
+            action="agent_queue_action_created",
+            entity="agent_queue_actions",
+            entity_id=action.id,
+            actor_user_id=actor.id,
+            metadata={
+                "agent_id": action.agent_id,
+                "action_type": action.action_type.value,
+                "queue_name": action.queue_name,
+                "bulk": True,
+            },
+            organization_id=actor.organization_id,
+        )
+    db.commit()
+    for action in actions:
+        db.refresh(action)
+    return actions
 
 
 @router.get("/queue-actions", response_model=list[AgentQueueActionRead])

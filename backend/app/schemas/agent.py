@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
 
@@ -89,6 +89,17 @@ class AgentQueueActionCreate(BaseModel):
     driver_name: str | None = Field(default=None, max_length=180)
     port_name: str | None = Field(default=None, max_length=180)
     ip_address: str | None = Field(default=None, max_length=45)
+
+
+class AgentQueueBulkActionCreate(AgentQueueActionCreate):
+    agent_ids: list[int] = Field(default_factory=list, max_length=500)
+    apply_to_all: bool = False
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if not self.apply_to_all and not self.agent_ids:
+            raise ValueError("Informe agent_ids ou marque apply_to_all")
+        return self
 
 
 class AgentQueueActionResult(BaseModel):

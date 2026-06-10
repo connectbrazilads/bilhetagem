@@ -3,7 +3,16 @@ from pathlib import Path
 from starlette.requests import Request
 from sqlalchemy.orm import Session
 
-from app.api.routes.agent_updates import agent_heartbeat, agent_version, create_queue_action, finish_queue_action, list_agent_releases, list_agents, poll_queue_actions
+from app.api.routes.agent_updates import (
+    agent_heartbeat,
+    agent_version,
+    create_bulk_queue_actions,
+    create_queue_action,
+    finish_queue_action,
+    list_agent_releases,
+    list_agents,
+    poll_queue_actions,
+)
 from app.core.config import settings
 from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
 from app.models.audit_log import AuditLog
@@ -11,7 +20,7 @@ from app.models.organization import Organization
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.user import User, UserRole
-from app.schemas.agent import AgentHeartbeatPayload, AgentQueueActionCreate, AgentQueueActionResult
+from app.schemas.agent import AgentHeartbeatPayload, AgentQueueActionCreate, AgentQueueActionResult, AgentQueueBulkActionCreate
 
 
 def test_agent_version_requires_published_file_for_update(db_session: Session, monkeypatch, tmp_path: Path):
@@ -239,3 +248,92 @@ def test_remote_queue_actions_are_scoped_by_organization(db_session: Session):
     pending_default = poll_queue_actions(agent_uid="shared-agent-id", db=db_session, actor=actor_default)
 
     assert pending_default == []
+
+
+def test_bulk_queue_action_applies_to_all_agents_in_organization(db_session: Session):
+    other_org = Organization(name="Cliente Bulk B", slug="cliente-bulk-b", is_active=True)
+    db_session.add(other_org)
+    db_session.flush()
+    actor_default = User(username="bulk-org-a", full_name="A", role=UserRole.admin, is_active=True, organization_id=1)
+    actor_other = User(username="bulk-org-b", full_name="B", role=UserRole.admin, is_active=True, organization_id=other_org.id)
+    printer = Printer(organization_id=1, name="KONICA_BULK", ip_address="192.168.1.126", is_color=True)
+    db_session.add_all([actor_default, actor_other, printer])
+    db_session.commit()
+    agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="bulk-agent-1", computer_name="PC-1"),
+        request=_request("10.0.0.11"),
+        db=db_session,
+        actor=actor_default,
+    )
+    agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="bulk-agent-2", computer_name="PC-2"),
+        request=_request("10.0.0.12"),
+        db=db_session,
+        actor=actor_default,
+    )
+    agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="bulk-agent-other", computer_name="PC-OUTRO"),
+        request=_request("10.0.0.13"),
+        db=db_session,
+        actor=actor_other,
+    )
+
+    actions = create_bulk_queue_actions(
+        payload=AgentQueueBulkActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA_PADRAO",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.126",
+            apply_to_all=True,
+        ),
+        db=db_session,
+        actor=actor_default,
+    )
+
+    assert len(actions) == 2
+    assert {action.queue_name for action in actions} == {"KONICA_PADRAO"}
+    assert {action.printer_id for action in actions} == {printer.id}
+    assert poll_queue_actions(agent_uid="bulk-agent-other", db=db_session, actor=actor_other) == []
+    assert len(db_session.query(AuditLog).filter(AuditLog.action == "agent_queue_action_created").all()) == 2
+
+
+def test_bulk_queue_action_can_target_selected_agents(db_session: Session):
+    actor = User(username="bulk-selected", full_name="Selected", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_SELECTED", ip_address="192.168.1.127", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent_a = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="selected-agent-1", computer_name="PC-1"),
+        request=_request("10.0.0.21"),
+        db=db_session,
+        actor=actor,
+    )
+    agent_b = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="selected-agent-2", computer_name="PC-2"),
+        request=_request("10.0.0.22"),
+        db=db_session,
+        actor=actor,
+    )
+    agent_c = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="selected-agent-3", computer_name="PC-3"),
+        request=_request("10.0.0.23"),
+        db=db_session,
+        actor=actor,
+    )
+
+    actions = create_bulk_queue_actions(
+        payload=AgentQueueBulkActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA_GRUPO",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.127",
+            agent_ids=[agent_a.id, agent_c.id],
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert {action.agent_id for action in actions} == {agent_a.id, agent_c.id}
+    assert poll_queue_actions(agent_uid=agent_b.agent_uid, db=db_session, actor=actor) == []

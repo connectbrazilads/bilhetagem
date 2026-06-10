@@ -102,7 +102,11 @@ export default function AgentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [queueForm, setQueueForm] = useState({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
+  const [bulkForm, setBulkForm] = useState({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
+  const [bulkScope, setBulkScope] = useState<"all" | "selected">("all");
+  const [selectedBulkAgentIds, setSelectedBulkAgentIds] = useState<number[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -112,6 +116,7 @@ export default function AgentsPage() {
     try {
       const data = await apiFetch<AgentRow[]>("/agent/agents", token);
       setAgents(data);
+      setSelectedBulkAgentIds((ids) => ids.filter((id) => data.some((agent) => agent.id === id)));
       apiFetch<PrinterOption[]>("/printers", token).then(setPrinters).catch(() => setPrinters([]));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar agents");
@@ -174,6 +179,34 @@ export default function AgentsPage() {
     }
   }
 
+  async function createBulkQueueAction() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setBulkMessage(null);
+    try {
+      const actions = await apiFetch<AgentQueueAction[]>("/agent/queue-actions/bulk", token, {
+        method: "POST",
+        body: JSON.stringify({
+          action_type: "create_queue",
+          queue_name: bulkForm.queue_name,
+          printer_id: Number(bulkForm.printer_id),
+          driver_name: bulkForm.driver_name,
+          ip_address: bulkForm.ip_address || null,
+          port_name: bulkForm.port_name || null,
+          apply_to_all: bulkScope === "all",
+          agent_ids: bulkScope === "selected" ? selectedBulkAgentIds : [],
+        }),
+      });
+      setBulkMessage(`Fila enviada para ${actions.length} agent(s).`);
+      setBulkForm({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
+      setSelectedBulkAgentIds([]);
+      setBulkScope("all");
+      await load();
+    } catch (err) {
+      setBulkMessage(err instanceof Error ? err.message : "Falha ao aplicar fila em lote");
+    }
+  }
+
   useEffect(() => {
     load();
     const interval = setInterval(load, 15000);
@@ -186,6 +219,9 @@ export default function AgentsPage() {
     const queues = agents.reduce((total, agent) => total + agent.aliases.length, 0);
     return { total: agents.length, online, offline: agents.length - online, withError, queues };
   }, [agents]);
+  const canApplyBulkQueue =
+    Boolean(bulkForm.queue_name && bulkForm.printer_id && bulkForm.driver_name && (bulkForm.ip_address || bulkForm.port_name)) &&
+    (bulkScope === "all" ? agents.length > 0 : selectedBulkAgentIds.length > 0);
 
   return (
     <ProtectedPage>
@@ -244,6 +280,101 @@ export default function AgentsPage() {
           {error}
         </Surface>
       ) : null}
+
+      <Surface className="mb-6 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <TerminalSquare className="h-4 w-4 text-primary" />
+          <div>
+            <h2 className="text-sm font-bold">Aplicar fila gerenciada</h2>
+            <p className="text-xs text-muted-foreground">Cria a mesma fila padronizada em PCs selecionados ou em todos os agents da empresa.</p>
+          </div>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-xs font-semibold uppercase text-muted-foreground">Escopo</span>
+          <button
+            type="button"
+            className={`rounded-md border px-3 py-1.5 ${bulkScope === "all" ? "border-primary bg-primary/10 text-primary" : "bg-white text-muted-foreground"}`}
+            onClick={() => setBulkScope("all")}
+          >
+            Empresa inteira
+          </button>
+          <button
+            type="button"
+            className={`rounded-md border px-3 py-1.5 ${bulkScope === "selected" ? "border-primary bg-primary/10 text-primary" : "bg-white text-muted-foreground"}`}
+            onClick={() => setBulkScope("selected")}
+          >
+            PCs selecionados
+          </button>
+          {bulkScope === "selected" ? <span className="text-xs text-muted-foreground">{selectedBulkAgentIds.length} selecionado(s)</span> : null}
+        </div>
+        {bulkScope === "selected" ? (
+          <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {agents.map((agent) => {
+              const checked = selectedBulkAgentIds.includes(agent.id);
+              return (
+                <label key={agent.id} className="flex cursor-pointer items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(event) => {
+                      setSelectedBulkAgentIds((ids) =>
+                        event.target.checked ? [...ids, agent.id] : ids.filter((id) => id !== agent.id),
+                      );
+                    }}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{agent.computer_name || agent.agent_uid}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{agent.os_user || "-"} - {agent.status}</span>
+                  </span>
+                </label>
+              );
+            })}
+            {agents.length === 0 ? <div className="text-xs text-muted-foreground">Nenhum agent disponivel para selecao.</div> : null}
+          </div>
+        ) : null}
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_140px_140px_auto]">
+          <Input
+            placeholder="Nome padrao da fila"
+            value={bulkForm.queue_name}
+            onChange={(event) => setBulkForm({ ...bulkForm, queue_name: event.target.value })}
+          />
+          <select
+            className="h-9 rounded-md border bg-white px-3 text-sm"
+            value={bulkForm.printer_id}
+            onChange={(event) => {
+              const printer = printers.find((item) => item.id.toString() === event.target.value);
+              setBulkForm({
+                ...bulkForm,
+                printer_id: event.target.value,
+                ip_address: bulkForm.ip_address || printer?.ip_address || "",
+              });
+            }}
+          >
+            <option value="">Impressora fisica</option>
+            {printers.map((printer) => (
+              <option key={printer.id} value={printer.id}>
+                {printer.name}
+              </option>
+            ))}
+          </select>
+          <Input
+            placeholder="Driver ja instalado"
+            value={bulkForm.driver_name}
+            onChange={(event) => setBulkForm({ ...bulkForm, driver_name: event.target.value })}
+          />
+          <Input placeholder="IP" value={bulkForm.ip_address} onChange={(event) => setBulkForm({ ...bulkForm, ip_address: event.target.value })} />
+          <Input placeholder="Porta" value={bulkForm.port_name} onChange={(event) => setBulkForm({ ...bulkForm, port_name: event.target.value })} />
+          <Button
+            type="button"
+            onClick={createBulkQueueAction}
+            disabled={!canApplyBulkQueue}
+          >
+            <Plus className="h-4 w-4" />
+            Aplicar
+          </Button>
+        </div>
+        {bulkMessage ? <div className="mt-2 text-xs text-muted-foreground">{bulkMessage}</div> : null}
+      </Surface>
 
       <Surface className="overflow-hidden">
         <table className="w-full text-sm">
