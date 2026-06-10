@@ -129,6 +129,75 @@ def test_allow_policy_exception_skips_later_block(db_session: Session):
     assert job.policy_action == "allow"
 
 
+def test_department_policy_does_not_affect_other_departments(db_session: Session):
+    finance = Department(organization_id=1, name="Financeiro")
+    legal = Department(organization_id=1, name="Juridico")
+    db_session.add_all([finance, legal])
+    db_session.flush()
+    db_session.add_all(
+        [
+            User(username="fin-user", full_name="Financeiro", role=UserRole.user, department_id=finance.id, is_active=True, organization_id=1),
+            User(username="legal-user", full_name="Juridico", role=UserRole.user, department_id=legal.id, is_active=True, organization_id=1),
+        ]
+    )
+    _printer(db_session)
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Bloquear colorido financeiro",
+            priority=10,
+            rule_type=PolicyRuleType.color,
+            action=PolicyAction.block,
+            department_id=finance.id,
+        )
+    )
+    db_session.commit()
+
+    blocked = register_print_job(
+        db_session,
+        PrintJobCreate(username="fin-user", printer_name="KONICA_POLICY", pages=1, is_color=True, external_job_id="eventlog:finance-block"),
+        organization_id=1,
+    )
+    allowed = register_print_job(
+        db_session,
+        PrintJobCreate(username="legal-user", printer_name="KONICA_POLICY", pages=1, is_color=True, external_job_id="eventlog:legal-allow"),
+        organization_id=1,
+    )
+
+    assert blocked.status == JobStatus.blocked
+    assert blocked.reason == "Bloqueado pela politica: Bloquear colorido financeiro"
+    assert allowed.status == JobStatus.authorized
+    assert allowed.reason is None
+
+
+def test_inactive_policy_does_not_interfere_with_new_jobs(db_session: Session):
+    _admin(db_session)
+    _printer(db_session)
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Bloqueio inativo",
+            priority=1,
+            is_active=False,
+            rule_type=PolicyRuleType.color,
+            action=PolicyAction.block,
+        )
+    )
+    db_session.commit()
+
+    decision = register_print_job(
+        db_session,
+        PrintJobCreate(username="cliente", printer_name="KONICA_POLICY", pages=1, is_color=True, external_job_id="eventlog:inactive-policy"),
+        organization_id=1,
+    )
+
+    assert decision.status == JobStatus.authorized
+    assert decision.reason is None
+    job = db_session.query(PrintJob).filter(PrintJob.id == decision.job_id).one()
+    assert job.policy_name is None
+    assert job.policy_action is None
+
+
 def test_policy_simulation_does_not_create_job_or_debit_quota(db_session: Session):
     user = User(username="simulador", full_name="Usuario Simulador", role=UserRole.user, is_active=True, organization_id=1)
     printer = _printer(db_session)
