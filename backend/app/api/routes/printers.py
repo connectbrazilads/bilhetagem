@@ -16,6 +16,14 @@ from app.services.audit_service import write_audit
 router = APIRouter(prefix="/printers", tags=["printers"])
 
 
+def _changed_values(before: dict, after: dict) -> dict:
+    return {
+        key: {"before": before_value, "after": after[key]}
+        for key, before_value in before.items()
+        if before_value != after[key]
+    }
+
+
 @router.get("", response_model=list[PrinterRead])
 def list_printers(
     db: Session = Depends(get_db),
@@ -57,6 +65,16 @@ def update_printer_endpoint(
     printer = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == printer_id).first()
     if not printer:
         raise HTTPException(status_code=404, detail="Impressora nao encontrada")
+
+    before = {
+        "name": printer.name,
+        "location": printer.location,
+        "is_color": printer.is_color,
+        "cost_mono": printer.cost_mono,
+        "cost_color": printer.cost_color,
+        "is_active": printer.is_active,
+        "ip_address": printer.ip_address,
+    }
     
     if payload.name is not None:
         printer.name = payload.name
@@ -72,8 +90,26 @@ def update_printer_endpoint(
         printer.is_active = payload.is_active
     if payload.ip_address is not None:
         printer.ip_address = payload.ip_address if payload.ip_address.strip() != "" else None
-        
-    write_audit(db, action="printer_updated", entity="printers", entity_id=printer.id, actor_user_id=actor.id)
+
+    after = {
+        "name": printer.name,
+        "location": printer.location,
+        "is_color": printer.is_color,
+        "cost_mono": printer.cost_mono,
+        "cost_color": printer.cost_color,
+        "is_active": printer.is_active,
+        "ip_address": printer.ip_address,
+    }
+    changes = _changed_values(before, after)
+    if changes:
+        write_audit(
+            db,
+            action="printer_updated",
+            entity="printers",
+            entity_id=printer.id,
+            actor_user_id=actor.id,
+            metadata={"changes": changes},
+        )
     db.commit()
     db.refresh(printer)
     return printer

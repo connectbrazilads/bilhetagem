@@ -17,6 +17,14 @@ from app.services.audit_service import write_audit
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+def _changed_values(before: dict, after: dict) -> dict:
+    return {
+        key: {"before": before_value, "after": after[key]}
+        for key, before_value in before.items()
+        if before_value != after[key]
+    }
+
+
 def _ensure_human_role_change(current_role: UserRole | None, requested_role: UserRole | None) -> None:
     if requested_role is None:
         return
@@ -98,6 +106,17 @@ def update_user_endpoint(
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     
     _ensure_human_role_change(user.role, payload.role)
+    from app.services.quota_service import get_or_create_current_quota
+    quota = get_or_create_current_quota(db, user)
+    before = {
+        "full_name": user.full_name,
+        "role": user.role.value,
+        "department_id": user.department_id,
+        "department_name": user.department.name if user.department else None,
+        "is_active": user.is_active,
+        "monthly_limit": quota.monthly_limit,
+        "monthly_balance": quota.monthly_balance,
+    }
 
     if payload.full_name is not None:
         user.full_name = payload.full_name
@@ -115,14 +134,31 @@ def update_user_endpoint(
         user.department = get_or_create_department(db, payload.department_name, actor.organization_id)
     
     if payload.monthly_limit is not None or payload.monthly_balance is not None:
-        from app.services.quota_service import get_or_create_current_quota
-        quota = get_or_create_current_quota(db, user)
         if payload.monthly_limit is not None:
             quota.monthly_limit = payload.monthly_limit
         if payload.monthly_balance is not None:
             quota.monthly_balance = payload.monthly_balance
-        
-    write_audit(db, action="user_updated", entity="users", entity_id=user.id, actor_user_id=actor.id)
+
+    db.flush()
+    after = {
+        "full_name": user.full_name,
+        "role": user.role.value,
+        "department_id": user.department_id,
+        "department_name": user.department.name if user.department else None,
+        "is_active": user.is_active,
+        "monthly_limit": quota.monthly_limit,
+        "monthly_balance": quota.monthly_balance,
+    }
+    changes = _changed_values(before, after)
+    if changes:
+        write_audit(
+            db,
+            action="user_updated",
+            entity="users",
+            entity_id=user.id,
+            actor_user_id=actor.id,
+            metadata={"changes": changes},
+        )
     db.commit()
     db.refresh(user)
     return _read_user(user, db)

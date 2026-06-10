@@ -19,8 +19,8 @@ from app.api.routes.auth import login
 from app.api.routes.audit_logs import export_audit_logs, list_audit_logs
 from app.api.routes.organizations import create_organization, list_organizations, update_organization
 from app.api.routes.reports import export_report
-from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
-from app.schemas.printer import PrinterAliasBind
+from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint, update_printer_endpoint
+from app.schemas.printer import PrinterAliasBind, PrinterUpdate
 from app.api.routes.jobs import list_jobs
 from app.api.routes.departments import create_department, delete_department, list_departments, update_department
 from app.api.routes.printers import list_printers
@@ -850,6 +850,72 @@ def test_user_department_id_assignment_is_scoped_and_clearable(db_session: Sessi
     cleared = update_user_endpoint(created.id, UserUpdate(department_id=None), db=db_session, actor=admin)
     assert cleared.department_id is None
     assert cleared.department_name is None
+
+
+def test_user_update_audit_includes_changed_fields(db_session: Session):
+    admin = User(username="audit-user-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    department = Department(organization_id=1, name="Financeiro")
+    new_department = Department(organization_id=1, name="Operacoes")
+    user = User(username="audit-user", full_name="Usuario Antigo", role=UserRole.user, is_active=True, organization_id=1, department=department)
+    db_session.add_all([admin, department, new_department, user])
+    db_session.flush()
+    quota = Quota(
+        organization_id=1,
+        user_id=user.id,
+        year=datetime.now(timezone.utc).year,
+        month=datetime.now(timezone.utc).month,
+        monthly_limit=500,
+        monthly_balance=50.0,
+        used_pages=0,
+        used_balance=0.0,
+    )
+    db_session.add(quota)
+    db_session.commit()
+
+    update_user_endpoint(
+        user.id,
+        UserUpdate(full_name="Usuario Novo", department_id=new_department.id, is_active=False, monthly_limit=750, monthly_balance=75.0),
+        db=db_session,
+        actor=admin,
+    )
+
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "user_updated", AuditLog.entity_id == user.id).one()
+    assert audit.log_metadata["changes"]["full_name"] == {"before": "Usuario Antigo", "after": "Usuario Novo"}
+    assert audit.log_metadata["changes"]["department_id"] == {"before": department.id, "after": new_department.id}
+    assert audit.log_metadata["changes"]["department_name"] == {"before": "Financeiro", "after": "Operacoes"}
+    assert audit.log_metadata["changes"]["is_active"] == {"before": True, "after": False}
+    assert audit.log_metadata["changes"]["monthly_limit"] == {"before": 500, "after": 750}
+    assert audit.log_metadata["changes"]["monthly_balance"] == {"before": 50.0, "after": 75.0}
+
+
+def test_printer_update_audit_includes_changed_fields(db_session: Session):
+    admin = User(username="audit-printer-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(
+        organization_id=1,
+        name="KONICA ANTIGA",
+        location="Recepcao",
+        ip_address="192.168.1.10",
+        is_color=True,
+        cost_mono=0.05,
+        cost_color=0.25,
+        is_active=True,
+    )
+    db_session.add_all([admin, printer])
+    db_session.commit()
+
+    update_printer_endpoint(
+        printer.id,
+        PrinterUpdate(name="KONICA NOVA", ip_address="", cost_color=0.30, is_active=False),
+        db=db_session,
+        actor=admin,
+    )
+
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "printer_updated", AuditLog.entity_id == printer.id).one()
+    assert audit.log_metadata["changes"]["name"] == {"before": "KONICA ANTIGA", "after": "KONICA NOVA"}
+    assert audit.log_metadata["changes"]["ip_address"] == {"before": "192.168.1.10", "after": None}
+    assert audit.log_metadata["changes"]["cost_color"] == {"before": 0.25, "after": 0.30}
+    assert audit.log_metadata["changes"]["is_active"] == {"before": True, "after": False}
+    assert "cost_mono" not in audit.log_metadata["changes"]
 
 
 def test_admin_can_manage_human_user_roles(db_session: Session):
