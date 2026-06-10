@@ -25,6 +25,7 @@ from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActi
 from app.models.agent_log import AgentLog
 from app.models.audit_log import AuditLog
 from app.models.organization import Organization
+from app.models.print_agent import PrintAgent
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.print_job import JobStatus, PrintJob
@@ -414,6 +415,77 @@ def test_agent_heartbeat_marks_missing_local_queues_as_stale(db_session: Session
     assert queues["Brother USB"].is_present is True
     assert queues["KONICA Financeiro"].is_present is False
     assert any(alert.code == "stale_queues" and "KONICA Financeiro" in alert.message for alert in response.health_alerts)
+
+
+def test_agent_heartbeat_reuses_alias_by_normalized_queue_name(db_session: Session):
+    actor = User(username="agent-normalized-queue", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    first = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-normalized-queue",
+            computer_name="PC-NORMALIZED",
+            queues=[
+                {"queue_name": "KONICA Financeiro", "driver_name": "KONICA Driver", "port_name": "IP_192.168.1.125"},
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+    second = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-normalized-queue",
+            computer_name="PC-NORMALIZED",
+            queues=[
+                {"queue_name": "  konica   financeiro ", "driver_name": "KONICA Driver", "port_name": "IP_192.168.1.125"},
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert len(first.aliases) == 1
+    assert len(second.aliases) == 1
+    assert db_session.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id).count() == 1
+    alias = db_session.query(PrinterAlias).one()
+    assert alias.normalized_queue_name == "konica financeiro"
+    assert "duplicate_queue_aliases" not in {alert.code for alert in second.health_alerts}
+
+
+def test_agent_health_alerts_report_duplicate_queue_aliases(db_session: Session):
+    now = datetime.now(timezone.utc)
+    actor = User(username="agent-duplicate-alias", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
+    agent = PrintAgent(organization_id=1, agent_uid="pc-duplicate-alias", computer_name="PC-DUP", last_seen_at=now)
+    db_session.add_all([actor, agent])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PrinterAlias(
+                organization_id=1,
+                agent_id=agent.id,
+                queue_name="KONICA Financeiro",
+                normalized_queue_name="konica financeiro",
+                last_seen_at=now,
+            ),
+            PrinterAlias(
+                organization_id=1,
+                agent_id=agent.id,
+                queue_name="  konica   financeiro ",
+                normalized_queue_name="konica financeiro",
+                last_seen_at=now,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = get_agent_detail(agent.id, db=db_session, actor=actor)
+
+    alerts = {alert.code: alert for alert in response.health_alerts}
+    assert alerts["duplicate_queue_aliases"].severity == "warning"
+    assert "konica" in alerts["duplicate_queue_aliases"].message.lower()
 
 
 def test_agent_health_alerts_report_operational_issues(db_session: Session, monkeypatch):

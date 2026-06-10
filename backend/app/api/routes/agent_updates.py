@@ -385,6 +385,7 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None 
     present_aliases = [alias for alias in aliases if _alias_is_present(agent, alias)]
     stale_queues = [alias.queue_name for alias in aliases if not _alias_is_present(agent, alias)]
     unbound_queues = [alias.queue_name for alias in present_aliases if alias.printer_id is None]
+    duplicate_queues = _duplicate_present_queue_aliases(present_aliases)
     stale_actions = _stale_queue_actions(agent)
 
     if not is_online:
@@ -409,6 +410,11 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None 
         sample = ", ".join(unbound_queues[:3])
         suffix = f": {sample}" if sample else ""
         alerts.append(AgentHealthAlertRead(code="unbound_queues", severity="warning", message=f"{count} fila(s) sem vinculo com impressora fisica{suffix}"))
+    if duplicate_queues:
+        count = len(duplicate_queues)
+        sample = ", ".join(duplicate_queues[:3])
+        suffix = f": {sample}" if sample else ""
+        alerts.append(AgentHealthAlertRead(code="duplicate_queue_aliases", severity="warning", message=f"{count} fila(s) duplicada(s) por nome normalizado{suffix}"))
     if stale_actions:
         count = len(stale_actions)
         sample = ", ".join(action.queue_name for action in stale_actions[:3])
@@ -427,6 +433,20 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None 
             )
 
     return alerts
+
+
+def _duplicate_present_queue_aliases(aliases: list[PrinterAlias]) -> list[str]:
+    grouped: dict[tuple[int | None, str], list[str]] = {}
+    for alias in aliases:
+        normalized = alias.normalized_queue_name or _normalize_alias_name(alias.queue_name)
+        if not normalized:
+            continue
+        grouped.setdefault((alias.agent_id, normalized), []).append(alias.queue_name)
+    duplicates: list[str] = []
+    for names in grouped.values():
+        if len(names) > 1:
+            duplicates.extend(names[1:])
+    return duplicates
 
 
 def _stale_queue_actions(agent: PrintAgent) -> list[AgentQueueAction]:
@@ -765,9 +785,15 @@ def agent_heartbeat(
         .filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.agent_id == agent.id)
         .all()
     }
+    existing_aliases_by_normalized = {
+        normalized: alias
+        for alias in existing_aliases.values()
+        if (normalized := alias.normalized_queue_name or _normalize_alias_name(alias.queue_name))
+    }
     for queue in payload.queues:
         queue_name = queue.queue_name.strip()
-        alias = existing_aliases.get(queue_name)
+        normalized_queue_name = _normalize_alias_name(queue_name)
+        alias = existing_aliases.get(queue_name) or (existing_aliases_by_normalized.get(normalized_queue_name) if normalized_queue_name else None)
         if not alias:
             alias = PrinterAlias(
                 organization_id=actor.organization_id,
@@ -777,7 +803,9 @@ def agent_heartbeat(
             db.add(alias)
             db.flush()
             existing_aliases[queue_name] = alias
-        alias.normalized_queue_name = _normalize_alias_name(queue_name)
+        if normalized_queue_name:
+            existing_aliases_by_normalized[normalized_queue_name] = alias
+        alias.normalized_queue_name = normalized_queue_name
         alias.computer_name = agent.computer_name
         alias.driver_name = _clean_optional(queue.driver_name)
         alias.port_name = _clean_optional(queue.port_name)
