@@ -65,6 +65,13 @@ export function getCurrentRole(token: string): string | null {
   }
 }
 
+export function clearAuthStorage() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("organization_slug");
+  localStorage.removeItem("organization_name");
+  localStorage.removeItem("organization_billing_status");
+}
+
 export async function apiFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -78,7 +85,7 @@ export async function apiFetch<T>(path: string, token: string, init?: RequestIni
   if (!response.ok) {
     if (response.status === 401) {
       if (typeof window !== "undefined") {
-        localStorage.removeItem("token");
+        clearAuthStorage();
         window.location.href = "/";
       }
     }

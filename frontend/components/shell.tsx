@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { BarChart3, Building2, Download, Gauge, History, LogOut, MonitorCog, Printer, Settings, ShieldCheck, Users, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { apiFetch, getCurrentRole } from "@/lib/api";
+import { apiFetch, clearAuthStorage, getCurrentRole } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -69,8 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   function logout() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("organization_billing_status");
+    clearAuthStorage();
     router.push("/");
   }
 

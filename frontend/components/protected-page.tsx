@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/shell";
-import { getCurrentRole, isTokenExpired } from "@/lib/api";
+import { clearAuthStorage, getCurrentRole, isTokenExpired } from "@/lib/api";
 
 type ProtectedPageProps = {
   children: React.ReactNode;
@@ -22,13 +22,13 @@ export function ProtectedPage({ children, roles }: ProtectedPageProps) {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token || isTokenExpired(token)) {
-      localStorage.removeItem("token");
+      clearAuthStorage();
       router.replace("/");
       return;
     }
     const role = getCurrentRole(token);
     if (!role || role === "agent") {
-      localStorage.removeItem("token");
+      clearAuthStorage();
       router.replace("/");
       return;
     }
@@ -36,7 +36,7 @@ export function ProtectedPage({ children, roles }: ProtectedPageProps) {
       if (role === "manager") {
         router.replace("/dashboard");
       } else {
-        localStorage.removeItem("token");
+        clearAuthStorage();
         router.replace("/");
       }
       return;
