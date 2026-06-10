@@ -1502,6 +1502,50 @@ def test_create_or_restore_queue_rejects_inactive_printer(db_session: Session):
     assert poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor) == []
 
 
+def test_queue_action_rejects_duplicate_active_action_for_same_agent_queue(db_session: Session):
+    actor = User(username="queue-duplicate-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA DUP ACTION", ip_address="192.168.1.151", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-queue-duplicate", computer_name="PC-DUPLICATE"),
+        request=_request("10.0.0.51"),
+        db=db_session,
+        actor=actor,
+    )
+
+    first = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA   Financeiro",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.151",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        create_queue_action(
+            agent_id=agent.id,
+            payload=AgentQueueActionCreate(
+                action_type=AgentQueueActionType.restore_queue,
+                queue_name="konica financeiro",
+                printer_id=printer.id,
+                driver_name="KONICA Driver",
+                ip_address="192.168.1.151",
+            ),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert exc.value.status_code == 409
+    assert "acao remota pendente ou em execucao" in exc.value.detail
+    assert db_session.query(type(first)).filter(type(first).agent_id == agent.id).count() == 1
+
+
 def test_pending_queue_action_can_be_cancelled_by_admin(db_session: Session):
     actor = User(username="queue-cancel-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="KONICA CANCEL", ip_address="192.168.1.140", is_color=True)
@@ -2047,6 +2091,56 @@ def test_bulk_create_queue_action_rejects_inactive_printer(db_session: Session):
 
     assert exc.value.status_code == 409
     assert poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor) == []
+
+
+def test_bulk_queue_action_rejects_agents_with_active_action_for_same_queue(db_session: Session):
+    actor = User(username="bulk-duplicate-admin", full_name="Bulk Duplicate", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_BULK_DUP", ip_address="192.168.1.129", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent_a = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="bulk-duplicate-agent-1", computer_name="PC-DUP-1"),
+        request=_request("10.0.0.29"),
+        db=db_session,
+        actor=actor,
+    )
+    agent_b = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="bulk-duplicate-agent-2", computer_name="PC-DUP-2"),
+        request=_request("10.0.0.30"),
+        db=db_session,
+        actor=actor,
+    )
+    existing = create_queue_action(
+        agent_id=agent_a.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA GRUPO",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.129",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        create_bulk_queue_actions(
+            payload=AgentQueueBulkActionCreate(
+                action_type=AgentQueueActionType.restore_queue,
+                queue_name="  konica   grupo ",
+                printer_id=printer.id,
+                driver_name="KONICA Driver",
+                ip_address="192.168.1.129",
+                agent_ids=[agent_a.id, agent_b.id],
+            ),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert exc.value.status_code == 409
+    assert "PC-DUP-1" in exc.value.detail
+    assert db_session.query(type(existing)).filter(type(existing).organization_id == actor.organization_id).count() == 1
+    assert poll_queue_actions(agent_uid=agent_b.agent_uid, db=db_session, actor=actor) == []
 
 
 def test_bulk_remove_queue_action_does_not_require_printer_or_driver(db_session: Session):

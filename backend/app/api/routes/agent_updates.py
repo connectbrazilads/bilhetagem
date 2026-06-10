@@ -48,6 +48,7 @@ QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
 RECENT_AGENT_LOG_ALERT_WINDOW = timedelta(minutes=15)
 AGENT_LOG_RETENTION = timedelta(days=7)
 AGENT_LOG_MAX_PER_AGENT = 200
+ACTIVE_QUEUE_ACTION_STATUSES = (AgentQueueActionStatus.pending, AgentQueueActionStatus.running)
 
 
 def _agent_file() -> Path:
@@ -856,6 +857,51 @@ def _new_queue_action(
     )
 
 
+def _active_queue_action_conflicts(
+    db: Session,
+    organization_id: int,
+    agent_ids: list[int],
+    queue_name: str,
+) -> list[AgentQueueAction]:
+    normalized_queue_name = _normalize_alias_name(queue_name)
+    if not agent_ids or not normalized_queue_name:
+        return []
+    active_actions = (
+        db.query(AgentQueueAction)
+        .filter(
+            AgentQueueAction.organization_id == organization_id,
+            AgentQueueAction.agent_id.in_(agent_ids),
+            AgentQueueAction.status.in_(ACTIVE_QUEUE_ACTION_STATUSES),
+        )
+        .all()
+    )
+    return [
+        action
+        for action in active_actions
+        if _normalize_alias_name(action.queue_name) == normalized_queue_name
+    ]
+
+
+def _ensure_no_active_queue_action(
+    db: Session,
+    organization_id: int,
+    agents: list[PrintAgent],
+    queue_name: str,
+) -> None:
+    conflicts = _active_queue_action_conflicts(db, organization_id, [agent.id for agent in agents], queue_name)
+    if not conflicts:
+        return
+    samples = []
+    for action in conflicts[:3]:
+        agent_name = action.agent.computer_name if action.agent else f"agent {action.agent_id}"
+        samples.append(f"{agent_name}: {action.queue_name} ({action.action_type.value})")
+    suffix = f": {', '.join(samples)}" if samples else ""
+    raise HTTPException(
+        status_code=409,
+        detail=f"Ja existe acao remota pendente ou em execucao para esta fila{suffix}",
+    )
+
+
 def _queue_action_audit_metadata(action: AgentQueueAction, agent: PrintAgent | None = None, *, bulk: bool | None = None) -> dict:
     metadata = {
         "agent_id": action.agent_id,
@@ -1157,6 +1203,7 @@ def create_queue_action(
         raise HTTPException(status_code=404, detail="Agent nao encontrado")
 
     printer = _validate_queue_action_payload(db, payload, actor.organization_id)
+    _ensure_no_active_queue_action(db, actor.organization_id, [agent], payload.queue_name)
     action = _new_queue_action(
         organization_id=actor.organization_id,
         agent_id=agent.id,
@@ -1201,6 +1248,7 @@ def create_bulk_queue_actions(
     if not agents:
         raise HTTPException(status_code=404, detail="Nenhum agent encontrado para aplicar a fila")
 
+    _ensure_no_active_queue_action(db, actor.organization_id, agents, payload.queue_name)
     actions = [
         _new_queue_action(
             organization_id=actor.organization_id,
