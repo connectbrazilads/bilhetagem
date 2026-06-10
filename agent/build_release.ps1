@@ -74,6 +74,17 @@ function Invoke-CodeSign([string]$Path) {
     }
 }
 
+function Assert-PublishableFile([string]$Path) {
+    if (-not (Test-Path $Path)) {
+        throw "Artefato nao encontrado: $Path"
+    }
+    $item = Get-Item $Path
+    if ($item.Length -le 0) {
+        throw "Artefato vazio nao pode ser publicado: $Path"
+    }
+    return $item
+}
+
 function Get-SignatureInfo([string]$Path) {
     $signature = Get-AuthenticodeSignature -FilePath $Path
     return [ordered]@{
@@ -83,12 +94,13 @@ function Get-SignatureInfo([string]$Path) {
 }
 
 function Get-FileEntry([string]$Kind, [string]$Path, [string]$ReleaseVersion) {
+    $item = Assert-PublishableFile $Path
     $hash = (Get-FileHash -Algorithm SHA256 -Path $Path).Hash.ToLowerInvariant()
     $signatureInfo = Get-SignatureInfo $Path
     return [ordered]@{
         kind = $Kind
         filename = Split-Path -Leaf $Path
-        size_bytes = (Get-Item $Path).Length
+        size_bytes = $item.Length
         sha256 = $hash
         signature_status = $signatureInfo.signature_status
         signer_subject = $signatureInfo.signer_subject
@@ -144,11 +156,17 @@ $installerExe = Join-Path $releaseDir "PrintBillingAgentInstaller.exe"
 Copy-Item "dist_release_agent\PrintBillingAgent.exe" $agentExe -Force
 Copy-Item "dist\PrintBillingAgentInstaller.exe" $installerExe -Force
 
+Assert-PublishableFile $agentExe | Out-Null
+Assert-PublishableFile $installerExe | Out-Null
+
 Invoke-CodeSign $agentExe
 Invoke-CodeSign $installerExe
 
 $msiPath = Build-Msi -InstallerExe $installerExe -OutDir $releaseDir -ReleaseVersion $releaseVersion
-if ($msiPath) { Invoke-CodeSign $msiPath }
+if ($msiPath) {
+    Assert-PublishableFile $msiPath | Out-Null
+    Invoke-CodeSign $msiPath
+}
 
 $files = @()
 $files += Get-FileEntry -Kind "agent" -Path $agentExe -ReleaseVersion $releaseVersion

@@ -30,11 +30,15 @@ foreach ($release in $versions) {
     $releaseDir = Join-Path $ReleaseRoot $release.version
     $sumsPath = Join-Path $releaseDir "SHA256SUMS.txt"
     $expectedSums = @{}
-    foreach ($file in @($release.files)) {
+    $releaseFiles = @($release.files | Where-Object { $null -ne $_ })
+    if ($releaseFiles.Count -eq 0) {
+        $failures.Add("Release sem arquivos publicados: $($release.version)")
+    }
+    foreach ($file in $releaseFiles) {
         $expectedSums[$file.filename] = ([string]$file.sha256).ToLowerInvariant()
     }
-    $hasMsi = @($release.files | Where-Object { $_.kind -eq "msi" -or ([string]$_.filename).ToLowerInvariant().EndsWith(".msi") }).Count -gt 0
-    $hasInstaller = @($release.files | Where-Object { $_.kind -eq "installer" -or ([string]$_.filename).ToLowerInvariant().EndsWith("installer.exe") }).Count -gt 0
+    $hasMsi = @($releaseFiles | Where-Object { $_.kind -eq "msi" -or ([string]$_.filename).ToLowerInvariant().EndsWith(".msi") }).Count -gt 0
+    $hasInstaller = @($releaseFiles | Where-Object { $_.kind -eq "installer" -or ([string]$_.filename).ToLowerInvariant().EndsWith("installer.exe") }).Count -gt 0
     if ($RequireInstaller -and -not $hasInstaller) {
         $failures.Add("Instalador EXE ausente na versao: $($release.version)")
     }
@@ -70,10 +74,16 @@ foreach ($release in $versions) {
         }
     }
 
-    foreach ($file in @($release.files)) {
+    foreach ($file in $releaseFiles) {
         $path = Join-Path $releaseDir $file.filename
         if (-not (Test-Path $path)) {
             $failures.Add("Arquivo ausente: $path")
+            continue
+        }
+
+        $size = (Get-Item $path).Length
+        if ($size -le 0) {
+            $failures.Add("Arquivo vazio nao pode ser publicado: $($file.filename)")
             continue
         }
 
@@ -82,8 +92,7 @@ foreach ($release in $versions) {
             $failures.Add("Hash divergente: $($file.filename)")
         }
 
-        $size = (Get-Item $path).Length
-        if ($file.size_bytes -and $size -ne [int64]$file.size_bytes) {
+        if ($null -ne $file.size_bytes -and $size -ne [int64]$file.size_bytes) {
             $failures.Add("Tamanho divergente: $($file.filename)")
         }
 

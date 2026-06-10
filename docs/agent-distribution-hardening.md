@@ -92,7 +92,7 @@ Valide automaticamente:
 .\verify_release.ps1
 ```
 
-O verificador confere os hashes dos arquivos, os tamanhos declarados no manifest, o status de assinatura e se o `SHA256SUMS.txt` da versao possui exatamente as mesmas entradas do manifest.
+O verificador confere os hashes dos arquivos, os tamanhos declarados no manifest, o status de assinatura, se algum artefato esta vazio e se o `SHA256SUMS.txt` da versao possui exatamente as mesmas entradas do manifest.
 
 Depois que o certificado real estiver configurado:
 
