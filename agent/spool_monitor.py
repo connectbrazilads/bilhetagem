@@ -218,7 +218,7 @@ class SpoolMonitor:
                 logger.info("Acao remota de fila concluida: id=%s %s", action_id, message)
                 self._record_log("info", f"Acao remota de fila concluida: id={action_id} {message}", "queue_action")
             except Exception as exc:
-                message = str(exc)[:500]
+                message = self._queue_action_failure_message(exc)
                 logger.exception("Falha ao executar acao remota de fila id=%s", action_id or "desconhecido")
                 self._record_error(f"Falha em acao remota de fila {action_id or 'desconhecida'}: {message}")
                 if action_id is not None:
@@ -226,6 +226,10 @@ class SpoolMonitor:
                         self.api_client.finish_queue_action(action_id, "failed", message, agent_uid=self._agent_uid)
                     except Exception:
                         logger.exception("Falha ao confirmar erro da acao remota de fila id=%s", action_id)
+
+    def _queue_action_failure_message(self, exc: Exception) -> str:
+        message = str(exc).strip()
+        return (message or exc.__class__.__name__ or "Falha desconhecida na acao remota de fila")[:500]
 
     def _execute_queue_action(self, action: dict) -> str:
         action_type = action.get("action_type")

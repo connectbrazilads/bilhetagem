@@ -169,6 +169,35 @@ def test_queue_action_processing_continues_after_malformed_action(monkeypatch, t
     assert "desconhecida" in monitor._last_error
 
 
+def test_queue_action_failure_confirmation_has_non_blank_message(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
+    monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)
+
+    class FakeApiClient:
+        def __init__(self):
+            self.finished = []
+
+        def get_queue_actions(self, agent_uid: str) -> list[dict]:
+            return [{"id": 21, "action_type": "remove_queue", "queue_name": "SEM_MENSAGEM"}]
+
+        def finish_queue_action(self, action_id: int, status: str, result_message: str | None = None, agent_uid: str | None = None) -> dict:
+            self.finished.append((action_id, status, result_message, agent_uid))
+            return {"id": action_id, "status": status}
+
+    api_client = FakeApiClient()
+    monitor = SpoolMonitor(
+        api_client,
+        agent_config=AgentConfig(queue_action_interval_seconds=0),
+        sleep=lambda _: None,
+    )
+    monkeypatch.setattr(monitor, "_execute_queue_action", lambda action: (_ for _ in ()).throw(RuntimeError()))
+
+    monitor._process_queue_actions_if_due()
+
+    assert api_client.finished == [(21, "failed", "RuntimeError", monitor._agent_uid)]
+    assert "RuntimeError" in (monitor._last_error or "")
+
+
 def test_create_managed_queue_updates_existing_queue_binding(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
     monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)
