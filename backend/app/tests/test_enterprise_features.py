@@ -22,6 +22,7 @@ from app.api.routes.reports import export_report
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint, update_printer_endpoint
 from app.schemas.printer import PrinterAliasBind, PrinterUpdate
 from app.api.routes.jobs import list_jobs
+from app.api.routes.quotas import update_quota
 from app.api.routes.departments import create_department, delete_department, list_departments, update_department
 from app.api.routes.printers import list_printers
 from app.api.routes.users import create_user_endpoint, delete_user_endpoint, list_users, update_user_endpoint
@@ -29,6 +30,7 @@ from app.core.security import create_access_token, hash_password
 from app.core.deps import get_current_user, require_roles
 from app.schemas.department import DepartmentCreate, DepartmentUpdate
 from app.schemas.auth import LoginRequest
+from app.schemas.quota import QuotaUpdate
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.report_service import dashboard_metrics
 from app.services.monthly_closing_service import build_monthly_snapshot
@@ -925,6 +927,35 @@ def test_user_update_audit_includes_changed_fields(db_session: Session):
     assert audit.log_metadata["changes"]["is_active"] == {"before": True, "after": False}
     assert audit.log_metadata["changes"]["monthly_limit"] == {"before": 500, "after": 750}
     assert audit.log_metadata["changes"]["monthly_balance"] == {"before": 50.0, "after": 75.0}
+
+
+def test_quota_update_audit_includes_limit_change(db_session: Session):
+    manager = User(username="quota-manager", full_name="Manager", role=UserRole.manager, is_active=True, organization_id=1)
+    user = User(username="quota-user", full_name="Usuario", role=UserRole.user, is_active=True, organization_id=1)
+    db_session.add_all([manager, user])
+    db_session.flush()
+    quota = Quota(
+        organization_id=1,
+        user_id=user.id,
+        year=2026,
+        month=6,
+        monthly_limit=500,
+        monthly_balance=50.0,
+        used_pages=120,
+        used_balance=12.0,
+    )
+    db_session.add(quota)
+    db_session.commit()
+
+    updated = update_quota(quota.id, QuotaUpdate(monthly_limit=750), db=db_session, actor=manager)
+
+    assert updated.monthly_limit == 750
+    assert updated.remaining_pages == 630
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "quota_updated", AuditLog.entity_id == quota.id).one()
+    assert audit.actor_user_id == manager.id
+    assert audit.log_metadata["username"] == "quota-user"
+    assert audit.log_metadata["period"] == "2026-06"
+    assert audit.log_metadata["changes"]["monthly_limit"] == {"before": 500, "after": 750}
 
 
 def test_printer_update_audit_includes_changed_fields(db_session: Session):

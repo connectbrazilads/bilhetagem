@@ -49,8 +49,25 @@ def update_quota(
     quota = db.query(Quota).filter(Quota.organization_id == actor.organization_id, Quota.id == quota_id).first()
     if not quota:
         raise HTTPException(status_code=404, detail="Cota não encontrada")
+    before_limit = quota.monthly_limit
     quota.monthly_limit = payload.monthly_limit
-    write_audit(db, action="quota_updated", entity="quotas", entity_id=quota.id, actor_user_id=actor.id)
+    write_audit(
+        db,
+        action="quota_updated",
+        entity="quotas",
+        entity_id=quota.id,
+        actor_user_id=actor.id,
+        metadata={
+            "username": quota.user.username,
+            "period": f"{quota.year}-{quota.month:02d}",
+            "changes": {
+                "monthly_limit": {
+                    "before": before_limit,
+                    "after": quota.monthly_limit,
+                }
+            },
+        },
+    )
     db.commit()
     db.refresh(quota)
     return _read_quota(quota)

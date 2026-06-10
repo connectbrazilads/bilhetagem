@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Gauge, WalletCards } from "lucide-react";
+import { Check, Edit, Gauge, WalletCards, X } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
-import { Surface } from "@/components/ui";
+import { Button, Input, Surface } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
 
 type QuotaRow = {
@@ -19,11 +19,57 @@ type QuotaRow = {
 
 export default function QuotasPage() {
   const [quotas, setQuotas] = useState<QuotaRow[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draftLimit, setDraftLimit] = useState("");
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    await apiFetch<QuotaRow[]>("/quotas", token).then(setQuotas).catch(() => setQuotas([]));
+  }
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) apiFetch<QuotaRow[]>("/quotas", token).then(setQuotas).catch(() => setQuotas([]));
+    load();
   }, []);
+
+  function startEdit(quota: QuotaRow) {
+    setEditingId(quota.id);
+    setDraftLimit(String(quota.monthly_limit));
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraftLimit("");
+    setError(null);
+  }
+
+  async function saveQuota(quota: QuotaRow) {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const monthlyLimit = Number(draftLimit);
+    if (!Number.isFinite(monthlyLimit) || monthlyLimit < 0) {
+      setError("Informe um limite mensal valido.");
+      return;
+    }
+    setSavingId(quota.id);
+    setError(null);
+    try {
+      const updated = await apiFetch<QuotaRow>(`/quotas/${quota.id}`, token, {
+        method: "PUT",
+        body: JSON.stringify({ monthly_limit: Math.trunc(monthlyLimit) }),
+      });
+      setQuotas((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setEditingId(null);
+      setDraftLimit("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao atualizar cota");
+    } finally {
+      setSavingId(null);
+    }
+  }
 
   const totals = useMemo(() => {
     return quotas.reduce(
@@ -52,6 +98,8 @@ export default function QuotasPage() {
         <Summary label="Saldo restante" value={totals.remaining} icon={WalletCards} />
       </div>
 
+      {error ? <Surface className="mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</Surface> : null}
+
       <Surface className="overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted/80 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -61,6 +109,7 @@ export default function QuotasPage() {
               <th className="p-4">Uso</th>
               <th className="p-4 text-right">Limite</th>
               <th className="p-4 text-right">Saldo</th>
+              <th className="p-4 text-right">Acoes</th>
             </tr>
           </thead>
           <tbody>
@@ -80,8 +129,43 @@ export default function QuotasPage() {
                       <span className="w-14 text-xs font-semibold text-muted-foreground">{percent.toFixed(0)}%</span>
                     </div>
                   </td>
-                  <td className="p-4 text-right font-medium">{quota.monthly_limit.toLocaleString("pt-BR")}</td>
+                  <td className="p-4 text-right font-medium">
+                    {editingId === quota.id ? (
+                      <Input
+                        className="ml-auto w-28 text-right"
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={draftLimit}
+                        onChange={(event) => setDraftLimit(event.target.value)}
+                      />
+                    ) : (
+                      quota.monthly_limit.toLocaleString("pt-BR")
+                    )}
+                  </td>
                   <td className="p-4 text-right font-semibold">{quota.remaining_pages.toLocaleString("pt-BR")}</td>
+                  <td className="p-4 text-right">
+                    {editingId === quota.id ? (
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          type="button"
+                          className="h-8 w-8 p-0"
+                          title="Salvar limite"
+                          disabled={savingId === quota.id}
+                          onClick={() => saveQuota(quota)}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button type="button" variant="outline" className="h-8 w-8 p-0" title="Cancelar" onClick={cancelEdit}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button type="button" variant="ghost" className="h-8 w-8 p-0" title="Editar limite mensal" onClick={() => startEdit(quota)}>
+                        <Edit className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
