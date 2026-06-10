@@ -1297,11 +1297,9 @@ def cancel_queue_action(
         entity_id=action.id,
         actor_user_id=actor.id,
         metadata={
-            "agent_id": action.agent_id,
-            "agent_uid": action.agent.agent_uid if action.agent else None,
-            "action_type": action.action_type.value,
-            "queue_name": action.queue_name,
+            **_queue_action_audit_metadata(action, action.agent),
             "previous_status": previous_status,
+            "status": action.status.value,
             "result_message": action.result_message,
         },
         organization_id=actor.organization_id,
@@ -1351,13 +1349,9 @@ def finish_queue_action(
         entity_id=action.id,
         actor_user_id=actor.id,
         metadata={
-            "agent_id": action.agent_id,
-            "action_type": action.action_type.value,
-            "queue_name": action.queue_name,
+            **_queue_action_audit_metadata(action, action.agent),
             "status": action.status.value,
             "result_message": action.result_message,
-            "printer_id": action.printer_id,
-            "agent_uid": action.agent.agent_uid if action.agent else None,
         },
         organization_id=actor.organization_id,
     )
