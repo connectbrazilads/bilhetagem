@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     agent_latest_version: str = "0.2.0"
     agent_download_dir: str = "agent_downloads"
     agent_download_filename: str = "PrintBillingAgent.exe"
+    agent_release_manifest_filename: str = "manifest.json"
 
     @field_validator("cors_origins", mode="before")
     @classmethod

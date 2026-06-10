@@ -1,3 +1,5 @@
+import hashlib
+import json
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
@@ -17,6 +19,8 @@ from app.models.user import User
 from app.models.user import UserRole
 from app.schemas.agent import (
     AgentHeartbeatPayload,
+    AgentReleaseFileRead,
+    AgentReleaseRead,
     AgentQueueActionCreate,
     AgentQueueActionRead,
     AgentQueueActionResult,
@@ -50,6 +54,98 @@ def _is_newer(latest: str, current: str | None) -> bool:
 
 def _agent_file() -> Path:
     return Path(settings.agent_download_dir) / settings.agent_download_filename
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _manifest_path() -> Path:
+    return Path(settings.agent_download_dir) / settings.agent_release_manifest_filename
+
+
+def _release_file(version: str, filename: str) -> Path:
+    root = Path(settings.agent_download_dir)
+    versioned = root / version / filename
+    if versioned.exists():
+        return versioned
+    return root / filename
+
+
+def _is_safe_release_filename(filename: str) -> bool:
+    return Path(filename).name == filename and "/" not in filename and "\\" not in filename
+
+
+def _load_release_manifest() -> list[AgentReleaseRead]:
+    manifest_path = _manifest_path()
+    releases: list[AgentReleaseRead] = []
+    if manifest_path.exists():
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for raw_release in data.get("versions", []):
+            version = str(raw_release["version"])
+            files = []
+            for raw_file in raw_release.get("files", []):
+                filename = str(raw_file["filename"])
+                if not _is_safe_release_filename(filename):
+                    continue
+                path = _release_file(version, filename)
+                if not path.exists():
+                    continue
+                files.append(
+                    AgentReleaseFileRead(
+                        kind=str(raw_file.get("kind") or "agent"),
+                        filename=filename,
+                        size_bytes=int(raw_file.get("size_bytes") or path.stat().st_size),
+                        sha256=str(raw_file.get("sha256") or _sha256(path)),
+                        download_url=f"/agent/releases/{version}/download?filename={filename}",
+                    )
+                )
+            releases.append(
+                AgentReleaseRead(
+                    version=version,
+                    channel=str(raw_release.get("channel") or "stable"),
+                    published_at=raw_release.get("published_at"),
+                    notes=raw_release.get("notes"),
+                    files=files,
+                )
+            )
+        return releases
+
+    path = _agent_file()
+    if path.exists():
+        releases.append(
+            AgentReleaseRead(
+                version=settings.agent_latest_version,
+                files=[
+                    AgentReleaseFileRead(
+                        kind="agent",
+                        filename=path.name,
+                        size_bytes=path.stat().st_size,
+                        sha256=_sha256(path),
+                        download_url="/agent/download",
+                    )
+                ],
+            )
+        )
+    return releases
+
+
+def _latest_agent_release_file() -> tuple[AgentReleaseRead, AgentReleaseFileRead] | None:
+    for release in _load_release_manifest():
+        if release.version != settings.agent_latest_version:
+            continue
+        for file in release.files:
+            if file.kind == "agent":
+                return release, file
+    for release in _load_release_manifest():
+        for file in release.files:
+            if file.kind == "agent":
+                return release, file
+    return None
 
 
 def _clean_optional(value: str | None) -> str | None:
@@ -144,24 +240,57 @@ def agent_version(
     current_version: str | None = Query(default=None),
     _: User = Depends(get_current_user),
 ) -> AgentVersionRead:
-    file_exists = _agent_file().exists()
+    latest = _latest_agent_release_file()
+    file_exists = latest is not None
     return AgentVersionRead(
         latest_version=settings.agent_latest_version,
         update_available=file_exists and _is_newer(settings.agent_latest_version, current_version),
         mandatory=False,
         download_url="/agent/download" if file_exists else None,
+        sha256=latest[1].sha256 if latest else None,
     )
 
 
 @router.get("/download")
 def download_agent_update(_: User = Depends(get_current_user)) -> FileResponse:
-    path = _agent_file()
+    latest = _latest_agent_release_file()
+    path = _release_file(latest[0].version, latest[1].filename) if latest else _agent_file()
     if not path.exists():
         raise HTTPException(status_code=404, detail="Atualizacao do agent nao publicada")
     return FileResponse(
         path=str(path),
         media_type="application/octet-stream",
-        filename=settings.agent_download_filename,
+        filename=path.name,
+    )
+
+
+@router.get("/releases", response_model=list[AgentReleaseRead])
+def list_agent_releases(_: User = Depends(require_roles(UserRole.admin, UserRole.manager))) -> list[AgentReleaseRead]:
+    return _load_release_manifest()
+
+
+@router.get("/releases/{version}/download")
+def download_agent_release_file(
+    version: str,
+    filename: str = Query(min_length=1, max_length=180),
+    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+) -> FileResponse:
+    if not _is_safe_release_filename(filename):
+        raise HTTPException(status_code=400, detail="Nome de arquivo invalido")
+    releases = {release.version: release for release in _load_release_manifest()}
+    release = releases.get(version)
+    if not release:
+        raise HTTPException(status_code=404, detail="Versao nao encontrada")
+    file_entry = next((file for file in release.files if file.filename == filename), None)
+    if not file_entry:
+        raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
+    path = _release_file(version, filename)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Arquivo nao publicado")
+    return FileResponse(
+        path=str(path),
+        media_type="application/octet-stream",
+        filename=filename,
     )
 
 

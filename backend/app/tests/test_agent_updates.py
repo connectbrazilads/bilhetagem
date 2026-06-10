@@ -3,7 +3,7 @@ from pathlib import Path
 from starlette.requests import Request
 from sqlalchemy.orm import Session
 
-from app.api.routes.agent_updates import agent_heartbeat, agent_version, create_queue_action, finish_queue_action, list_agents, poll_queue_actions
+from app.api.routes.agent_updates import agent_heartbeat, agent_version, create_queue_action, finish_queue_action, list_agent_releases, list_agents, poll_queue_actions
 from app.core.config import settings
 from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
 from app.models.organization import Organization
@@ -39,6 +39,46 @@ def test_agent_version_reports_update_when_file_exists(db_session: Session, monk
 
     assert response.update_available is True
     assert response.download_url == "/agent/download"
+    assert response.sha256 is not None
+
+
+def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypatch, tmp_path: Path):
+    release_dir = tmp_path / "0.3.0"
+    release_dir.mkdir()
+    (release_dir / "PrintBillingAgent.exe").write_bytes(b"agent-v3")
+    (release_dir / "PrintBillingAgentInstaller.exe").write_bytes(b"installer-v3")
+    (tmp_path / "manifest.json").write_text(
+        """
+        {
+          "versions": [
+            {
+              "version": "0.3.0",
+              "channel": "stable",
+              "notes": "Teste",
+              "files": [
+                {"kind": "agent", "filename": "PrintBillingAgent.exe"},
+                {"kind": "installer", "filename": "PrintBillingAgentInstaller.exe"}
+              ]
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_latest_version", "0.3.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    actor = User(username="release-admin", full_name="Release Admin", role=UserRole.admin, is_active=True)
+    db_session.add(actor)
+    db_session.commit()
+
+    releases = list_agent_releases(_=actor)
+    version = agent_version(current_version="0.2.0", _=actor)
+
+    assert releases[0].version == "0.3.0"
+    assert {file.kind for file in releases[0].files} == {"agent", "installer"}
+    assert releases[0].files[0].sha256
+    assert version.update_available is True
+    assert version.sha256 == next(file.sha256 for file in releases[0].files if file.kind == "agent")
 
 
 def _request(ip_address: str = "10.0.0.10") -> Request:

@@ -10,6 +10,23 @@ class AgentVersionRead(BaseModel):
     update_available: bool
     mandatory: bool = False
     download_url: str | None = None
+    sha256: str | None = None
+
+
+class AgentReleaseFileRead(BaseModel):
+    kind: str
+    filename: str
+    size_bytes: int
+    sha256: str
+    download_url: str
+
+
+class AgentReleaseRead(BaseModel):
+    version: str
+    channel: str = "stable"
+    published_at: str | None = None
+    notes: str | None = None
+    files: list[AgentReleaseFileRead] = Field(default_factory=list)
 
 
 class AgentQueuePayload(BaseModel):

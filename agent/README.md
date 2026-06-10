@@ -58,7 +58,49 @@ O backend expoe:
 
 - `GET /agent/version?current_version=0.2.0`
 - `GET /agent/download`
+- `GET /agent/releases`
 
 Para publicar uma nova versao na VPS, copie `PrintBillingAgent.exe` para a pasta configurada em
 `AGENT_DOWNLOAD_DIR` e ajuste `AGENT_LATEST_VERSION` no ambiente do backend. Por padrao, o backend
 procura `agent_downloads/PrintBillingAgent.exe`.
+
+## Release versionado, MSI e assinatura
+
+Use o script de release para gerar artefatos versionados com SHA256:
+
+```powershell
+.\build_release.ps1 -Channel stable -Notes "Release comercial"
+```
+
+Saida padrao:
+
+- `releases\<versao>\PrintBillingAgent.exe`
+- `releases\<versao>\PrintBillingAgentInstaller.exe`
+- `releases\<versao>\PrintBillingAgent-<versao>.msi` quando WiX Toolset estiver instalado
+- `releases\<versao>\SHA256SUMS.txt`
+- `releases\manifest.json`
+
+Para publicar na VPS, copie a pasta da versao e o `manifest.json` para o diretorio configurado em
+`AGENT_DOWNLOAD_DIR`, e ajuste `AGENT_LATEST_VERSION` para a versao publicada.
+
+Assinatura opcional via `signtool.exe`:
+
+```powershell
+$env:PRINTBILLING_CERT_THUMBPRINT="THUMBPRINT_DO_CERTIFICADO"
+$env:PRINTBILLING_TIMESTAMP_URL="http://timestamp.digicert.com"
+.\build_release.ps1
+```
+
+Ou com arquivo PFX:
+
+```powershell
+$env:PRINTBILLING_CERT_PFX="C:\certs\printbilling-code-signing.pfx"
+$env:PRINTBILLING_CERT_PASSWORD="senha"
+.\build_release.ps1
+```
+
+MSI silencioso:
+
+```powershell
+msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="agent12345" ORGANIZATION="default" /qn
+```
