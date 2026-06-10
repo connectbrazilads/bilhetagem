@@ -33,6 +33,12 @@ type AgentRecentJob = {
   submitted_at: string;
 };
 
+type AgentHealthAlert = {
+  code: string;
+  severity: "info" | "warning" | "error" | string;
+  message: string;
+};
+
 type AgentRow = {
   id: number;
   agent_uid: string;
@@ -48,6 +54,7 @@ type AgentRow = {
   created_at: string;
   is_online: boolean;
   status: string;
+  health_alerts: AgentHealthAlert[];
   aliases: AgentQueue[];
   recent_jobs: AgentRecentJob[];
   queue_actions: AgentQueueAction[];
@@ -91,8 +98,14 @@ function captureLabel(mode: string | null) {
 
 function statusClass(agent: AgentRow) {
   if (!agent.is_online) return "border-red-200 bg-red-50 text-red-700";
-  if (agent.last_error) return "border-amber-200 bg-amber-50 text-amber-700";
+  if (agent.health_alerts.some((alert) => alert.severity === "warning" || alert.severity === "error")) return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
+function alertClass(severity: string) {
+  if (severity === "error") return "border-red-200 bg-red-50 text-red-700";
+  if (severity === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
 export default function AgentsPage() {
@@ -234,7 +247,7 @@ export default function AgentsPage() {
 
   const summary = useMemo(() => {
     const online = agents.filter((agent) => agent.is_online).length;
-    const withError = agents.filter((agent) => agent.last_error).length;
+    const withError = agents.filter((agent) => agent.health_alerts.length > 0).length;
     const queues = agents.reduce((total, agent) => total + agent.aliases.length, 0);
     return { total: agents.length, online, offline: agents.length - online, withError, queues };
   }, [agents]);
@@ -422,13 +435,25 @@ export default function AgentsPage() {
                   <div className="mt-0.5 max-w-[320px] truncate text-xs text-muted-foreground">
                     {agent.aliases.map((alias) => alias.queue_name).join(", ") || "-"}
                   </div>
+                  {agent.health_alerts.some((alert) => alert.code === "unbound_queues" || alert.code === "no_queues") ? (
+                    <div className="mt-1 text-xs font-semibold text-amber-700">Revisar vinculos de fila</div>
+                  ) : null}
                 </td>
                 <td className="p-3">{formatDate(agent.last_seen_at)}</td>
                 <td className="p-3">
                   <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusClass(agent)}`}>
                     {agent.status}
                   </span>
-                  {agent.last_error ? <div className="mt-1 max-w-[260px] truncate text-xs text-amber-700">{agent.last_error}</div> : null}
+                  {agent.health_alerts.length > 0 ? (
+                    <div className="mt-1 flex max-w-[320px] flex-wrap gap-1">
+                      {agent.health_alerts.slice(0, 3).map((alert) => (
+                        <span key={alert.code} className={`inline-flex max-w-[300px] truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold ${alertClass(alert.severity)}`} title={alert.message}>
+                          {alert.message}
+                        </span>
+                      ))}
+                      {agent.health_alerts.length > 3 ? <span className="text-[10px] text-muted-foreground">+{agent.health_alerts.length - 3}</span> : null}
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             ))}
@@ -491,6 +516,19 @@ export default function AgentsPage() {
                 <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                   <div className="font-semibold">Ultimo erro</div>
                   <div className="mt-1">{selectedAgent.last_error}</div>
+                </div>
+              ) : null}
+
+              {selectedAgent.health_alerts.length > 0 ? (
+                <div className="rounded-md border bg-muted/20 p-4">
+                  <h3 className="mb-3 text-sm font-bold">Alertas operacionais</h3>
+                  <div className="grid gap-2">
+                    {selectedAgent.health_alerts.map((alert) => (
+                      <div key={alert.code} className={`rounded-md border px-3 py-2 text-sm ${alertClass(alert.severity)}`}>
+                        {alert.message}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 

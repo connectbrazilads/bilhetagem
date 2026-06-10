@@ -19,6 +19,7 @@ from app.models.user import User
 from app.models.user import UserRole
 from app.schemas.agent import (
     AgentHeartbeatPayload,
+    AgentHealthAlertRead,
     AgentQueueBulkActionCreate,
     AgentReleaseFileRead,
     AgentReleaseRead,
@@ -212,6 +213,30 @@ def _recent_jobs(db: Session, agent: PrintAgent) -> list[AgentRecentJobRead]:
     ]
 
 
+def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealthAlertRead]:
+    alerts: list[AgentHealthAlertRead] = []
+    aliases = list(agent.aliases)
+    unbound_queues = [alias.queue_name for alias in aliases if alias.printer_id is None]
+
+    if not is_online:
+        alerts.append(AgentHealthAlertRead(code="offline", severity="error", message="Agent offline ou sem contato recente"))
+    if agent.last_error:
+        alerts.append(AgentHealthAlertRead(code="last_error", severity="warning", message=agent.last_error))
+    if agent.event_log_enabled is False:
+        alerts.append(AgentHealthAlertRead(code="event_log_disabled", severity="warning", message="Event Log de impressao desativado no agent"))
+    if agent.last_seen_at and not aliases:
+        alerts.append(AgentHealthAlertRead(code="no_queues", severity="warning", message="Nenhuma fila local detectada no ultimo heartbeat"))
+    if unbound_queues:
+        count = len(unbound_queues)
+        sample = ", ".join(unbound_queues[:3])
+        suffix = f": {sample}" if sample else ""
+        alerts.append(AgentHealthAlertRead(code="unbound_queues", severity="warning", message=f"{count} fila(s) sem vinculo com impressora fisica{suffix}"))
+    if _is_newer(settings.agent_latest_version, agent.version):
+        alerts.append(AgentHealthAlertRead(code="outdated_version", severity="info", message=f"Agent abaixo da versao publicada {settings.agent_latest_version}"))
+
+    return alerts
+
+
 def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | None = None) -> PrintAgentRead:
     is_online, status_text = _agent_status(agent)
     queue_actions = sorted(
@@ -234,6 +259,7 @@ def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | 
         created_at=agent.created_at,
         is_online=is_online,
         status=status_text,
+        health_alerts=_agent_health_alerts(agent, is_online),
         aliases=list(agent.aliases),
         recent_jobs=_recent_jobs(db, agent) if include_jobs and db is not None else [],
         queue_actions=queue_actions,

@@ -135,6 +135,40 @@ def test_agent_heartbeat_creates_agent_and_local_queues(db_session: Session):
     assert response.aliases[0].ip_address == "192.168.1.125"
 
 
+def test_agent_health_alerts_report_operational_issues(db_session: Session, monkeypatch):
+    monkeypatch.setattr(settings, "agent_latest_version", "0.3.0")
+    actor = User(username="agent-alerts", full_name="Agent Alerts", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-alerts",
+            computer_name="PC-ALERT",
+            version="0.2.0",
+            capture_mode="spool",
+            event_log_enabled=False,
+            last_error="Falha ao ler fila",
+            queues=[
+                {
+                    "queue_name": "USER",
+                    "driver_name": "Driver",
+                    "port_name": "USB001",
+                    "connection_type": "usb",
+                    "fingerprint": "queue:pc-alert|user|usb001|driver",
+                }
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    alert_codes = {alert.code for alert in response.health_alerts}
+    assert {"last_error", "event_log_disabled", "unbound_queues", "outdated_version"}.issubset(alert_codes)
+    assert "offline" not in alert_codes
+
+
 def test_list_agents_is_scoped_by_organization(db_session: Session):
     other_org = Organization(name="Outro Cliente", slug="outro-cliente", is_active=True)
     db_session.add(other_org)

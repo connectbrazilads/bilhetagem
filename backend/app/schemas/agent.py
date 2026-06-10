@@ -82,6 +82,12 @@ class AgentRecentJobRead(BaseModel):
     submitted_at: datetime
 
 
+class AgentHealthAlertRead(BaseModel):
+    code: str
+    severity: str
+    message: str
+
+
 class AgentQueueActionCreate(BaseModel):
     action_type: AgentQueueActionType
     queue_name: str = Field(min_length=1, max_length=180)
@@ -141,6 +147,7 @@ class PrintAgentRead(BaseModel):
     created_at: datetime
     is_online: bool
     status: str
+    health_alerts: list[AgentHealthAlertRead] = Field(default_factory=list)
     aliases: list[AgentQueueRead] = Field(default_factory=list)
     recent_jobs: list[AgentRecentJobRead] = Field(default_factory=list)
     queue_actions: list[AgentQueueActionRead] = Field(default_factory=list)
