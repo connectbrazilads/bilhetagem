@@ -95,9 +95,17 @@ function billingStatusSuffix(status: OrganizationOption["billing_status"]) {
   return "";
 }
 
+function powershellQuote(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function msiProperty(name: string, value: string) {
+  return `${name}=${powershellQuote(value)}`;
+}
+
 function maskSecret(command: string, secret: string) {
   if (!command || !secret) return command;
-  return command.replaceAll(secret, "********");
+  return command.replaceAll(secret, "********").replaceAll(powershellQuote(secret), "'********'");
 }
 
 function isUnsafeAgentPassword(value: string) {
@@ -237,12 +245,53 @@ export default function DownloadsPage() {
   const cancelBlockedArg = cancelBlocked ? "true" : "false";
   const usePrintEventLogArg = usePrintEventLog ? "true" : "false";
   const autoUpdateArg = autoUpdate ? "true" : "false";
-  const exeCommand = installerFile && commandReady
-    ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}" --spool-server "${spoolServer}" --log-level "${logLevel}" --cancel-blocked "${cancelBlockedArg}" --use-print-event-log "${usePrintEventLogArg}" --auto-update "${autoUpdateArg}"`
-    : "";
-  const msiCommand = msiFile && commandReady
-    ? `msiexec /i "${msiFile.filename}" APIURL="${API_URL}" AGENTUSER="${deployUser}" AGENTPASSWORD="${deployPassword}" ORGANIZATION="${deployOrg}" DEFAULTUSERNAME="${defaultUsername}" SPOOLSERVER="${spoolServer}" LOGLEVEL="${logLevel}" CANCELBLOCKED="${cancelBlockedArg}" USEPRINTEVENTLOG="${usePrintEventLogArg}" AUTOUPDATE="${autoUpdateArg}" /qn`
-    : "";
+  const exeCommand =
+    installerFile && commandReady
+      ? [
+          "&",
+          powershellQuote(`.\\${installerFile.filename}`),
+          "--silent",
+          "--api-url",
+          powershellQuote(API_URL),
+          "--username",
+          powershellQuote(deployUser),
+          "--password",
+          powershellQuote(deployPassword),
+          "--organization",
+          powershellQuote(deployOrg),
+          "--default-username",
+          powershellQuote(defaultUsername),
+          "--spool-server",
+          powershellQuote(spoolServer),
+          "--log-level",
+          powershellQuote(logLevel),
+          "--cancel-blocked",
+          powershellQuote(cancelBlockedArg),
+          "--use-print-event-log",
+          powershellQuote(usePrintEventLogArg),
+          "--auto-update",
+          powershellQuote(autoUpdateArg),
+        ].join(" ")
+      : "";
+  const msiCommand =
+    msiFile && commandReady
+      ? [
+          "msiexec",
+          "/i",
+          powershellQuote(msiFile.filename),
+          msiProperty("APIURL", API_URL),
+          msiProperty("AGENTUSER", deployUser),
+          msiProperty("AGENTPASSWORD", deployPassword),
+          msiProperty("ORGANIZATION", deployOrg),
+          msiProperty("DEFAULTUSERNAME", defaultUsername),
+          msiProperty("SPOOLSERVER", spoolServer),
+          msiProperty("LOGLEVEL", logLevel),
+          msiProperty("CANCELBLOCKED", cancelBlockedArg),
+          msiProperty("USEPRINTEVENTLOG", usePrintEventLogArg),
+          msiProperty("AUTOUPDATE", autoUpdateArg),
+          "/qn",
+        ].join(" ")
+      : "";
 
   return (
     <ProtectedPage>
@@ -294,7 +343,7 @@ export default function DownloadsPage() {
             </div>
             <div>
               <h2 className="text-sm font-bold">Instalacao silenciosa</h2>
-              <p className="text-xs text-muted-foreground">Comandos prontos para implantar o agent. A senha fica mascarada na tela, mas e copiada corretamente.</p>
+              <p className="text-xs text-muted-foreground">Comandos PowerShell prontos para implantar o agent. A senha fica mascarada na tela, mas e copiada corretamente.</p>
             </div>
           </div>
           <div className="mb-4 grid gap-3 md:grid-cols-4">
