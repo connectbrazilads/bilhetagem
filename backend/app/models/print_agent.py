@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -8,10 +8,11 @@ from app.models.base import Base
 
 class PrintAgent(Base):
     __tablename__ = "print_agents"
+    __table_args__ = (UniqueConstraint("organization_id", "agent_uid", name="uq_print_agents_org_uid"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), default=1, nullable=False)
-    agent_uid: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    agent_uid: Mapped[str] = mapped_column(String(120), nullable=False)
     computer_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     os_user: Mapped[str | None] = mapped_column(String(120), nullable=True)
     version: Mapped[str | None] = mapped_column(String(40), nullable=True)

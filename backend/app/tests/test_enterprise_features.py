@@ -9,10 +9,13 @@ from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
+from app.api.routes.auth import login
 from app.api.routes.printers import merge_printer_endpoint
 from app.api.routes.jobs import list_jobs
 from app.api.routes.printers import list_printers
 from app.api.routes.users import list_users
+from app.core.security import hash_password
+from app.schemas.auth import LoginRequest
 from app.services.report_service import dashboard_metrics
 from app.services.snmp_service import SnmpPrinterStatus, poll_printers_once
 from app.services.ldap_service import sync_ldap_users, test_ldap_connection as check_ldap_connection
@@ -241,3 +244,42 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     assert [printer.name for printer in printers] == ["Org 1 Printer"]
     assert [job.username for job in jobs] == ["org1-user"]
     assert metrics["pages_month"] == 3
+
+
+def test_same_user_and_printer_names_can_exist_in_different_organizations(db_session: Session):
+    other_org = Organization(name="Cliente C", slug="cliente-c", is_active=True)
+    db_session.add(other_org)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            User(
+                organization_id=1,
+                username="admin",
+                full_name="Admin Default",
+                password_hash=hash_password("admin12345"),
+                role=UserRole.admin,
+                is_active=True,
+            ),
+            User(
+                organization_id=other_org.id,
+                username="admin",
+                full_name="Admin Cliente C",
+                password_hash=hash_password("admin12345"),
+                role=UserRole.admin,
+                is_active=True,
+            ),
+            Printer(organization_id=1, name="KONICA", is_color=True),
+            Printer(organization_id=other_org.id, name="KONICA", is_color=True),
+        ]
+    )
+    db_session.commit()
+
+    token = login(
+        LoginRequest(username="admin", password="admin12345", organization_slug="cliente-c"),
+        db=db_session,
+    )
+
+    assert db_session.query(User).filter(User.username == "admin").count() == 2
+    assert db_session.query(Printer).filter(Printer.name == "KONICA").count() == 2
+    assert token.organization_id == other_org.id

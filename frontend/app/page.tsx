@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, LogIn, User } from "lucide-react";
+import { Building2, Lock, LogIn, User } from "lucide-react";
 
 import { Button, Input, Surface } from "@/components/ui";
 import { API_URL } from "@/lib/api";
@@ -11,6 +11,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
+  const [organizationSlug, setOrganizationSlug] = useState("default");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +23,7 @@ export default function LoginPage() {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password, organization_slug: organizationSlug || null })
       });
       if (!response.ok) {
         throw new Error("Credenciais invalidas");
@@ -45,6 +46,13 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-muted-foreground">Acesse o painel administrativo.</p>
         </div>
         <form className="space-y-3" onSubmit={submit}>
+          <label className="block text-sm font-medium">
+            Empresa
+            <div className="mt-1 flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <Input value={organizationSlug} onChange={(event) => setOrganizationSlug(event.target.value)} />
+            </div>
+          </label>
           <label className="block text-sm font-medium">
             Usuario
             <div className="mt-1 flex items-center gap-2">

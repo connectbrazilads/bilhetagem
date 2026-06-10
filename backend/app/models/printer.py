@@ -2,7 +2,7 @@ from datetime import datetime
 
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -10,10 +10,11 @@ from app.models.base import Base
 
 class Printer(Base):
     __tablename__ = "printers"
+    __table_args__ = (UniqueConstraint("organization_id", "name", name="uq_printers_org_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), default=1, nullable=False)
-    name: Mapped[str] = mapped_column(String(180), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
     location: Mapped[str | None] = mapped_column(String(180), nullable=True)
     is_color: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     cost_mono: Mapped[float] = mapped_column(default=0.05, nullable=False)
