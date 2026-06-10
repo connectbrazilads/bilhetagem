@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.print_agent import PrintAgent
@@ -223,12 +223,16 @@ def simulate_print_policy(db: Session, payload: PrintJobCreate, organization_id:
     queue_name = _clean_optional(payload.queue_name) or payload.printer_name
     alias = None
     if agent and queue_name:
+        normalized_queue_name = _normalize(queue_name)
         alias = (
             db.query(PrinterAlias)
             .filter(
                 PrinterAlias.organization_id == organization_id,
                 PrinterAlias.agent_id == agent.id,
-                PrinterAlias.queue_name == queue_name,
+                or_(
+                    PrinterAlias.queue_name == queue_name,
+                    PrinterAlias.normalized_queue_name == normalized_queue_name,
+                ),
             )
             .first()
         )

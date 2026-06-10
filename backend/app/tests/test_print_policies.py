@@ -390,6 +390,52 @@ def test_policy_simulation_resolves_alias_by_fingerprint(db_session: Session):
     assert simulation.decision.action == PolicyAction.require_release
 
 
+def test_policy_simulation_resolves_agent_alias_by_normalized_queue_name(db_session: Session):
+    user = User(username="alias-normalized-sim", full_name="Alias Normalized Sim", role=UserRole.user, is_active=True, organization_id=1)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-policy-normalized", computer_name="PC-POLICY")
+    printer = _printer(db_session)
+    db_session.add_all([user, agent])
+    db_session.flush()
+    alias = PrinterAlias(
+        organization_id=1,
+        printer_id=printer.id,
+        agent_id=agent.id,
+        queue_name="KONICA Financeiro",
+        normalized_queue_name="konica financeiro",
+    )
+    db_session.add(alias)
+    db_session.flush()
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Liberar fila normalizada",
+            priority=10,
+            rule_type=PolicyRuleType.always,
+            action=PolicyAction.require_release,
+            printer_alias_id=alias.id,
+        )
+    )
+    db_session.commit()
+
+    simulation = simulate_print_policy(
+        db_session,
+        PrintJobCreate(
+            username="alias-normalized-sim",
+            printer_name="KONICA FINANCEIRO LOCAL",
+            queue_name="  konica   financeiro ",
+            pages=1,
+            is_color=False,
+            agent_uid=agent.agent_uid,
+        ),
+        organization_id=1,
+    )
+
+    assert simulation.alias is not None
+    assert simulation.alias.id == alias.id
+    assert simulation.printer.id == printer.id
+    assert simulation.decision.action == PolicyAction.require_release
+
+
 def test_policy_simulation_resolves_alias_fingerprint_case_insensitive(db_session: Session):
     user = User(username="alias-case-sim", full_name="Alias Case Sim", role=UserRole.user, is_active=True, organization_id=1)
     printer = _printer(db_session)

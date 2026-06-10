@@ -228,6 +228,41 @@ def test_jobs_with_different_queue_names_share_same_physical_printer(db_session:
     assert len(printer.aliases) == 2
 
 
+def test_job_reuses_agent_alias_by_normalized_queue_name(db_session: Session):
+    printer = Printer(organization_id=1, name="KONICA FINANCEIRO", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-normalized-queue", computer_name="PC-FIN")
+    db_session.add_all([printer, agent])
+    db_session.flush()
+    alias = PrinterAlias(
+        organization_id=1,
+        printer=printer,
+        agent=agent,
+        queue_name="KONICA Financeiro",
+        normalized_queue_name="konica financeiro",
+    )
+    db_session.add(alias)
+    db_session.commit()
+
+    register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="diego",
+            printer_name="KONICA FINANCEIRO LOCAL",
+            queue_name="  konica   financeiro ",
+            pages=1,
+            is_color=False,
+            agent_uid=agent.agent_uid,
+            external_job_id="eventlog:normalized-queue",
+        ),
+    )
+
+    job = db_session.query(PrintJob).one()
+    assert job.printer_id == printer.id
+    assert job.printer_alias_id == alias.id
+    assert db_session.query(PrinterAlias).count() == 1
+    assert db_session.query(Printer).count() == 1
+
+
 def test_usb_job_uses_known_alias_device_id_instead_of_creating_queue_printer(db_session: Session):
     printer = Printer(organization_id=1, name="BROTHER DCP-T420W", is_color=False)
     alias = PrinterAlias(
