@@ -1180,6 +1180,9 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
         OrganizationCreate(
             name="Cliente Novo",
             slug="cliente-novo",
+            billing_plan="professional",
+            billing_status="active",
+            contracted_printer_limit=25,
             admin_username="admin",
             admin_password="ClienteNovoAdminPassword2026",
             agent_username="agent",
@@ -1193,6 +1196,9 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
     assert [user.username for user in seeded_users] == ["admin", "agent"]
     assert {user.username: user.role for user in seeded_users} == {"admin": UserRole.admin, "agent": UserRole.agent}
     assert created.users_count == 2
+    assert created.billing_plan == "professional"
+    assert created.billing_status == "active"
+    assert created.contracted_printer_limit == 25
 
     token = login(
         LoginRequest(username="admin", password="ClienteNovoAdminPassword2026", organization_slug="cliente-novo"),
@@ -1203,6 +1209,9 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
     audit = db_session.query(AuditLog).filter(AuditLog.action == "organization_created").one()
     assert audit.log_metadata["admin_username"] == "admin"
     assert audit.log_metadata["agent_username"] == "agent"
+    assert audit.log_metadata["billing_plan"] == "professional"
+    assert audit.log_metadata["billing_status"] == "active"
+    assert audit.log_metadata["contracted_printer_limit"] == 25
     assert "ClienteNovoAdminPassword2026" not in str(audit.log_metadata)
     assert "ClienteNovoAgentPassword2026" not in str(audit.log_metadata)
 
@@ -1227,18 +1236,27 @@ def test_organization_create_rejects_default_or_shared_initial_passwords():
 
 def test_updating_organization_writes_changed_fields_to_audit(db_session: Session):
     platform_admin = User(username="platform-update-admin", full_name="Platform Admin", role=UserRole.admin, is_active=True, organization_id=1)
-    organization = Organization(name="Cliente Audit Update", slug="cliente-audit-update", is_active=True)
+    organization = Organization(name="Cliente Audit Update", slug="cliente-audit-update", is_active=True, billing_plan="starter", billing_status="trial", contracted_printer_limit=0)
     db_session.add_all([platform_admin, organization])
     db_session.commit()
 
     updated = update_organization(
         organization.id,
-        OrganizationUpdate(name="Cliente Audit Renomeado", is_active=False),
+        OrganizationUpdate(
+            name="Cliente Audit Renomeado",
+            is_active=False,
+            billing_plan="enterprise",
+            billing_status="past_due",
+            contracted_printer_limit=75,
+        ),
         db=db_session,
         actor=platform_admin,
     )
     assert updated.name == "Cliente Audit Renomeado"
     assert updated.is_active is False
+    assert updated.billing_plan == "enterprise"
+    assert updated.billing_status == "past_due"
+    assert updated.contracted_printer_limit == 75
 
     audit = db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").one()
     assert audit.log_metadata["changes"]["name"] == {
@@ -1246,10 +1264,19 @@ def test_updating_organization_writes_changed_fields_to_audit(db_session: Sessio
         "after": "Cliente Audit Renomeado",
     }
     assert audit.log_metadata["changes"]["is_active"] == {"before": True, "after": False}
+    assert audit.log_metadata["changes"]["billing_plan"] == {"before": "starter", "after": "enterprise"}
+    assert audit.log_metadata["changes"]["billing_status"] == {"before": "trial", "after": "past_due"}
+    assert audit.log_metadata["changes"]["contracted_printer_limit"] == {"before": 0, "after": 75}
 
     update_organization(
         organization.id,
-        OrganizationUpdate(name="Cliente Audit Renomeado", is_active=False),
+        OrganizationUpdate(
+            name="Cliente Audit Renomeado",
+            is_active=False,
+            billing_plan="enterprise",
+            billing_status="past_due",
+            contracted_printer_limit=75,
+        ),
         db=db_session,
         actor=platform_admin,
     )

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -9,6 +10,9 @@ class OrganizationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     slug: str = Field(min_length=2, max_length=120, pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$")
     is_active: bool = True
+    billing_plan: Literal["starter", "professional", "enterprise"] = "starter"
+    billing_status: Literal["trial", "active", "past_due", "suspended"] = "trial"
+    contracted_printer_limit: int = Field(default=0, ge=0, le=100_000)
     admin_username: str = Field(default="admin", min_length=2, max_length=120)
     admin_password: str = Field(min_length=8, max_length=120)
     agent_username: str = Field(default="agent", min_length=2, max_length=120)
@@ -30,6 +34,9 @@ class OrganizationCreate(BaseModel):
 class OrganizationUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=180)
     is_active: bool | None = None
+    billing_plan: Literal["starter", "professional", "enterprise"] | None = None
+    billing_status: Literal["trial", "active", "past_due", "suspended"] | None = None
+    contracted_printer_limit: int | None = Field(default=None, ge=0, le=100_000)
 
 
 class OrganizationRead(BaseModel):
@@ -37,6 +44,9 @@ class OrganizationRead(BaseModel):
     name: str
     slug: str
     is_active: bool
+    billing_plan: str = "starter"
+    billing_status: str = "trial"
+    contracted_printer_limit: int = 0
     created_at: datetime
     users_count: int = 0
     printers_count: int = 0

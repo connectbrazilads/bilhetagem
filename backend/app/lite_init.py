@@ -42,11 +42,18 @@ def _ensure_lite_schema() -> None:
         ).scalar()
         if not organization_count:
             conn.exec_driver_sql(
-                "CREATE TABLE organizations (id INTEGER PRIMARY KEY, name VARCHAR(180) NOT NULL UNIQUE, slug VARCHAR(120) NOT NULL UNIQUE, is_active BOOLEAN NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
+                "CREATE TABLE organizations (id INTEGER PRIMARY KEY, name VARCHAR(180) NOT NULL UNIQUE, slug VARCHAR(120) NOT NULL UNIQUE, is_active BOOLEAN NOT NULL DEFAULT 1, billing_plan VARCHAR(40) NOT NULL DEFAULT 'starter', billing_status VARCHAR(40) NOT NULL DEFAULT 'trial', contracted_printer_limit INTEGER NOT NULL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
             )
             conn.exec_driver_sql(
                 "INSERT OR IGNORE INTO organizations (id, name, slug, is_active) VALUES (1, 'Empresa Padrao', 'default', 1)"
             )
+        organization_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(organizations)").fetchall()}
+        if "billing_plan" not in organization_columns:
+            conn.exec_driver_sql("ALTER TABLE organizations ADD COLUMN billing_plan VARCHAR(40) NOT NULL DEFAULT 'starter'")
+        if "billing_status" not in organization_columns:
+            conn.exec_driver_sql("ALTER TABLE organizations ADD COLUMN billing_status VARCHAR(40) NOT NULL DEFAULT 'trial'")
+        if "contracted_printer_limit" not in organization_columns:
+            conn.exec_driver_sql("ALTER TABLE organizations ADD COLUMN contracted_printer_limit INTEGER NOT NULL DEFAULT 0")
         for table_name in ("departments", "printers", "users", "quotas", "print_jobs", "audit_logs", "print_agents", "printer_aliases", "system_settings"):
             exists = conn.exec_driver_sql(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?",

@@ -16,6 +16,9 @@ type OrganizationRow = {
   name: string;
   slug: string;
   is_active: boolean;
+  billing_plan: "starter" | "professional" | "enterprise";
+  billing_status: "trial" | "active" | "past_due" | "suspended";
+  contracted_printer_limit: number;
   created_at: string;
   users_count: number;
   printers_count: number;
@@ -32,6 +35,9 @@ const emptyForm = {
   name: "",
   slug: "",
   is_active: true,
+  billing_plan: "starter",
+  billing_status: "trial",
+  contracted_printer_limit: 0,
   admin_username: "admin",
   admin_password: "",
   agent_username: "agent",
@@ -83,12 +89,18 @@ export default function OrganizationsPage() {
       if (editing) {
         await apiFetch<OrganizationRow>(`/organizations/${editing.id}`, token, {
           method: "PUT",
-          body: JSON.stringify({ name: form.name, is_active: form.is_active }),
+          body: JSON.stringify({
+            name: form.name,
+            is_active: form.is_active,
+            billing_plan: form.billing_plan,
+            billing_status: form.billing_status,
+            contracted_printer_limit: Number(form.contracted_printer_limit) || 0,
+          }),
         });
       } else {
         await apiFetch<OrganizationRow>("/organizations", token, {
           method: "POST",
-          body: JSON.stringify(form),
+          body: JSON.stringify({ ...form, contracted_printer_limit: Number(form.contracted_printer_limit) || 0 }),
         });
       }
       setEditing(null);
@@ -101,7 +113,15 @@ export default function OrganizationsPage() {
 
   function startEdit(organization: OrganizationRow) {
     setEditing(organization);
-    setForm({ ...emptyForm, name: organization.name, slug: organization.slug, is_active: organization.is_active });
+    setForm({
+      ...emptyForm,
+      name: organization.name,
+      slug: organization.slug,
+      is_active: organization.is_active,
+      billing_plan: organization.billing_plan,
+      billing_status: organization.billing_status,
+      contracted_printer_limit: organization.contracted_printer_limit,
+    });
   }
 
   function resetForm() {
@@ -134,7 +154,7 @@ export default function OrganizationsPage() {
 
       {isPlatformAdmin === true ? (
         <Surface as="form" className="mb-4 p-4" onSubmit={submit}>
-          <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_180px_160px_160px_140px_auto]">
             <Input
               placeholder="Nome da empresa"
               value={form.name}
@@ -147,6 +167,32 @@ export default function OrganizationsPage() {
               onChange={(event) => setForm({ ...form, slug: event.target.value.toLowerCase().replace(/\s+/g, "-") })}
               required
               disabled={editing !== null}
+            />
+            <select
+              value={form.billing_plan}
+              onChange={(event) => setForm({ ...form, billing_plan: event.target.value as typeof form.billing_plan })}
+              className="h-9 rounded-md border bg-white px-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+            >
+              <option value="starter">Starter</option>
+              <option value="professional">Professional</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
+            <select
+              value={form.billing_status}
+              onChange={(event) => setForm({ ...form, billing_status: event.target.value as typeof form.billing_status })}
+              className="h-9 rounded-md border bg-white px-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+            >
+              <option value="trial">Teste</option>
+              <option value="active">Em dia</option>
+              <option value="past_due">Em atraso</option>
+              <option value="suspended">Suspenso</option>
+            </select>
+            <Input
+              type="number"
+              min={0}
+              placeholder="Limite imp."
+              value={form.contracted_printer_limit}
+              onChange={(event) => setForm({ ...form, contracted_printer_limit: parseInt(event.target.value) || 0 })}
             />
             <div className="flex flex-wrap items-center gap-2">
               {editing ? (
@@ -226,6 +272,7 @@ export default function OrganizationsPage() {
                 <tr>
                   <th className="p-4">Empresa</th>
                   <th className="p-4">Slug</th>
+                  <th className="p-4">Comercial</th>
                   <th className="p-4">Uso</th>
                   <th className="p-4">Criada em</th>
                   <th className="p-4">Status</th>
@@ -237,6 +284,19 @@ export default function OrganizationsPage() {
                   <tr key={organization.id} className="border-t bg-white transition-colors hover:bg-muted/30">
                     <td className="p-4 font-semibold">{organization.name}</td>
                     <td className="p-4 font-mono text-xs text-muted-foreground">{organization.slug}</td>
+                    <td className="p-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                          {planLabel(organization.billing_plan)}
+                        </span>
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${billingStatusClass(organization.billing_status)}`}>
+                          {billingStatusLabel(organization.billing_status)}
+                        </span>
+                        <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                          {organization.contracted_printer_limit || "Sem"} limite
+                        </span>
+                      </div>
+                    </td>
                     <td className="p-4">
                       <div className="flex flex-wrap gap-1.5">
                         <MetricPill label="Usuarios" value={organization.users_count} />
@@ -285,6 +345,32 @@ export default function OrganizationsPage() {
 
 function money(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function planLabel(plan: OrganizationRow["billing_plan"]) {
+  const labels = {
+    starter: "Starter",
+    professional: "Professional",
+    enterprise: "Enterprise",
+  };
+  return labels[plan] || plan;
+}
+
+function billingStatusLabel(status: OrganizationRow["billing_status"]) {
+  const labels = {
+    trial: "Teste",
+    active: "Em dia",
+    past_due: "Em atraso",
+    suspended: "Suspenso",
+  };
+  return labels[status] || status;
+}
+
+function billingStatusClass(status: OrganizationRow["billing_status"]) {
+  if (status === "active") return "border-green-200 bg-green-50 text-green-700";
+  if (status === "past_due") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (status === "suspended") return "border-red-200 bg-red-50 text-red-700";
+  return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
 function generatePassword(length = 18) {

@@ -78,6 +78,9 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         name=organization.name,
         slug=organization.slug,
         is_active=organization.is_active,
+        billing_plan=organization.billing_plan,
+        billing_status=organization.billing_status,
+        contracted_printer_limit=organization.contracted_printer_limit,
         created_at=organization.created_at,
         users_count=db.query(User).filter(User.organization_id == organization.id).count(),
         printers_count=db.query(Printer).filter(Printer.organization_id == organization.id).count(),
@@ -110,7 +113,14 @@ def create_organization(
 ) -> OrganizationRead:
     if not _can_manage_all(actor):
         raise HTTPException(status_code=403, detail="Somente o admin da empresa padrao pode criar empresas")
-    organization = Organization(name=payload.name, slug=payload.slug, is_active=payload.is_active)
+    organization = Organization(
+        name=payload.name,
+        slug=payload.slug,
+        is_active=payload.is_active,
+        billing_plan=payload.billing_plan,
+        billing_status=payload.billing_status,
+        contracted_printer_limit=payload.contracted_printer_limit,
+    )
     db.add(organization)
     try:
         db.flush()
@@ -144,6 +154,9 @@ def create_organization(
             metadata={
                 "name": organization.name,
                 "slug": organization.slug,
+                "billing_plan": organization.billing_plan,
+                "billing_status": organization.billing_status,
+                "contracted_printer_limit": organization.contracted_printer_limit,
                 "admin_username": payload.admin_username,
                 "agent_username": payload.agent_username,
             },
@@ -172,14 +185,35 @@ def update_organization(
     if payload.is_active is False and organization.id == actor.organization_id:
         raise HTTPException(status_code=400, detail="Nao e possivel desativar a empresa em uso pelo usuario logado")
 
-    before = {"name": organization.name, "is_active": organization.is_active}
+    before = {
+        "name": organization.name,
+        "is_active": organization.is_active,
+        "billing_plan": organization.billing_plan,
+        "billing_status": organization.billing_status,
+        "contracted_printer_limit": organization.contracted_printer_limit,
+    }
     if payload.name is not None:
         organization.name = payload.name
     if payload.is_active is not None:
         organization.is_active = payload.is_active
+    if payload.billing_plan is not None:
+        organization.billing_plan = payload.billing_plan
+    if payload.billing_status is not None:
+        organization.billing_status = payload.billing_status
+    if payload.contracted_printer_limit is not None:
+        organization.contracted_printer_limit = payload.contracted_printer_limit
 
     try:
-        changes = _changed_values(before, {"name": organization.name, "is_active": organization.is_active})
+        changes = _changed_values(
+            before,
+            {
+                "name": organization.name,
+                "is_active": organization.is_active,
+                "billing_plan": organization.billing_plan,
+                "billing_status": organization.billing_status,
+                "contracted_printer_limit": organization.contracted_printer_limit,
+            },
+        )
         if changes:
             write_audit(
                 db,
