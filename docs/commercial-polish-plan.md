@@ -14,6 +14,30 @@ Este plano organiza as 7 melhorias prioritarias para transformar o sistema atual
 
 A ordem foi escolhida para reduzir retrabalho: primeiro vem isolamento por empresa, depois distribuicao confiavel do agent, depois operacao remota, politicas, relatorios comerciais e, por ultimo, assinatura formal do instalador.
 
+## Benchmark competitivo 2026
+
+Referencias analisadas:
+
+- NDD Print Control: https://ndd.tech/dispositivos/print-control/
+- PaperCut NG: https://www.papercut.com/pt-br/ng/
+
+Resumo de mercado:
+
+- A NDD posiciona o Print Control para provedores de outsourcing e clientes finais, com foco em governanca, rastreabilidade, politicas, cotas, ESG, relatorios, alertas, API e operacao remota. A pagina tambem indica o modulo como "em breve", entao ha oportunidade para uma oferta mais simples e disponivel rapidamente no mercado brasileiro.
+- O PaperCut NG e uma referencia madura de gerenciamento autonomo de impressao, com rastreamento detalhado, relatorios, reducao de desperdicio, politicas ecologicas, compatibilidade ampla e licenciamento baseado em usuarios.
+
+Implicacoes para o nosso produto:
+
+- Nao competir inicialmente como suite enterprise completa; competir como SaaS simples, rapido de instalar e adequado a revendas/provedores pequenos e medios.
+- Priorizar instalador unico, agent estavel, painel de saude, relatorios mensais bonitos e baixo esforco operacional.
+- Tratar duplicidade de impressoras por aliases/fingerprint como diferencial essencial, principalmente em ambientes sem servidor de impressao.
+- Suportar impressoras USB na bilhetagem, assumindo que telemetria SNMP pode ficar indisponivel nesses casos.
+- Usar politicas, cotas, ESG e fechamento mensal como linguagem comercial, nao apenas como telas tecnicas.
+
+Posicionamento recomendado:
+
+Bilhetagem SaaS simples para empresas e provedores de outsourcing no Brasil, com agent leve, instalacao facil, relatorios claros, monitoramento SNMP quando disponivel e controle por usuario, departamento, impressora e fila.
+
 ## 1. Multiempresa real
 
 Objetivo: permitir que uma unica VPS atenda varios clientes com isolamento de dados, configuracoes e agentes.
