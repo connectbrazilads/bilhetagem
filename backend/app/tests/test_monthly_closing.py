@@ -16,7 +16,7 @@ from app.models.organization import Organization
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.schemas.settings import MonthlyReportEmailSettings
-from app.schemas.report import MonthlyClosingCreate
+from app.schemas.report import MonthlyClosingCreate, MonthlyClosingRead
 from app.services.email_service import send_due_monthly_report_email, send_monthly_closing_email
 from app.services.email_scheduler import send_due_monthly_reports_once
 from app.models.user import User, UserRole
@@ -165,6 +165,11 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
         },
     ]
     assert closing.snapshot["organization"] == {"id": 1, "name": "Cliente Fechamento", "slug": "cliente-fechamento"}
+    validated_closing = MonthlyClosingRead.model_validate(closing)
+    assert validated_closing.snapshot.organization.slug == "cliente-fechamento"
+    assert validated_closing.snapshot.totals.released_jobs == 1
+    assert validated_closing.snapshot.by_policy[0].name == "Bloquear colorido"
+    assert validated_closing.snapshot.eco.pages_saved == 3
 
     user.full_name = "Ana Renomeada"
     printer.name = "KONICA_NOVA"

@@ -65,6 +65,78 @@ class DashboardMetrics(BaseModel):
     eco_metrics: DashboardEcoMetrics | None = None
 
 
+class MonthlyClosingOrganizationSnapshot(BaseModel):
+    id: int
+    name: str
+    slug: str
+
+
+class MonthlyClosingPeriodSnapshot(BaseModel):
+    year: int
+    month: int
+    start: str
+    end: str
+
+
+class MonthlyClosingTotalsSnapshot(BaseModel):
+    total_jobs: int = 0
+    billable_jobs: int = 0
+    pending_jobs: int = 0
+    pending_pages: int = 0
+    blocked_jobs: int = 0
+    total_pages: int = 0
+    mono_pages: int = 0
+    color_pages: int = 0
+    blocked_pages: int = 0
+    total_cost: float = 0.0
+    released_jobs: int = 0
+
+
+class MonthlyClosingUsageSnapshot(BaseModel):
+    name: str
+    jobs: int = 0
+    pages: int = 0
+    mono_pages: int = 0
+    color_pages: int = 0
+    cost: float = 0.0
+    cost_per_page: float = 0.0
+
+
+class MonthlyClosingPolicySnapshot(BaseModel):
+    name: str
+    action: str = ""
+    jobs: int = 0
+    billable_jobs: int = 0
+    pending_jobs: int = 0
+    pending_pages: int = 0
+    blocked_jobs: int = 0
+    pages: int = 0
+    mono_pages: int = 0
+    color_pages: int = 0
+    saved_pages: int = 0
+    cost: float = 0.0
+    cost_per_page: float = 0.0
+
+
+class MonthlyClosingEcoSnapshot(BaseModel):
+    pages_saved: int = 0
+    co2_saved_g: float = 0.0
+    water_saved_l: float = 0.0
+    trees_saved: float = 0.0
+
+
+class MonthlyClosingSnapshot(BaseModel):
+    organization: MonthlyClosingOrganizationSnapshot
+    period: MonthlyClosingPeriodSnapshot
+    totals: MonthlyClosingTotalsSnapshot
+    by_user: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)
+    by_department: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)
+    by_printer: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)
+    by_type: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)
+    by_policy: list[MonthlyClosingPolicySnapshot] = Field(default_factory=list)
+    eco: MonthlyClosingEcoSnapshot
+
+
 class MonthlyClosingCreate(BaseModel):
     year: int = Field(ge=2000, le=2100)
     month: int = Field(ge=1, le=12)
@@ -83,7 +155,7 @@ class MonthlyClosingRead(BaseModel):
     color_pages: int
     blocked_pages: int
     total_cost: float
-    snapshot: dict
+    snapshot: MonthlyClosingSnapshot
     generated_at: datetime
 
     model_config = {"from_attributes": True}
