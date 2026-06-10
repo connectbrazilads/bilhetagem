@@ -23,6 +23,56 @@ type AuditFacets = {
   entities: string[];
 };
 
+const ACTION_LABELS: Record<string, string> = {
+  agent_queue_action_created: "Acao remota criada",
+  agent_queue_action_dispatched: "Acao remota enviada",
+  agent_queue_action_finished: "Acao remota finalizada",
+  audit_logs_exported: "Auditoria exportada",
+  department_created: "Departamento criado",
+  department_deleted: "Departamento excluido",
+  department_updated: "Departamento atualizado",
+  ldap_settings_updated: "LDAP atualizado",
+  ldap_sync_performed: "LDAP sincronizado",
+  monthly_closing_due_email_sent: "Fechamento mensal enviado",
+  monthly_closing_exported: "Fechamento mensal exportado",
+  monthly_closing_generated: "Fechamento mensal gerado",
+  monthly_report_email_settings_updated: "Envio mensal atualizado",
+  pending_jobs_auto_released: "Fila liberada automaticamente",
+  policy_created: "Politica criada",
+  policy_deleted: "Politica excluida",
+  policy_reordered: "Politicas reordenadas",
+  policy_updated: "Politica atualizada",
+  print_job_authorized: "Impressao autorizada",
+  print_job_blocked: "Impressao bloqueada",
+  print_job_cancelled: "Impressao cancelada",
+  print_job_released: "Impressao liberada",
+  printer_created: "Impressora criada",
+  printer_deleted: "Impressora excluida",
+  printer_merged: "Impressora mesclada",
+  printer_updated: "Impressora atualizada",
+  quota_updated: "Cota atualizada",
+  report_exported: "Relatorio exportado",
+  settings_updated: "Configuracoes atualizadas",
+  user_created: "Usuario criado",
+  user_deleted: "Usuario excluido",
+  user_updated: "Usuario atualizado",
+  web_print_confirmed: "Web Print confirmado",
+};
+
+const ENTITY_LABELS: Record<string, string> = {
+  agent_queue_actions: "Acoes remotas",
+  audit_logs: "Auditoria",
+  departments: "Departamentos",
+  organizations: "Empresas",
+  print_jobs: "Impressoes",
+  print_policies: "Politicas",
+  printers: "Impressoras",
+  quotas: "Cotas",
+  reports: "Relatorios",
+  settings: "Configuracoes",
+  users: "Usuarios",
+};
+
 export default function AuditPage() {
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [facets, setFacets] = useState<AuditFacets>({ actions: [], entities: [] });
@@ -71,7 +121,7 @@ export default function AuditPage() {
     setError(null);
     const params = buildParams("5000");
     try {
-      await downloadBlob(`/audit-logs/export?${params.toString()}`, "auditoria.csv", token);
+      await downloadBlob(`/audit-logs/export?${params.toString()}`, buildAuditFilename(dateFrom, dateTo), token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao exportar auditoria");
     }
@@ -149,7 +199,7 @@ export default function AuditPage() {
             <option value="">Todas as acoes</option>
             {facets.actions.map((item) => (
               <option key={item} value={item}>
-                {item}
+                {auditActionLabel(item)}
               </option>
             ))}
           </select>
@@ -161,7 +211,7 @@ export default function AuditPage() {
             <option value="">Todas as entidades</option>
             {facets.entities.map((item) => (
               <option key={item} value={item}>
-                {item}
+                {entityLabel(item)}
               </option>
             ))}
           </select>
@@ -200,10 +250,14 @@ export default function AuditPage() {
                     <td className="whitespace-nowrap p-4 text-muted-foreground">{new Date(log.created_at).toLocaleString("pt-BR")}</td>
                     <td className="p-4 font-medium">{log.actor_username || "Sistema"}</td>
                     <td className="p-4">
-                      <span className="inline-flex rounded-full border bg-muted px-2 py-0.5 font-mono text-xs">{log.action}</span>
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${auditActionClass(log.action)}`} title={log.action}>
+                        {auditActionLabel(log.action)}
+                      </span>
                     </td>
                     <td className="p-4">
-                      <div className="font-medium">{log.entity}</div>
+                      <div className="font-medium" title={log.entity}>
+                        {entityLabel(log.entity)}
+                      </div>
                       <div className="text-xs text-muted-foreground">{log.entity_id ? `#${log.entity_id}` : "-"}</div>
                     </td>
                     <td className="min-w-[260px] p-4 font-mono text-xs text-muted-foreground">
@@ -293,6 +347,37 @@ function isCriticalAuditAction(action: string) {
     action.startsWith("user_") ||
     action.startsWith("printer_")
   );
+}
+
+function auditActionLabel(action: string) {
+  if (ACTION_LABELS[action]) return ACTION_LABELS[action];
+  return humanizeKey(action);
+}
+
+function entityLabel(entity: string) {
+  if (ENTITY_LABELS[entity]) return ENTITY_LABELS[entity];
+  return humanizeKey(entity);
+}
+
+function auditActionClass(action: string) {
+  if (action.includes("deleted") || action.includes("blocked") || action.includes("cancelled")) {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+  if (action.includes("updated") || action.includes("reordered") || action.includes("settings")) {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  if (action.includes("exported") || action.includes("generated") || action.includes("sent")) {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+  if (action.includes("created") || action.includes("authorized") || action.includes("released") || action.includes("confirmed")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  return "border-slate-200 bg-slate-100 text-slate-700";
+}
+
+function buildAuditFilename(dateFrom: string, dateTo: string) {
+  const suffix = dateFrom || dateTo ? `-${dateFrom || "inicio"}-${dateTo || "hoje"}` : "";
+  return `auditoria${suffix}.csv`;
 }
 
 function readError(err: { message?: string }) {
