@@ -100,6 +100,8 @@ class AgentRecentJobRead(BaseModel):
     pages: int
     is_color: bool
     status: str
+    policy_name: str | None = None
+    policy_action: str | None = None
     submitted_at: datetime
 
 

@@ -31,6 +31,8 @@ type AgentRecentJob = {
   pages: number;
   is_color: boolean;
   status: string;
+  policy_name: string | null;
+  policy_action: string | null;
   submitted_at: string;
 };
 
@@ -147,6 +149,14 @@ function queueActionStatusClass(action: AgentQueueAction) {
   if (action.status === "succeeded") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (action.status === "failed") return "border-red-200 bg-red-50 text-red-700";
   return "border-blue-200 bg-blue-50 text-blue-700";
+}
+
+function policyActionLabel(action: string | null) {
+  if (action === "allow") return "Excecao";
+  if (action === "block") return "Bloqueio";
+  if (action === "require_release") return "Liberacao";
+  if (action === "force_mono") return "Cobrar P&B";
+  return "Politica";
 }
 
 function isStaleQueueAction(action: AgentQueueAction) {
@@ -967,6 +977,7 @@ export default function AgentsPage() {
                         <th className="p-3">Usuario</th>
                         <th className="p-3">Impressora</th>
                         <th className="p-3">Documento</th>
+                        <th className="p-3">Politica</th>
                         <th className="p-3">Paginas</th>
                       </tr>
                     </thead>
@@ -982,12 +993,26 @@ export default function AgentsPage() {
                               <span className="truncate">{job.document_name || "-"}</span>
                             </div>
                           </td>
+                          <td className="p-3">
+                            {job.policy_name ? (
+                              <div>
+                                <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                                  {policyActionLabel(job.policy_action)}
+                                </span>
+                                <div className="mt-1 max-w-[180px] truncate text-xs font-medium" title={job.policy_name}>
+                                  {job.policy_name}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </td>
                           <td className="p-3">{job.pages}</td>
                         </tr>
                       ))}
                       {selectedAgent.recent_jobs.length === 0 ? (
                         <tr>
-                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={5}>
+                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={6}>
                             Nenhum job recente deste agent.
                           </td>
                         </tr>

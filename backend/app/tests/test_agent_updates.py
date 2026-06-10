@@ -27,6 +27,7 @@ from app.models.audit_log import AuditLog
 from app.models.organization import Organization
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
+from app.models.print_job import JobStatus, PrintJob
 from app.models.user import User, UserRole
 from app.schemas.agent import AgentHeartbeatPayload, AgentQueueActionCreate, AgentQueueActionResult, AgentQueueBulkActionCreate
 
@@ -495,6 +496,41 @@ def test_agent_heartbeat_stores_recent_logs(db_session: Session):
     assert [log.message for log in detail.recent_logs] == ["Nivel desconhecido vira info", "Falha temporaria ao consultar SNMP"]
     assert {log.level for log in detail.recent_logs} == {"info", "warning"}
     assert detail.recent_logs[0].source == "diagnostic"
+
+
+def test_agent_detail_recent_jobs_include_policy_context(db_session: Session):
+    actor = User(username="agent-policy-job-admin", full_name="Agent Policy Job", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="agent-policy-job-user", full_name="Agent Policy User", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA POLICY JOB", is_color=True)
+    db_session.add_all([actor, user, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-policy-job", computer_name="PC-POLICY-JOB"),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        agent_id=agent.id,
+        pages=2,
+        is_color=True,
+        cost=0.50,
+        status=JobStatus.blocked,
+        document_name="Contrato.pdf",
+        policy_name="Bloquear colorido",
+        policy_action="block",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    detail = get_agent_detail(agent_id=agent.id, db=db_session, actor=actor)
+
+    assert detail.recent_jobs[0].document_name == "Contrato.pdf"
+    assert detail.recent_jobs[0].policy_name == "Bloquear colorido"
+    assert detail.recent_jobs[0].policy_action == "block"
 
 
 def test_agent_error_logs_create_operational_alert(db_session: Session):

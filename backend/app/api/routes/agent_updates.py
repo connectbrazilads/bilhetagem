@@ -295,6 +295,8 @@ def _recent_jobs(db: Session, agent: PrintAgent) -> list[AgentRecentJobRead]:
             pages=job.pages,
             is_color=job.is_color,
             status=job.status.value if hasattr(job.status, "value") else str(job.status),
+            policy_name=job.policy_name,
+            policy_action=job.policy_action,
             submitted_at=job.submitted_at,
         )
         for job in jobs
