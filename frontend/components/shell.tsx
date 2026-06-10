@@ -136,11 +136,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function billingStatusLabel(status: string) {
   if (status === "trial") return "Teste";
+  if (status === "active") return "Em dia";
   if (status === "past_due") return "Em atraso";
   return "";
 }
 
 function billingStatusClass(status: string) {
+  if (status === "active") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "past_due") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-blue-200 bg-blue-50 text-blue-700";
 }
