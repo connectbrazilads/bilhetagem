@@ -360,6 +360,8 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
             if len(expected_sha256) != 64 or any(char not in "0123456789abcdef" for char in expected_sha256):
                 raise RuntimeError(f"Servidor informou SHA256 invalido da atualizacao do agent: {expected_sha256}")
             update_bytes = self.api_client.download_agent_update()
+            if not update_bytes:
+                raise RuntimeError("Atualizacao do agent vazia")
             actual_sha256 = hashlib.sha256(update_bytes).hexdigest()
             if actual_sha256.lower() != expected_sha256:
                 raise RuntimeError(

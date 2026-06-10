@@ -105,6 +105,34 @@ def test_agent_update_rejects_malformed_sha_before_download(monkeypatch, tmp_pat
     assert "Servidor informou SHA256 invalido" in monitor._last_error
 
 
+def test_agent_update_rejects_empty_download(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
+    monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)
+
+    class FakeApiClient:
+        def get_agent_version_info(self, current_version: str) -> dict:
+            return {
+                "latest_version": "0.3.0",
+                "update_available": True,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            }
+
+        def download_agent_update(self) -> bytes:
+            return b""
+
+    monitor = SpoolMonitor(
+        FakeApiClient(),
+        agent_config=AgentConfig(auto_update_enabled=True, update_check_interval_seconds=0),
+        sleep=lambda _: None,
+    )
+
+    monitor._check_agent_update_if_due()
+
+    assert not (tmp_path / "PrintBillingAgent.update.exe").exists()
+    assert monitor._last_error is not None
+    assert "Atualizacao do agent vazia" in monitor._last_error
+
+
 def test_agent_heartbeat_reports_local_admin_state(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
     monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)
