@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.password_policy import is_unsafe_initial_password
 
@@ -17,6 +17,13 @@ class OrganizationCreate(BaseModel):
     admin_password: str = Field(min_length=8, max_length=120)
     agent_username: str = Field(default="agent", min_length=2, max_length=120)
     agent_password: str = Field(min_length=8, max_length=120)
+
+    @field_validator("slug", "admin_username", "agent_username", mode="before")
+    @classmethod
+    def normalize_identifiers(cls, value):
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
 
     @model_validator(mode="after")
     def validate_initial_users(self):

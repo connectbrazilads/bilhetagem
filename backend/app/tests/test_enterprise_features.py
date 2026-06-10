@@ -1788,6 +1788,40 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
     assert "ClienteNovoAgentPassword2026" not in str(audit.log_metadata)
 
 
+def test_creating_organization_normalizes_slug_and_initial_usernames(db_session: Session):
+    platform_admin = User(username="platform-normalize-admin", full_name="Platform Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(platform_admin)
+    db_session.commit()
+
+    created = create_organization(
+        OrganizationCreate(
+            name="Cliente Normalizado",
+            slug=" CLIENTE-NORMALIZADO ",
+            admin_username=" Admin.Cliente ",
+            admin_password="ClienteNormalizadoAdminPassword2026",
+            agent_username=" Agent.Cliente ",
+            agent_password="ClienteNormalizadoAgentPassword2026",
+        ),
+        db=db_session,
+        actor=platform_admin,
+    )
+
+    seeded_users = db_session.query(User).filter(User.organization_id == created.id).order_by(User.username).all()
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "organization_created").one()
+    token = login(
+        LoginRequest(username=" admin.cliente ", password="ClienteNormalizadoAdminPassword2026", organization_slug=" CLIENTE-NORMALIZADO "),
+        db=db_session,
+    )
+
+    assert created.slug == "cliente-normalizado"
+    assert [user.username for user in seeded_users] == ["admin.cliente", "agent.cliente"]
+    assert audit.log_metadata["slug"] == "cliente-normalizado"
+    assert audit.log_metadata["admin_username"] == "admin.cliente"
+    assert audit.log_metadata["agent_username"] == "agent.cliente"
+    assert token.organization_id == created.id
+    assert token.organization_slug == "cliente-normalizado"
+
+
 def test_organization_create_rejects_default_or_shared_initial_passwords():
     with pytest.raises(ValidationError):
         OrganizationCreate(
