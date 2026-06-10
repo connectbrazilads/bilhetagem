@@ -91,9 +91,13 @@ def update_monthly_report_email_settings_endpoint(
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> MonthlyReportEmailSettings:
     try:
-        validate_recipients(payload.recipients)
+        recipients = validate_recipients(payload.recipients)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    if payload.enabled and not recipients:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Informe ao menos um destinatario para ativar o envio mensal")
+    if payload.enabled and not payload.include_pdf and not payload.include_xlsx:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selecione ao menos um formato de anexo para ativar o envio mensal")
     before = get_monthly_report_email_settings(db, actor.organization_id)
     updated = update_monthly_report_email_settings(db, payload.model_dump(), actor.organization_id)
     changes = _changed_values(before, updated)

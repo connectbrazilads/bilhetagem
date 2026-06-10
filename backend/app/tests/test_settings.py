@@ -456,6 +456,54 @@ def test_monthly_report_email_settings_reject_invalid_recipients_without_audit(d
     assert db_session.query(AuditLog).filter(AuditLog.action == "monthly_report_email_settings_updated").count() == 0
 
 
+def test_monthly_report_email_settings_require_recipients_when_enabled(db_session: Session):
+    actor = User(username="admin-email-no-recipient", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        update_monthly_report_email_settings_endpoint(
+            payload=MonthlyReportEmailSettings(
+                enabled=True,
+                recipients="  ",
+                day_of_month=5,
+                include_pdf=True,
+                include_xlsx=True,
+            ),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert exc.value.status_code == 400
+    assert "destinatario" in exc.value.detail
+    assert db_session.query(SystemSetting).filter(SystemSetting.key == "monthly_report_email_enabled").count() == 0
+    assert db_session.query(AuditLog).filter(AuditLog.action == "monthly_report_email_settings_updated").count() == 0
+
+
+def test_monthly_report_email_settings_require_attachment_when_enabled(db_session: Session):
+    actor = User(username="admin-email-no-attachment", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        update_monthly_report_email_settings_endpoint(
+            payload=MonthlyReportEmailSettings(
+                enabled=True,
+                recipients="financeiro@empresa.com",
+                day_of_month=5,
+                include_pdf=False,
+                include_xlsx=False,
+            ),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert exc.value.status_code == 400
+    assert "formato de anexo" in exc.value.detail
+    assert db_session.query(SystemSetting).filter(SystemSetting.key == "monthly_report_email_enabled").count() == 0
+    assert db_session.query(AuditLog).filter(AuditLog.action == "monthly_report_email_settings_updated").count() == 0
+
+
 def test_monthly_report_email_settings_fall_back_when_stored_values_are_invalid(db_session: Session):
     actor = User(username="admin-invalid-email-settings", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add(actor)
