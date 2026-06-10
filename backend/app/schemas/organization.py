@@ -20,5 +20,9 @@ class OrganizationRead(BaseModel):
     slug: str
     is_active: bool
     created_at: datetime
+    users_count: int = 0
+    printers_count: int = 0
+    agents_count: int = 0
+    jobs_count: int = 0
 
     model_config = {"from_attributes": True}

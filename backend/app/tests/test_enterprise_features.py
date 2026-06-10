@@ -13,6 +13,7 @@ from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
 from app.api.routes.auth import login
 from app.api.routes.audit_logs import export_audit_logs, list_audit_logs
+from app.api.routes.organizations import list_organizations
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
 from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
@@ -364,6 +365,62 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
     assert db_session.query(User).filter(User.username == "admin").count() == 2
     assert db_session.query(Printer).filter(Printer.name == "KONICA").count() == 2
     assert token.organization_id == other_org.id
+
+
+def test_organization_list_includes_scoped_usage_counts(db_session: Session):
+    other_org = Organization(name="Cliente Usage", slug="cliente-usage", is_active=True)
+    admin = User(username="usage-admin", full_name="Usage Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add_all([other_org, admin])
+    db_session.flush()
+
+    default_user = User(username="usage-user-a", full_name="Usage A", role=UserRole.user, is_active=True, organization_id=1)
+    default_printer = Printer(name="Usage Printer A", is_color=False, organization_id=1)
+    default_agent = PrintAgent(agent_uid="usage-agent-a", computer_name="PC-A", organization_id=1)
+    other_user = User(username="usage-user-b", full_name="Usage B", role=UserRole.user, is_active=True, organization_id=other_org.id)
+    other_printer = Printer(name="Usage Printer B", is_color=False, organization_id=other_org.id)
+    other_agent = PrintAgent(agent_uid="usage-agent-b", computer_name="PC-B", organization_id=other_org.id)
+    db_session.add_all([default_user, default_printer, default_agent, other_user, other_printer, other_agent])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PrintJob(
+                organization_id=1,
+                user_id=default_user.id,
+                printer_id=default_printer.id,
+                agent_id=default_agent.id,
+                pages=1,
+                is_color=False,
+                cost=0.05,
+                status=JobStatus.authorized,
+                submitted_at=datetime.now(timezone.utc),
+            ),
+            PrintJob(
+                organization_id=other_org.id,
+                user_id=other_user.id,
+                printer_id=other_printer.id,
+                agent_id=other_agent.id,
+                pages=2,
+                is_color=False,
+                cost=0.10,
+                status=JobStatus.authorized,
+                submitted_at=datetime.now(timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    rows = list_organizations(db=db_session, actor=admin)
+    default_row = next(row for row in rows if row.id == 1)
+    other_row = next(row for row in rows if row.id == other_org.id)
+
+    assert default_row.users_count >= 2
+    assert default_row.printers_count >= 1
+    assert default_row.agents_count >= 1
+    assert default_row.jobs_count == 1
+    assert other_row.users_count == 1
+    assert other_row.printers_count == 1
+    assert other_row.agents_count == 1
+    assert other_row.jobs_count == 1
 
 
 def test_department_admin_crud_is_scoped_and_protects_in_use_departments(db_session: Session):

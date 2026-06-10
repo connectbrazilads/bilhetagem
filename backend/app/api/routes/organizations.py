@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.organization import Organization
+from app.models.print_agent import PrintAgent
+from app.models.print_job import PrintJob
+from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationUpdate
 from app.services.audit_service import write_audit
@@ -17,14 +20,29 @@ def _can_manage_all(actor: User) -> bool:
     return bool(actor.organization and actor.organization.slug == DEFAULT_ORGANIZATION_SLUG and actor.role == UserRole.admin)
 
 
+def _organization_read(db: Session, organization: Organization) -> OrganizationRead:
+    return OrganizationRead(
+        id=organization.id,
+        name=organization.name,
+        slug=organization.slug,
+        is_active=organization.is_active,
+        created_at=organization.created_at,
+        users_count=db.query(User).filter(User.organization_id == organization.id).count(),
+        printers_count=db.query(Printer).filter(Printer.organization_id == organization.id).count(),
+        agents_count=db.query(PrintAgent).filter(PrintAgent.organization_id == organization.id).count(),
+        jobs_count=db.query(PrintJob).filter(PrintJob.organization_id == organization.id).count(),
+    )
+
+
 @router.get("", response_model=list[OrganizationRead])
 def list_organizations(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
-) -> list[Organization]:
+) -> list[OrganizationRead]:
     if not _can_manage_all(actor):
-        return [actor.organization]
-    return db.query(Organization).order_by(Organization.name).all()
+        return [_organization_read(db, actor.organization)]
+    organizations = db.query(Organization).order_by(Organization.name).all()
+    return [_organization_read(db, organization) for organization in organizations]
 
 
 @router.post("", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED)
@@ -32,7 +50,7 @@ def create_organization(
     payload: OrganizationCreate,
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
-) -> Organization:
+) -> OrganizationRead:
     if not _can_manage_all(actor):
         raise HTTPException(status_code=403, detail="Somente o admin da empresa padrao pode criar empresas")
     organization = Organization(name=payload.name, slug=payload.slug, is_active=payload.is_active)
@@ -50,7 +68,7 @@ def create_organization(
         )
         db.commit()
         db.refresh(organization)
-        return organization
+        return _organization_read(db, organization)
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Empresa ja cadastrada") from exc
@@ -62,7 +80,7 @@ def update_organization(
     payload: OrganizationUpdate,
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
-) -> Organization:
+) -> OrganizationRead:
     if not _can_manage_all(actor) and actor.organization_id != organization_id:
         raise HTTPException(status_code=403, detail="Permissao insuficiente")
     organization = db.query(Organization).filter(Organization.id == organization_id).first()
@@ -86,7 +104,7 @@ def update_organization(
         )
         db.commit()
         db.refresh(organization)
-        return organization
+        return _organization_read(db, organization)
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Nome de empresa ja cadastrado") from exc

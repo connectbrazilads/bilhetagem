@@ -13,6 +13,10 @@ type OrganizationRow = {
   slug: string;
   is_active: boolean;
   created_at: string;
+  users_count: number;
+  printers_count: number;
+  agents_count: number;
+  jobs_count: number;
 };
 
 const emptyForm = { name: "", slug: "", is_active: true };
@@ -38,6 +42,7 @@ export default function OrganizationsPage() {
       total: organizations.length,
       active: organizations.filter((organization) => organization.is_active).length,
       inactive: organizations.filter((organization) => !organization.is_active).length,
+      jobs: organizations.reduce((total, organization) => total + organization.jobs_count, 0),
     };
   }, [organizations]);
 
@@ -83,10 +88,11 @@ export default function OrganizationsPage() {
         <p className="mt-1 text-sm text-muted-foreground">Gerencie clientes e o isolamento de dados do ambiente SaaS.</p>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-3">
+      <div className="mb-4 grid gap-4 md:grid-cols-4">
         <Summary label="Empresas" value={summary.total} icon={Building2} />
         <Summary label="Ativas" value={summary.active} icon={Power} />
         <Summary label="Inativas" value={summary.inactive} icon={Power} />
+        <Summary label="Jobs registrados" value={summary.jobs} icon={Power} />
       </div>
 
       <Surface as="form" className="mb-4 grid gap-3 p-4 lg:grid-cols-[1fr_220px_auto]" onSubmit={submit}>
@@ -142,6 +148,7 @@ export default function OrganizationsPage() {
                 <tr>
                   <th className="p-4">Empresa</th>
                   <th className="p-4">Slug</th>
+                  <th className="p-4">Uso</th>
                   <th className="p-4">Criada em</th>
                   <th className="p-4">Status</th>
                   <th className="p-4 text-right">Acoes</th>
@@ -152,6 +159,14 @@ export default function OrganizationsPage() {
                   <tr key={organization.id} className="border-t bg-white transition-colors hover:bg-muted/30">
                     <td className="p-4 font-semibold">{organization.name}</td>
                     <td className="p-4 font-mono text-xs text-muted-foreground">{organization.slug}</td>
+                    <td className="p-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        <MetricPill label="Usuários" value={organization.users_count} />
+                        <MetricPill label="Impressoras" value={organization.printers_count} />
+                        <MetricPill label="Agents" value={organization.agents_count} />
+                        <MetricPill label="Jobs" value={organization.jobs_count} />
+                      </div>
+                    </td>
                     <td className="p-4 text-muted-foreground">{new Date(organization.created_at).toLocaleDateString("pt-BR")}</td>
                     <td className="p-4">
                       <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${organization.is_active ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
@@ -171,6 +186,14 @@ export default function OrganizationsPage() {
         )}
       </Surface>
     </ProtectedPage>
+  );
+}
+
+function MetricPill({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+      {value.toLocaleString("pt-BR")} {label}
+    </span>
   );
 }
 
