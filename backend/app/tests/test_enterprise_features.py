@@ -19,6 +19,7 @@ from app.models.user import User, UserRole
 from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
 from app.api.routes.auth import current_auth_context, login
+from app.api.routes.agent_updates import list_agents
 from app.api.routes.audit_logs import export_audit_logs, list_audit_log_facets, list_audit_logs
 from app.api.routes.organizations import create_organization, list_organizations, update_organization
 from app.api.routes.reports import export_report
@@ -835,7 +836,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     default_org = db_session.query(Organization).filter(Organization.id == 1).one()
     default_org.billing_plan = "professional"
     default_org.billing_status = "active"
-    default_org.contracted_printer_limit = 2
+    default_org.contracted_printer_limit = 3
     other_org = Organization(name="Cliente B", slug="cliente-b", is_active=True)
     db_session.add(other_org)
     db_session.flush()
@@ -851,8 +852,14 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         ip_address="192.168.10.20",
         toner_levels={"black": 8},
     )
+    org_one_duplicate_printer = Printer(
+        name="Org 1 Duplicate Printer",
+        is_color=False,
+        organization_id=1,
+        ip_address="192.168.10.20",
+    )
     org_two_printer = Printer(name="Org 2 Printer", is_color=False, organization_id=other_org.id, ip_address="192.168.20.20")
-    db_session.add_all([org_one_department, org_one_admin, org_one_user, org_two_user, org_one_printer, org_two_printer])
+    db_session.add_all([org_one_department, org_one_admin, org_one_user, org_two_user, org_one_printer, org_one_duplicate_printer, org_two_printer])
     db_session.flush()
     now = datetime.now(timezone.utc)
     org_one_online_agent = PrintAgent(
@@ -925,6 +932,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
                 queue_name="Org 1 Printer",
                 normalized_queue_name="org 1 printer",
                 connection_type="network",
+                ip_address="192.168.10.20",
                 last_seen_at=now,
             ),
             PrinterAlias(
@@ -968,6 +976,16 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
                 queue_name="USER",
                 normalized_queue_name="user",
                 connection_type="network",
+                last_seen_at=now,
+            ),
+            PrinterAlias(
+                organization_id=1,
+                printer_id=org_one_duplicate_printer.id,
+                agent_id=org_one_recent_log_agent.id,
+                queue_name="Org 1 Duplicate Printer",
+                normalized_queue_name="org 1 duplicate printer",
+                connection_type="network",
+                ip_address="192.168.10.20",
                 last_seen_at=now,
             ),
             AgentLog(
@@ -1042,6 +1060,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         actor=org_one_admin,
     )
     metrics = dashboard_metrics(db_session, organization_id=1)
+    agents = list_agents(db=db_session, actor=org_one_admin)
     export_response = export_report(format="xlsx", db=db_session, actor=org_one_admin)
     workbook = load_workbook(BytesIO(export_response.body), data_only=True)
     exported_users = [row[1].value for row in workbook["Impressoes"].iter_rows(min_row=2)]
@@ -1052,7 +1071,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     org_user_read = next(user for user in users if user.username == "org1-user")
     assert org_user_read.department_id == org_one_department.id
     assert org_user_read.department_name == "Financeiro"
-    assert [printer.name for printer in printers] == ["Org 1 Printer"]
+    assert [printer.name for printer in printers] == ["Org 1 Duplicate Printer", "Org 1 Printer"]
     assert [job.username for job in jobs] == ["org1-user"]
     assert jobs[0].department_id == org_one_department.id
     assert jobs[0].department_name == "Financeiro"
@@ -1061,9 +1080,9 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert metrics["contract_overview"] == {
         "billing_plan": "professional",
         "billing_status": "active",
-        "contracted_printer_limit": 2,
-        "active_printers_count": 1,
-        "printer_usage_percent": 50.0,
+        "contracted_printer_limit": 3,
+        "active_printers_count": 2,
+        "printer_usage_percent": 66.7,
         "printer_limit_status": "ok",
     }
     assert metrics["top_users"] == [
@@ -1077,25 +1096,29 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         "agents_online": 4,
         "agents_offline": 1,
         "agents_with_alerts": 5,
-        "printers_total": 1,
-        "printers_monitored": 1,
+        "printers_total": 2,
+        "printers_monitored": 2,
         "printers_unmonitored": 0,
         "low_toner_printers": 1,
         "unbound_queues": 1,
         "usb_queues": 1,
         "duplicate_queue_aliases": 1,
         "generic_queue_aliases": 1,
+        "hardware_identity_conflicts": 1,
         "pending_queue_actions": 1,
         "stale_queue_actions": 1,
     }
     validated_metrics = DashboardMetrics.model_validate(metrics)
     assert validated_metrics.contract_overview is not None
-    assert validated_metrics.contract_overview.printer_usage_percent == 50.0
+    assert validated_metrics.contract_overview.printer_usage_percent == 66.7
     assert validated_metrics.operational_health is not None
     assert validated_metrics.operational_health.duplicate_queue_aliases == 1
     assert validated_metrics.operational_health.generic_queue_aliases == 1
+    assert validated_metrics.operational_health.hardware_identity_conflicts == 1
     assert validated_metrics.operational_health.pending_queue_actions == 1
     assert validated_metrics.operational_health.stale_queue_actions == 1
+    recent_log_agent = next(agent for agent in agents if agent.agent_uid == "org1-recent-log-agent")
+    assert any(alert.code == "hardware_identity_conflict" for alert in recent_log_agent.health_alerts)
     assert validated_metrics.top_users[0].username == "Org 1 User"
     assert validated_metrics.top_printers[0].printer == "Org 1 Printer"
     assert validated_metrics.department_usage[0].department == "Financeiro"

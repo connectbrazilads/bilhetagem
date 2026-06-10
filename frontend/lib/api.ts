@@ -26,6 +26,7 @@ export type DashboardMetrics = {
     usb_queues: number;
     duplicate_queue_aliases: number;
     generic_queue_aliases: number;
+    hardware_identity_conflicts: number;
     pending_queue_actions: number;
     stale_queue_actions: number;
   } | null;

@@ -16,6 +16,7 @@ class OperationalHealth(BaseModel):
     usb_queues: int = 0
     duplicate_queue_aliases: int = 0
     generic_queue_aliases: int = 0
+    hardware_identity_conflicts: int = 0
     pending_queue_actions: int = 0
     stale_queue_actions: int = 0
 

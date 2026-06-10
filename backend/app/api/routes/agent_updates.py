@@ -41,6 +41,7 @@ from app.schemas.agent import (
 from app.services.audit_service import write_audit
 from app.services.agent_release_service import is_newer_version, published_agent_version, version_tuple
 from app.services.organization_service import DEFAULT_ORGANIZATION_SLUG
+from app.services.printer_identity_service import conflicting_alias_ids
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
@@ -449,7 +450,12 @@ def _recent_error_log_alert(db: Session, agent: PrintAgent) -> AgentHealthAlertR
     )
 
 
-def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None = None) -> list[AgentHealthAlertRead]:
+def _agent_health_alerts(
+    agent: PrintAgent,
+    is_online: bool,
+    db: Session | None = None,
+    conflict_alias_ids: set[int] | None = None,
+) -> list[AgentHealthAlertRead]:
     alerts: list[AgentHealthAlertRead] = []
     aliases = list(agent.aliases)
     present_aliases = [alias for alias in aliases if _alias_is_present(agent, alias)]
@@ -457,6 +463,11 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None 
     unbound_queues = [alias.queue_name for alias in present_aliases if alias.printer_id is None]
     duplicate_queues = _duplicate_present_queue_aliases(present_aliases)
     generic_queues = [alias.queue_name for alias in present_aliases if _is_generic_queue_name(alias.queue_name)]
+    identity_conflict_queues = [
+        alias.queue_name
+        for alias in present_aliases
+        if conflict_alias_ids is not None and alias.id in conflict_alias_ids
+    ]
     stale_actions = _stale_queue_actions(agent)
 
     if not is_online:
@@ -491,6 +502,17 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None 
         sample = ", ".join(generic_queues[:3])
         suffix = f": {sample}" if sample else ""
         alerts.append(AgentHealthAlertRead(code="generic_queue_names", severity="warning", message=f"{count} fila(s) com nome generico; padronize ou vincule a fila correta{suffix}"))
+    if identity_conflict_queues:
+        count = len(identity_conflict_queues)
+        sample = ", ".join(identity_conflict_queues[:3])
+        suffix = f": {sample}" if sample else ""
+        alerts.append(
+            AgentHealthAlertRead(
+                code="hardware_identity_conflict",
+                severity="warning",
+                message=f"{count} fila(s) com serial/IP/device/fingerprint vinculado a mais de uma impressora{suffix}",
+            )
+        )
     if stale_actions:
         count = len(stale_actions)
         sample = ", ".join(action.queue_name for action in stale_actions[:3])
@@ -571,7 +593,12 @@ def _alias_to_read(agent: PrintAgent, alias: PrinterAlias) -> AgentQueueRead:
     )
 
 
-def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | None = None) -> PrintAgentRead:
+def _agent_to_read(
+    agent: PrintAgent,
+    include_jobs: bool = False,
+    db: Session | None = None,
+    conflict_alias_ids: set[int] | None = None,
+) -> PrintAgentRead:
     is_online, status_text = _agent_status(agent)
     queue_actions = sorted(
         agent.queue_actions,
@@ -593,7 +620,7 @@ def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | 
         created_at=agent.created_at,
         is_online=is_online,
         status=status_text,
-        health_alerts=_agent_health_alerts(agent, is_online, db),
+        health_alerts=_agent_health_alerts(agent, is_online, db, conflict_alias_ids),
         aliases=[_alias_to_read(agent, alias) for alias in agent.aliases],
         recent_jobs=_recent_jobs(db, agent) if include_jobs and db is not None else [],
         queue_actions=queue_actions,
@@ -941,7 +968,8 @@ def list_agents(
         .order_by(PrintAgent.last_seen_at.desc().nullslast(), PrintAgent.computer_name, PrintAgent.id)
         .all()
     )
-    return [_agent_to_read(agent, db=db) for agent in agents]
+    conflict_ids = conflicting_alias_ids(db, actor.organization_id)
+    return [_agent_to_read(agent, db=db, conflict_alias_ids=conflict_ids) for agent in agents]
 
 
 @router.get("/agents/{agent_id}", response_model=PrintAgentRead)
@@ -962,7 +990,8 @@ def get_agent_detail(
     )
     if not agent:
         raise HTTPException(status_code=404, detail="Agent nao encontrado")
-    return _agent_to_read(agent, include_jobs=True, db=db)
+    conflict_ids = conflicting_alias_ids(db, actor.organization_id)
+    return _agent_to_read(agent, include_jobs=True, db=db, conflict_alias_ids=conflict_ids)
 
 
 @router.post("/agents/{agent_id}/queue-actions", response_model=AgentQueueActionRead)

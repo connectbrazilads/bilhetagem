@@ -402,6 +402,7 @@ export default function AgentsPage() {
         (agentStatusFilter === "outdated" && hasAlert(agent, "outdated_version")) ||
         (agentStatusFilter === "auto-update-off" && hasAlert(agent, "auto_update_disabled")) ||
         (agentStatusFilter === "unbound" && hasAlert(agent, "unbound_queues")) ||
+        (agentStatusFilter === "identity-conflict" && hasAlert(agent, "hardware_identity_conflict")) ||
         (agentStatusFilter === "generic" && hasAlert(agent, "generic_queue_names")) ||
         (agentStatusFilter === "stale" && hasAlert(agent, "stale_queues")) ||
         (agentStatusFilter === "usb" && agent.aliases.some((alias) => alias.is_present && alias.connection_type === "usb"));
@@ -495,6 +496,7 @@ export default function AgentsPage() {
             <option value="outdated">Versao desatualizada</option>
             <option value="auto-update-off">Auto-update desligado</option>
             <option value="unbound">Filas sem vinculo</option>
+            <option value="identity-conflict">Conflito fisico</option>
             <option value="generic">Filas genericas</option>
             <option value="stale">Filas ausentes</option>
             <option value="usb">Filas USB</option>

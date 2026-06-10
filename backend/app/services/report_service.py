@@ -15,6 +15,7 @@ from app.models.printer_alias import PrinterAlias
 from app.models.user import User
 from app.services.agent_release_service import is_newer_version, published_agent_version
 from app.services.organization_contract_service import printer_contract_overview
+from app.services.printer_identity_service import physical_identity_conflicts
 
 AGENT_ONLINE_WINDOW = timedelta(minutes=3)
 QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
@@ -178,6 +179,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     usb_queues = sum(1 for alias in present_aliases if alias.connection_type == "usb")
     duplicate_queue_aliases = _duplicate_queue_alias_count(present_aliases)
     generic_queue_aliases = sum(1 for alias in present_aliases if _is_generic_queue_name(alias.queue_name))
+    hardware_identity_conflicts = len(physical_identity_conflicts(db, organization_id))
     pending_queue_actions = (
         db.query(AgentQueueAction)
         .filter(
@@ -231,6 +233,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         "usb_queues": int(usb_queues),
         "duplicate_queue_aliases": duplicate_queue_aliases,
         "generic_queue_aliases": int(generic_queue_aliases),
+        "hardware_identity_conflicts": int(hardware_identity_conflicts),
         "pending_queue_actions": len(pending_queue_actions),
         "stale_queue_actions": int(stale_queue_actions),
     }
