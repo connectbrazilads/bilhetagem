@@ -295,6 +295,24 @@ export default function PoliciesPage() {
     }
   }
 
+  async function togglePolicyActive(policy: PolicyRow) {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setError(null);
+    try {
+      const updated = await apiFetch<PolicyRow>(`/policies/${policy.id}`, token, {
+        method: "PUT",
+        body: JSON.stringify({ is_active: !policy.is_active }),
+      });
+      setPolicies((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (editingId === updated.id) {
+        setForm((current) => ({ ...current, is_active: updated.is_active }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao alterar status da politica");
+    }
+  }
+
   function describePolicy(policy: PolicyRow) {
     const parts = [ruleLabels[policy.rule_type]];
     if (policy.max_pages) parts.push(`>${policy.max_pages} pag.`);
@@ -536,9 +554,20 @@ export default function PoliciesPage() {
                 <td className="p-4 text-muted-foreground">{describePolicy(policy)}</td>
                 <td className="p-4 font-medium">{actionLabels[policy.action]}</td>
                 <td className="p-4">
-                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${policy.is_active ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                  <label
+                    className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                      policy.is_active ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"
+                    }`}
+                    title={policy.is_active ? "Desativar politica" : "Ativar politica"}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5"
+                      checked={policy.is_active}
+                      onChange={() => togglePolicyActive(policy)}
+                    />
                     {policy.is_active ? "Ativa" : "Inativa"}
-                  </span>
+                  </label>
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-1">

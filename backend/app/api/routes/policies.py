@@ -52,6 +52,35 @@ def _validate_policy_fields(policy: PrintPolicy) -> None:
         raise HTTPException(status_code=422, detail="start_time e end_time obrigatorios para regra por horario")
 
 
+def _policy_snapshot(policy: PrintPolicy) -> dict:
+    return {
+        "name": policy.name,
+        "description": policy.description,
+        "priority": policy.priority,
+        "is_active": policy.is_active,
+        "rule_type": policy.rule_type.value,
+        "action": policy.action.value,
+        "user_id": policy.user_id,
+        "department_id": policy.department_id,
+        "printer_id": policy.printer_id,
+        "printer_alias_id": policy.printer_alias_id,
+        "queue_name": policy.queue_name,
+        "max_pages": policy.max_pages,
+        "days_of_week": policy.days_of_week,
+        "start_time": policy.start_time.isoformat() if policy.start_time else None,
+        "end_time": policy.end_time.isoformat() if policy.end_time else None,
+        "message": policy.message,
+    }
+
+
+def _changed_values(before: dict, after: dict) -> dict:
+    return {
+        key: {"before": before.get(key), "after": after_value}
+        for key, after_value in after.items()
+        if before.get(key) != after_value
+    }
+
+
 @router.get("", response_model=list[PrintPolicyRead])
 def list_policies(
     db: Session = Depends(get_db),
@@ -186,6 +215,7 @@ def update_policy(
     _validate_scope(db, payload, actor.organization_id)
 
     data = payload.model_dump(exclude_unset=True)
+    before = _policy_snapshot(policy)
     for field, value in data.items():
         if field in {"name", "description", "queue_name", "days_of_week", "message"}:
             setattr(policy, field, _clean_optional(value))
@@ -193,7 +223,16 @@ def update_policy(
             setattr(policy, field, value)
     _validate_policy_fields(policy)
     try:
-        write_audit(db, action="policy_updated", entity="print_policies", entity_id=policy.id, actor_user_id=actor.id)
+        changes = _changed_values(before, _policy_snapshot(policy))
+        if changes:
+            write_audit(
+                db,
+                action="policy_updated",
+                entity="print_policies",
+                entity_id=policy.id,
+                actor_user_id=actor.id,
+                metadata={"changes": changes},
+            )
         db.commit()
         db.refresh(policy)
         return policy

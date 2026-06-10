@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.api.routes.policies import reorder_policies
+from app.api.routes.policies import reorder_policies, update_policy
 from app.models.audit_log import AuditLog
 from app.models.department import Department
 from app.models.print_job import JobStatus, PrintJob
@@ -10,7 +10,7 @@ from app.models.print_policy import PolicyAction, PolicyRuleType, PrintPolicy
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate
-from app.schemas.policy import PrintPolicyReorder
+from app.schemas.policy import PrintPolicyReorder, PrintPolicyUpdate
 from app.services.policy_service import simulate_print_policy
 from app.services.print_job_service import register_print_job
 
@@ -222,6 +222,27 @@ def test_reorder_policies_updates_priorities_and_audits(db_session: Session):
     audit = db_session.query(AuditLog).filter(AuditLog.action == "policy_reordered").one()
     assert audit.log_metadata["old_order"][0]["id"] == policies[0].id
     assert audit.log_metadata["new_order"][0] == {"id": policies[2].id, "priority": 10}
+
+
+def test_update_policy_active_status_audits_changes(db_session: Session):
+    actor = _admin(db_session)
+    policy = PrintPolicy(
+        organization_id=1,
+        name="Status auditavel",
+        priority=10,
+        rule_type=PolicyRuleType.color,
+        action=PolicyAction.block,
+        is_active=True,
+    )
+    db_session.add(policy)
+    db_session.commit()
+
+    updated = update_policy(policy.id, PrintPolicyUpdate(is_active=False), db=db_session, actor=actor)
+
+    assert updated.is_active is False
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "policy_updated").one()
+    assert audit.entity_id == policy.id
+    assert audit.log_metadata["changes"]["is_active"] == {"before": True, "after": False}
 
 
 def test_policy_simulation_does_not_create_job_or_debit_quota(db_session: Session):
