@@ -423,6 +423,7 @@ export default function ReportsPage() {
                   <th className="p-4 text-right">Paginas</th>
                   <th className="p-4 text-right">Custo</th>
                   <th className="p-4">Tipo</th>
+                  <th className="p-4">Politica</th>
                   <th className="p-4">Status</th>
                 </tr>
               </thead>
@@ -446,6 +447,20 @@ export default function ReportsPage() {
                       <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${job.is_color ? "border-purple-200 bg-purple-50 text-purple-700" : "border-slate-200 bg-slate-100 text-slate-700"}`}>
                         {job.is_color ? "Colorido" : "P&B"}
                       </span>
+                    </td>
+                    <td className="min-w-[180px] p-4">
+                      {job.policy_name ? (
+                        <div title={job.reason || job.policy_name}>
+                          <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                            {policyActionLabel(job.policy_action)}
+                          </span>
+                          <div className="mt-1 max-w-[220px] truncate text-xs font-medium" title={job.policy_name}>
+                            {job.policy_name}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </td>
                     <td className="p-4">
                       <span
@@ -501,6 +516,14 @@ function statusLabel(status: string) {
   if (status === "pending_release") return "Pendente";
   if (status === "cancelled") return "Cancelada";
   return "Bloqueada";
+}
+
+function policyActionLabel(action?: string | null) {
+  if (action === "allow") return "Excecao";
+  if (action === "block") return "Bloqueio";
+  if (action === "require_release") return "Liberacao";
+  if (action === "force_mono") return "Cobrar P&B";
+  return "Politica";
 }
 
 function Summary({ label, value, icon: Icon }: { label: string; value: number | string; icon: typeof FileText }) {
