@@ -216,12 +216,12 @@ def test_deployment_organizations_are_scoped_for_download_commands(db_session: S
     other_org = Organization(name="Cliente Download", slug="cliente-download", is_active=True)
     third_org = Organization(name="Cliente Inativo Download", slug="cliente-inativo-download", is_active=False)
     platform_admin = User(username="platform-download-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
-    tenant_manager = User(username="tenant-download-manager", full_name="Manager", role=UserRole.manager, is_active=True, organization=other_org)
-    db_session.add_all([other_org, third_org, platform_admin, tenant_manager])
+    tenant_admin = User(username="tenant-download-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization=other_org)
+    db_session.add_all([other_org, third_org, platform_admin, tenant_admin])
     db_session.commit()
 
     platform_options = list_agent_deployment_organizations(db=db_session, actor=platform_admin)
-    tenant_options = list_agent_deployment_organizations(db=db_session, actor=tenant_manager)
+    tenant_options = list_agent_deployment_organizations(db=db_session, actor=tenant_admin)
 
     assert {organization.slug for organization in platform_options} >= {"default", "cliente-download"}
     assert "cliente-inativo-download" not in {organization.slug for organization in platform_options}
