@@ -1,5 +1,5 @@
 from app.core.database import SessionLocal, engine
-from app.models import agent_queue_action, audit_log, department, organization, print_agent, print_job, printer, printer_alias, quota, user, system_setting  # noqa: F401
+from app.models import agent_queue_action, audit_log, department, organization, print_agent, print_job, print_policy, printer, printer_alias, quota, user, system_setting  # noqa: F401
 from app.models.base import Base
 from app.models.user import UserRole
 from app.seed import ensure_user
@@ -70,6 +70,12 @@ def _ensure_lite_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE print_jobs ADD COLUMN computer_name VARCHAR(180)")
         if "queue_name" not in job_columns:
             conn.exec_driver_sql("ALTER TABLE print_jobs ADD COLUMN queue_name VARCHAR(180)")
+        if "policy_id" not in job_columns:
+            conn.exec_driver_sql("ALTER TABLE print_jobs ADD COLUMN policy_id INTEGER")
+        if "policy_name" not in job_columns:
+            conn.exec_driver_sql("ALTER TABLE print_jobs ADD COLUMN policy_name VARCHAR(180)")
+        if "policy_action" not in job_columns:
+            conn.exec_driver_sql("ALTER TABLE print_jobs ADD COLUMN policy_action VARCHAR(40)")
         agent_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(print_agents)").fetchall()}
         if "ip_address" not in agent_columns:
             conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN ip_address VARCHAR(45)")
@@ -108,4 +114,36 @@ def _ensure_lite_schema() -> None:
             )
             conn.exec_driver_sql(
                 "CREATE INDEX ix_agent_queue_actions_agent_status ON agent_queue_actions (agent_id, status)"
+            )
+        policies_count = conn.exec_driver_sql(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='print_policies'"
+        ).scalar()
+        if not policies_count:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE print_policies (
+                    id INTEGER PRIMARY KEY,
+                    organization_id INTEGER NOT NULL DEFAULT 1,
+                    name VARCHAR(180) NOT NULL,
+                    description VARCHAR(255),
+                    priority INTEGER NOT NULL DEFAULT 100,
+                    is_active BOOLEAN NOT NULL DEFAULT 1,
+                    rule_type VARCHAR(40) NOT NULL,
+                    action VARCHAR(40) NOT NULL,
+                    user_id INTEGER,
+                    department_id INTEGER,
+                    printer_id INTEGER,
+                    printer_alias_id INTEGER,
+                    queue_name VARCHAR(180),
+                    max_pages INTEGER,
+                    days_of_week VARCHAR(40),
+                    start_time TIME,
+                    end_time TIME,
+                    message VARCHAR(255),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX ix_print_policies_org_active_priority ON print_policies (organization_id, is_active, priority)"
             )

@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.print_agent import PrintAgent
 from app.models.print_job import JobStatus, PrintJob
+from app.models.print_policy import PolicyAction
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate, PrintJobDecision
 from app.services.audit_service import write_audit
 from app.services.organization_service import get_or_create_default_organization
+from app.services.policy_service import evaluate_print_policies
 from app.services.quota_service import can_consume, get_or_create_current_quota
 
 
@@ -185,6 +187,7 @@ def register_print_job(db: Session, payload: PrintJobCreate, organization_id: in
     agent = _upsert_agent(db, payload, organization_id)
     printer = _resolve_printer_for_job(db, payload, agent, organization_id)
     alias = _upsert_printer_alias(db, payload, agent, printer, organization_id)
+    policy_decision = evaluate_print_policies(db, payload, user, printer, alias, organization_id)
     quota = get_or_create_current_quota(db, user, payload.submitted_at)
     is_print_event_log_job = bool(payload.external_job_id and payload.external_job_id.startswith("eventlog:"))
 
@@ -209,8 +212,8 @@ def register_print_job(db: Session, payload: PrintJobCreate, organization_id: in
                 reason=existing_job.reason,
             )
 
-    # Calculate print job cost
-    cost = payload.pages * (printer.cost_color if payload.is_color else printer.cost_mono)
+    effective_is_color = payload.is_color and not policy_decision.force_mono
+    cost = payload.pages * (printer.cost_color if effective_is_color else printer.cost_mono)
 
     # Calculate total cost/pages of currently pending release jobs for this user to prevent double-spending
     import sqlalchemy as sa
@@ -232,21 +235,34 @@ def register_print_job(db: Session, payload: PrintJobCreate, organization_id: in
     authorized_pages = effective_remaining_pages >= payload.pages
     authorized_balance = effective_remaining_balance >= cost
 
-    if sys_settings["blocking_enabled"]:
+    policy_blocks = policy_decision.action == PolicyAction.block
+    if policy_blocks:
+        authorized = False
+    elif sys_settings["blocking_enabled"]:
         authorized = authorized_pages and authorized_balance
     else:
         authorized = True
 
-    reason = None
-    if not authorized:
+    reason = policy_decision.reason if policy_decision.action in (PolicyAction.block, PolicyAction.force_mono) else None
+    if policy_blocks:
+        status = JobStatus.blocked
+        reason = policy_decision.reason
+    elif not authorized:
         status = JobStatus.blocked
         if not authorized_pages:
             reason = "Cota de paginas insuficiente (fila de liberacao inclusa)"
         else:
             reason = "Saldo mensal insuficiente (fila de liberacao inclusa)"
     else:
-        if sys_settings["safe_release_enabled"] and not is_print_event_log_job:
+        policy_requires_release = policy_decision.action == PolicyAction.require_release
+        if policy_requires_release and is_print_event_log_job:
+            status = JobStatus.authorized
+            reason = policy_decision.reason
+            quota.used_pages += payload.pages
+            quota.used_balance += cost
+        elif (sys_settings["safe_release_enabled"] or policy_requires_release) and not is_print_event_log_job:
             status = JobStatus.pending_release
+            reason = policy_decision.reason if policy_requires_release else None
         else:
             status = JobStatus.authorized
             quota.used_pages += payload.pages
@@ -263,10 +279,13 @@ def register_print_job(db: Session, payload: PrintJobCreate, organization_id: in
         computer_name=payload.computer_name,
         queue_name=payload.queue_name or payload.printer_name,
         pages=payload.pages,
-        is_color=payload.is_color,
+        is_color=effective_is_color,
         cost=cost,
         status=status,
         reason=reason,
+        policy_id=policy_decision.policy.id if policy_decision.policy else None,
+        policy_name=policy_decision.policy.name if policy_decision.policy else None,
+        policy_action=policy_decision.action.value if policy_decision.action else None,
         submitted_at=payload.submitted_at,
     )
     db.add(job)

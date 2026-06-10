@@ -58,6 +58,8 @@ def list_jobs(
             document_name=job.document_name,
             computer_name=job.computer_name,
             queue_name=job.queue_name,
+            policy_name=job.policy_name,
+            policy_action=job.policy_action,
         )
         for job in jobs
     ]

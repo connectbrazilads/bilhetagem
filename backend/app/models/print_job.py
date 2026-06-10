@@ -34,6 +34,9 @@ class PrintJob(Base):
     cost: Mapped[float] = mapped_column(default=0.0, nullable=False)
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), nullable=False)
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    policy_id: Mapped[int | None] = mapped_column(ForeignKey("print_policies.id"), nullable=True)
+    policy_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    policy_action: Mapped[str | None] = mapped_column(String(40), nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -41,3 +44,4 @@ class PrintJob(Base):
     printer = relationship("Printer", back_populates="print_jobs")
     printer_alias = relationship("PrinterAlias")
     agent = relationship("PrintAgent")
+    policy = relationship("PrintPolicy")

@@ -47,6 +47,8 @@ class PrintJobRead(BaseModel):
     document_name: str | None = None
     computer_name: str | None = None
     queue_name: str | None = None
+    policy_name: str | None = None
+    policy_action: str | None = None
 
 
 class JobFilter(BaseModel):
