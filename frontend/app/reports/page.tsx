@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, FileText, Printer, Search, Users } from "lucide-react";
+import { Download, FileText, Mail, Printer, Search, Users } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -45,6 +45,17 @@ type MonthlyClosing = {
   generated_at: string;
 };
 
+type MonthlyClosingEmailResult = {
+  sent: boolean;
+  recipients: string[];
+  attachments: string[];
+};
+
+type MonthlyClosingDueEmailResult = MonthlyClosingEmailResult & {
+  reason: string | null;
+  period: string | null;
+};
+
 export default function ReportsPage() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +67,8 @@ export default function ReportsPage() {
   const [closingMonth, setClosingMonth] = useState(String(now.getMonth() + 1));
   const [closings, setClosings] = useState<MonthlyClosing[]>([]);
   const [closingError, setClosingError] = useState<string | null>(null);
+  const [mailMessage, setMailMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [sendingEmailId, setSendingEmailId] = useState<number | "due" | null>(null);
 
   async function loadJobs() {
     const token = localStorage.getItem("token");
@@ -109,6 +122,50 @@ export default function ReportsPage() {
       await loadClosings();
     } catch (err) {
       setClosingError(err instanceof Error ? err.message : "Falha ao gerar fechamento");
+    }
+  }
+
+  async function sendClosingEmail(closing: MonthlyClosing) {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setMailMessage(null);
+    setSendingEmailId(closing.id);
+    try {
+      const result = await apiFetch<MonthlyClosingEmailResult>(`/reports/monthly-closings/${closing.id}/email`, token, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setMailMessage({
+        type: "success",
+        text: `Fechamento ${String(closing.month).padStart(2, "0")}/${closing.year} enviado para ${result.recipients.join(", ")} com ${result.attachments.length} anexo(s).`,
+      });
+    } catch (err) {
+      setMailMessage({ type: "error", text: err instanceof Error ? err.message : "Falha ao enviar fechamento por e-mail" });
+    } finally {
+      setSendingEmailId(null);
+    }
+  }
+
+  async function sendDueEmail() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setMailMessage(null);
+    setSendingEmailId("due");
+    try {
+      const result = await apiFetch<MonthlyClosingDueEmailResult>("/reports/monthly-closings/email-due", token, { method: "POST" });
+      if (result.sent) {
+        setMailMessage({
+          type: "success",
+          text: `Envio mensal realizado${result.period ? ` (${result.period})` : ""} para ${result.recipients.join(", ")}.`,
+        });
+        await loadClosings();
+      } else {
+        setMailMessage({ type: "success", text: result.reason || "Nenhum envio mensal pendente." });
+      }
+    } catch (err) {
+      setMailMessage({ type: "error", text: err instanceof Error ? err.message : "Falha ao processar envio mensal" });
+    } finally {
+      setSendingEmailId(null);
     }
   }
 
@@ -202,9 +259,18 @@ export default function ReportsPage() {
               ))}
             </select>
             <Button onClick={generateClosing}>Gerar fechamento</Button>
+            <Button variant="outline" onClick={sendDueEmail} disabled={sendingEmailId === "due"}>
+              <Mail className="h-4 w-4" />
+              {sendingEmailId === "due" ? "Enviando..." : "Enviar devido"}
+            </Button>
           </div>
         </div>
         {closingError ? <div className="border-b border-red-200 bg-red-50 p-3 text-sm text-red-800">{closingError}</div> : null}
+        {mailMessage ? (
+          <div className={`border-b p-3 text-sm ${mailMessage.type === "success" ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"}`}>
+            {mailMessage.text}
+          </div>
+        ) : null}
         {closings.length === 0 ? (
           <div className="p-6 text-center text-sm text-muted-foreground">Nenhum fechamento gerado.</div>
         ) : (
@@ -234,6 +300,10 @@ export default function ReportsPage() {
                     <td className="p-4 text-muted-foreground">{new Date(closing.generated_at).toLocaleString("pt-BR")}</td>
                     <td className="p-4">
                       <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => sendClosingEmail(closing)} disabled={sendingEmailId === closing.id}>
+                          <Mail className="h-4 w-4" />
+                          {sendingEmailId === closing.id ? "..." : "E-mail"}
+                        </Button>
                         <Button variant="outline" onClick={() => downloadClosing(closing, "pdf")}>PDF</Button>
                         <Button onClick={() => downloadClosing(closing, "xlsx")}>Excel</Button>
                       </div>
