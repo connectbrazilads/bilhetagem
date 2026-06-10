@@ -34,6 +34,11 @@ def test_self_update_script_preserves_backup_after_success():
     assert f'del "{script_path}" > nul 2>&1' in script
     assert f'del "{backup_path}"' not in script
     assert "Backup preservado" in script
+    assert "Falha ao criar backup; codigo=%ERRORLEVEL%" in script
+    assert "Falha ao substituir executavel; codigo=%ERRORLEVEL%" in script
+    assert "Falha ao iniciar servico atualizado; codigo=%ERRORLEVEL%" in script
+    assert "Falha ao restaurar backup; codigo=%ERRORLEVEL%" in script
+    assert "Falha ao iniciar servico apos rollback; codigo=%ERRORLEVEL%" in script
 
 
 def test_agent_update_failure_is_reported_in_diagnostics(monkeypatch, tmp_path: Path):
