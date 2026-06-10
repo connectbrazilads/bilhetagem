@@ -355,7 +355,12 @@ def test_agent_release_downloads_are_audited(db_session: Session, monkeypatch, t
     assert logs[0].log_metadata["kind"] == "installer"
     assert logs[0].log_metadata["sha256"] == hashlib.sha256(b"installer-v6").hexdigest()
     assert logs[1].organization_id == actor.organization_id
-    assert logs[1].log_metadata == {"version": "0.6.0", "file_count": 1}
+    assert logs[1].log_metadata == {
+        "version": "0.6.0",
+        "filename": "SHA256SUMS-0.6.0.txt",
+        "file_count": 1,
+        "sha256": hashlib.sha256(checksums_response.body).hexdigest(),
+    }
 
 
 def test_agent_release_download_revalidates_checksum_before_serving(db_session: Session, monkeypatch, tmp_path: Path):

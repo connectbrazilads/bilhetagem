@@ -1066,6 +1066,8 @@ def download_agent_release_checksums(
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> Response:
     release = _release_or_404(version)
+    content = _release_checksums_text(release)
+    filename = f"SHA256SUMS-{version}.txt"
     write_audit(
         db,
         action="agent_release_checksums_downloaded",
@@ -1074,15 +1076,17 @@ def download_agent_release_checksums(
         actor_user_id=actor.id,
         metadata={
             "version": release.version,
+            "filename": filename,
             "file_count": len(release.files),
+            "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
         },
         organization_id=actor.organization_id,
     )
     db.commit()
     return Response(
-        content=_release_checksums_text(release),
+        content=content,
         media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename=SHA256SUMS-{version}.txt"},
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
