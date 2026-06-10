@@ -38,30 +38,12 @@ from app.schemas.agent import (
     PrintAgentRead,
 )
 from app.services.audit_service import write_audit
+from app.services.agent_release_service import is_newer_version, published_agent_version, version_tuple
 from app.services.organization_service import DEFAULT_ORGANIZATION_SLUG
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
 RECENT_AGENT_LOG_ALERT_WINDOW = timedelta(minutes=15)
-
-
-def _version_tuple(version: str) -> tuple[int, ...]:
-    parts: list[int] = []
-    for part in version.split("."):
-        digits = "".join(char for char in part if char.isdigit())
-        parts.append(int(digits or 0))
-    return tuple(parts)
-
-
-def _is_newer(latest: str, current: str | None) -> bool:
-    if not current:
-        return True
-    latest_parts = _version_tuple(latest)
-    current_parts = _version_tuple(current)
-    size = max(len(latest_parts), len(current_parts))
-    latest_parts = latest_parts + (0,) * (size - len(latest_parts))
-    current_parts = current_parts + (0,) * (size - len(current_parts))
-    return latest_parts > current_parts
 
 
 def _agent_file() -> Path:
@@ -175,7 +157,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
 
 
 def _release_sort_key(release: AgentReleaseRead) -> tuple[str, tuple[int, ...]]:
-    return (release.published_at or "", _version_tuple(release.version))
+    return (release.published_at or "", version_tuple(release.version))
 
 
 def _latest_agent_release_file() -> tuple[AgentReleaseRead, AgentReleaseFileRead] | None:
@@ -184,11 +166,6 @@ def _latest_agent_release_file() -> tuple[AgentReleaseRead, AgentReleaseFileRead
             if file.kind == "agent":
                 return release, file
     return None
-
-
-def _published_agent_version() -> str:
-    latest = _latest_agent_release_file()
-    return latest[0].version if latest else settings.agent_latest_version
 
 
 def _release_or_404(version: str) -> AgentReleaseRead:
@@ -420,8 +397,8 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None 
         sample = ", ".join(action.queue_name for action in stale_actions[:3])
         suffix = f": {sample}" if sample else ""
         alerts.append(AgentHealthAlertRead(code="stale_queue_actions", severity="warning", message=f"{count} acao(oes) remota(s) sem conclusao ha mais de 15 min{suffix}"))
-    latest_version = _published_agent_version()
-    if _is_newer(latest_version, agent.version):
+    latest_version = published_agent_version()
+    if is_newer_version(latest_version, agent.version):
         alerts.append(AgentHealthAlertRead(code="outdated_version", severity="info", message=f"Agent abaixo da versao publicada {latest_version}"))
         if agent.auto_update_enabled is False:
             alerts.append(
@@ -676,7 +653,7 @@ def agent_version(
     published_version = latest[0].version if latest else settings.agent_latest_version
     return AgentVersionRead(
         latest_version=published_version,
-        update_available=file_exists and _is_newer(published_version, current_version),
+        update_available=file_exists and is_newer_version(published_version, current_version),
         mandatory=False,
         download_url="/agent/download" if file_exists else None,
         sha256=latest[1].sha256 if latest else None,
