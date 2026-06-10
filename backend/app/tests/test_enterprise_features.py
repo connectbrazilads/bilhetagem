@@ -2370,6 +2370,37 @@ def test_user_with_linked_policy_cannot_be_deleted(db_session: Session):
     assert db_session.get(PrintPolicy, policy.id) is not None
 
 
+def test_delete_user_detaches_requested_queue_actions(db_session: Session):
+    admin = User(username="delete-queue-user-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="delete-queue-user", full_name="Usuario com Acao", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA USER ACTION", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-delete-queue-user", computer_name="PC-QUEUE-USER")
+    db_session.add_all([admin, user, printer, agent])
+    db_session.flush()
+    action = AgentQueueAction(
+        organization_id=1,
+        agent_id=agent.id,
+        printer_id=printer.id,
+        requested_by_user_id=user.id,
+        action_type=AgentQueueActionType.create_queue,
+        queue_name="KONICA Usuario",
+        driver_name="KONICA Driver",
+        ip_address="192.168.1.125",
+        status=AgentQueueActionStatus.pending,
+    )
+    db_session.add(action)
+    db_session.commit()
+
+    result = delete_user_endpoint(user.id, db=db_session, actor=admin)
+    db_session.refresh(action)
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "user_deleted", AuditLog.entity_id == user.id).one()
+
+    assert result == {"status": "deleted", "deleted_jobs": 0, "detached_queue_actions": 1}
+    assert action.requested_by_user_id is None
+    assert db_session.get(User, user.id) is None
+    assert audit.log_metadata["detached_queue_actions"] == 1
+
+
 def test_agent_user_password_can_be_rotated_without_role_change(db_session: Session):
     admin = User(username="rotate-agent-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     agent_user = User(

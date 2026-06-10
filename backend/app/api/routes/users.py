@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.deps import require_roles
 from app.core.password_policy import is_unsafe_initial_password
 from app.core.security import hash_password
+from app.models.agent_queue_action import AgentQueueAction
 from app.models.audit_log import AuditLog
 from app.models.print_job import PrintJob
 from app.models.print_policy import PrintPolicy
@@ -216,14 +217,19 @@ def delete_user_endpoint(
         {AuditLog.actor_user_id: None},
         synchronize_session=False,
     )
+    detached_queue_actions = (
+        db.query(AgentQueueAction)
+        .filter(AgentQueueAction.organization_id == actor.organization_id, AgentQueueAction.requested_by_user_id == user.id)
+        .update({AgentQueueAction.requested_by_user_id: None}, synchronize_session=False)
+    )
     write_audit(
         db,
         action="user_deleted",
         entity="users",
         entity_id=user.id,
         actor_user_id=actor.id,
-        metadata={"username": user.username, "deleted_jobs": 0},
+        metadata={"username": user.username, "deleted_jobs": 0, "detached_queue_actions": detached_queue_actions},
     )
     db.delete(user)
     db.commit()
-    return {"status": "deleted", "deleted_jobs": 0}
+    return {"status": "deleted", "deleted_jobs": 0, "detached_queue_actions": detached_queue_actions}
