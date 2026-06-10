@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_roles
+from app.core.security import hash_password
 from app.models.organization import Organization
 from app.models.print_agent import PrintAgent
 from app.models.print_job import JobStatus, PrintJob
@@ -89,13 +90,39 @@ def create_organization(
     db.add(organization)
     try:
         db.flush()
+        db.add_all(
+            [
+                User(
+                    organization_id=organization.id,
+                    username=payload.admin_username,
+                    full_name="Administrador",
+                    password_hash=hash_password(payload.admin_password),
+                    role=UserRole.admin,
+                    is_active=True,
+                ),
+                User(
+                    organization_id=organization.id,
+                    username=payload.agent_username,
+                    full_name="Agente Windows",
+                    password_hash=hash_password(payload.agent_password),
+                    role=UserRole.admin,
+                    is_active=True,
+                ),
+            ]
+        )
+        db.flush()
         write_audit(
             db,
             action="organization_created",
             entity="organizations",
             entity_id=organization.id,
             actor_user_id=actor.id,
-            metadata={"name": organization.name, "slug": organization.slug},
+            metadata={
+                "name": organization.name,
+                "slug": organization.slug,
+                "admin_username": payload.admin_username,
+                "agent_username": payload.agent_username,
+            },
             organization_id=actor.organization_id,
         )
         db.commit()

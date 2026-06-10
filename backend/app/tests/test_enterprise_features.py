@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
+from app.models.audit_log import AuditLog
 from app.models.printer import Printer
 from app.models.print_agent import PrintAgent
 from app.models.printer_alias import PrinterAlias
@@ -13,7 +14,7 @@ from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
 from app.api.routes.auth import login
 from app.api.routes.audit_logs import export_audit_logs, list_audit_logs
-from app.api.routes.organizations import list_organizations
+from app.api.routes.organizations import create_organization, list_organizations
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
 from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
@@ -31,6 +32,7 @@ from app.services.ldap_service import sync_ldap_users, test_ldap_connection as c
 from app.api.routes.jobs import get_pdf_page_count
 from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
+from app.schemas.organization import OrganizationCreate
 
 def test_snmp_poll_uses_real_status_payload(db_session: Session, monkeypatch):
     # Mock SessionLocal in snmp_service to return db_session
@@ -402,6 +404,42 @@ def test_inactive_organization_cannot_issue_login_token(db_session: Session):
             db=db_session,
         )
     assert no_slug_exc.value.status_code == 401
+
+
+def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: Session):
+    platform_admin = User(username="platform-admin", full_name="Platform Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(platform_admin)
+    db_session.commit()
+
+    created = create_organization(
+        OrganizationCreate(
+            name="Cliente Novo",
+            slug="cliente-novo",
+            admin_username="admin",
+            admin_password="cliente12345",
+            agent_username="agent",
+            agent_password="agent12345",
+        ),
+        db=db_session,
+        actor=platform_admin,
+    )
+
+    seeded_users = db_session.query(User).filter(User.organization_id == created.id).order_by(User.username).all()
+    assert [user.username for user in seeded_users] == ["admin", "agent"]
+    assert all(user.role == UserRole.admin for user in seeded_users)
+    assert created.users_count == 2
+
+    token = login(
+        LoginRequest(username="admin", password="cliente12345", organization_slug="cliente-novo"),
+        db=db_session,
+    )
+    assert token.organization_id == created.id
+
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "organization_created").one()
+    assert audit.log_metadata["admin_username"] == "admin"
+    assert audit.log_metadata["agent_username"] == "agent"
+    assert "cliente12345" not in str(audit.log_metadata)
+    assert "agent12345" not in str(audit.log_metadata)
 
 
 def test_organization_list_includes_scoped_usage_counts(db_session: Session):

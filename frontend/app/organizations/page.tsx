@@ -23,7 +23,15 @@ type OrganizationRow = {
   cost_month: number;
 };
 
-const emptyForm = { name: "", slug: "", is_active: true };
+const emptyForm = {
+  name: "",
+  slug: "",
+  is_active: true,
+  admin_username: "admin",
+  admin_password: "admin12345",
+  agent_username: "agent",
+  agent_password: "agent12345",
+};
 
 export default function OrganizationsPage() {
   const [organizations, setOrganizations] = useState<OrganizationRow[]>([]);
@@ -80,7 +88,7 @@ export default function OrganizationsPage() {
 
   function startEdit(organization: OrganizationRow) {
     setEditing(organization);
-    setForm({ name: organization.name, slug: organization.slug, is_active: organization.is_active });
+    setForm({ ...emptyForm, name: organization.name, slug: organization.slug, is_active: organization.is_active });
   }
 
   function resetForm() {
@@ -104,42 +112,65 @@ export default function OrganizationsPage() {
         <Summary label="Custo mês" value={money(summary.costMonth)} icon={Power} />
       </div>
 
-      <Surface as="form" className="mb-4 grid gap-3 p-4 lg:grid-cols-[1fr_220px_auto]" onSubmit={submit}>
-        <Input
-          placeholder="Nome da empresa"
-          value={form.name}
-          onChange={(event) => setForm({ ...form, name: event.target.value })}
-          required
-        />
-        <Input
-          placeholder="slug-da-empresa"
-          value={form.slug}
-          onChange={(event) => setForm({ ...form, slug: event.target.value.toLowerCase().replace(/\s+/g, "-") })}
-          required
-          disabled={editing !== null}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          {editing ? (
-            <label className="flex items-center gap-2 px-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                checked={form.is_active}
-                onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
-              />
-              Ativa
-            </label>
-          ) : null}
-          <Button type="submit">
-            <Plus className="h-4 w-4" />
-            {editing ? "Salvar" : "Cadastrar"}
-          </Button>
-          {editing ? (
-            <Button type="button" variant="outline" onClick={resetForm}>
-              Cancelar
+      <Surface as="form" className="mb-4 p-4" onSubmit={submit}>
+        <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
+          <Input
+            placeholder="Nome da empresa"
+            value={form.name}
+            onChange={(event) => setForm({ ...form, name: event.target.value })}
+            required
+          />
+          <Input
+            placeholder="slug-da-empresa"
+            value={form.slug}
+            onChange={(event) => setForm({ ...form, slug: event.target.value.toLowerCase().replace(/\s+/g, "-") })}
+            required
+            disabled={editing !== null}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            {editing ? (
+              <label className="flex items-center gap-2 px-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  checked={form.is_active}
+                  onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
+                />
+                Ativa
+              </label>
+            ) : null}
+            <Button type="submit">
+              <Plus className="h-4 w-4" />
+              {editing ? "Salvar" : "Cadastrar"}
             </Button>
-          ) : null}
+            {editing ? (
+              <Button type="button" variant="outline" onClick={resetForm}>
+                Cancelar
+              </Button>
+            ) : null}
+          </div>
         </div>
+
+        {!editing ? (
+          <div className="mt-4 grid gap-3 border-t pt-4 md:grid-cols-2 lg:grid-cols-4">
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Admin inicial
+              <Input value={form.admin_username} onChange={(event) => setForm({ ...form, admin_username: event.target.value })} required />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Senha do admin
+              <Input type="password" value={form.admin_password} onChange={(event) => setForm({ ...form, admin_password: event.target.value })} required minLength={8} />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Usuário do agent
+              <Input value={form.agent_username} onChange={(event) => setForm({ ...form, agent_username: event.target.value })} required />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Senha do agent
+              <Input type="password" value={form.agent_password} onChange={(event) => setForm({ ...form, agent_password: event.target.value })} required minLength={8} />
+            </label>
+          </div>
+        ) : null}
       </Surface>
 
       {error ? <Surface className="mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</Surface> : null}
