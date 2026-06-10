@@ -1,5 +1,5 @@
 from app.core.database import SessionLocal, engine
-from app.models import audit_log, department, organization, print_agent, print_job, printer, printer_alias, quota, user, system_setting  # noqa: F401
+from app.models import agent_queue_action, audit_log, department, organization, print_agent, print_job, printer, printer_alias, quota, user, system_setting  # noqa: F401
 from app.models.base import Base
 from app.models.user import UserRole
 from app.seed import ensure_user
@@ -81,3 +81,31 @@ def _ensure_lite_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN auto_update_enabled BOOLEAN")
         if "last_error" not in agent_columns:
             conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN last_error VARCHAR(500)")
+        queue_actions_count = conn.exec_driver_sql(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='agent_queue_actions'"
+        ).scalar()
+        if not queue_actions_count:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE agent_queue_actions (
+                    id INTEGER PRIMARY KEY,
+                    organization_id INTEGER NOT NULL DEFAULT 1,
+                    agent_id INTEGER NOT NULL,
+                    printer_id INTEGER,
+                    requested_by_user_id INTEGER,
+                    action_type VARCHAR(40) NOT NULL,
+                    queue_name VARCHAR(180) NOT NULL,
+                    driver_name VARCHAR(180),
+                    port_name VARCHAR(180),
+                    ip_address VARCHAR(45),
+                    status VARCHAR(40) NOT NULL DEFAULT 'pending',
+                    result_message VARCHAR(500),
+                    requested_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    dispatched_at DATETIME,
+                    completed_at DATETIME
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX ix_agent_queue_actions_agent_status ON agent_queue_actions (agent_id, status)"
+            )

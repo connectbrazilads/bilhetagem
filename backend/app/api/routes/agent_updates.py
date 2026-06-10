@@ -8,12 +8,23 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
+from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus, AgentQueueActionType
 from app.models.print_agent import PrintAgent
 from app.models.print_job import PrintJob
+from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.user import User
 from app.models.user import UserRole
-from app.schemas.agent import AgentHeartbeatPayload, AgentRecentJobRead, AgentVersionRead, PrintAgentRead
+from app.schemas.agent import (
+    AgentHeartbeatPayload,
+    AgentQueueActionCreate,
+    AgentQueueActionRead,
+    AgentQueueActionResult,
+    AgentRecentJobRead,
+    AgentVersionRead,
+    PrintAgentRead,
+)
+from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -102,6 +113,11 @@ def _recent_jobs(db: Session, agent: PrintAgent) -> list[AgentRecentJobRead]:
 
 def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | None = None) -> PrintAgentRead:
     is_online, status_text = _agent_status(agent)
+    queue_actions = sorted(
+        agent.queue_actions,
+        key=lambda action: (action.requested_at, action.id),
+        reverse=True,
+    )[:20] if include_jobs else []
     return PrintAgentRead(
         id=agent.id,
         agent_uid=agent.agent_uid,
@@ -119,6 +135,7 @@ def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | 
         status=status_text,
         aliases=list(agent.aliases),
         recent_jobs=_recent_jobs(db, agent) if include_jobs and db is not None else [],
+        queue_actions=queue_actions,
     )
 
 
@@ -245,10 +262,130 @@ def get_agent_detail(
 ) -> PrintAgentRead:
     agent = (
         db.query(PrintAgent)
-        .options(selectinload(PrintAgent.aliases), selectinload(PrintAgent.aliases).selectinload(PrinterAlias.printer))
+        .options(
+            selectinload(PrintAgent.aliases),
+            selectinload(PrintAgent.aliases).selectinload(PrinterAlias.printer),
+            selectinload(PrintAgent.queue_actions),
+        )
         .filter(PrintAgent.organization_id == actor.organization_id, PrintAgent.id == agent_id)
         .first()
     )
     if not agent:
         raise HTTPException(status_code=404, detail="Agent nao encontrado")
     return _agent_to_read(agent, include_jobs=True, db=db)
+
+
+@router.post("/agents/{agent_id}/queue-actions", response_model=AgentQueueActionRead)
+def create_queue_action(
+    agent_id: int,
+    payload: AgentQueueActionCreate,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> AgentQueueAction:
+    agent = db.query(PrintAgent).filter(PrintAgent.organization_id == actor.organization_id, PrintAgent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent nao encontrado")
+
+    printer = None
+    if payload.printer_id is not None:
+        printer = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == payload.printer_id).first()
+        if not printer:
+            raise HTTPException(status_code=404, detail="Impressora nao encontrada")
+
+    if payload.action_type == AgentQueueActionType.create_queue:
+        if not _clean_optional(payload.driver_name):
+            raise HTTPException(status_code=422, detail="Driver obrigatorio para criar fila")
+        if not _clean_optional(payload.port_name) and not _clean_optional(payload.ip_address):
+            raise HTTPException(status_code=422, detail="Informe IP ou porta para criar fila")
+
+    action = AgentQueueAction(
+        organization_id=actor.organization_id,
+        agent_id=agent.id,
+        printer_id=printer.id if printer else None,
+        requested_by_user_id=actor.id,
+        action_type=payload.action_type,
+        queue_name=payload.queue_name.strip(),
+        driver_name=_clean_optional(payload.driver_name),
+        port_name=_clean_optional(payload.port_name),
+        ip_address=_clean_optional(payload.ip_address),
+        status=AgentQueueActionStatus.pending,
+    )
+    db.add(action)
+    db.flush()
+    write_audit(
+        db,
+        action="agent_queue_action_created",
+        entity="agent_queue_actions",
+        entity_id=action.id,
+        actor_user_id=actor.id,
+        metadata={
+            "agent": agent.agent_uid,
+            "action_type": action.action_type.value,
+            "queue_name": action.queue_name,
+        },
+        organization_id=actor.organization_id,
+    )
+    db.commit()
+    db.refresh(action)
+    return action
+
+
+@router.get("/queue-actions", response_model=list[AgentQueueActionRead])
+def poll_queue_actions(
+    agent_uid: str = Query(min_length=1, max_length=120),
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> list[AgentQueueAction]:
+    agent = db.query(PrintAgent).filter(PrintAgent.organization_id == actor.organization_id, PrintAgent.agent_uid == agent_uid).first()
+    if not agent:
+        return []
+
+    now = datetime.now(timezone.utc)
+    actions = (
+        db.query(AgentQueueAction)
+        .filter(
+            AgentQueueAction.organization_id == actor.organization_id,
+            AgentQueueAction.agent_id == agent.id,
+            AgentQueueAction.status == AgentQueueActionStatus.pending,
+        )
+        .order_by(AgentQueueAction.requested_at, AgentQueueAction.id)
+        .limit(10)
+        .all()
+    )
+    for action in actions:
+        action.status = AgentQueueActionStatus.running
+        action.dispatched_at = now
+    db.commit()
+    for action in actions:
+        db.refresh(action)
+    return actions
+
+
+@router.post("/queue-actions/{action_id}/result", response_model=AgentQueueActionRead)
+def finish_queue_action(
+    action_id: int,
+    payload: AgentQueueActionResult,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> AgentQueueAction:
+    if payload.status not in (AgentQueueActionStatus.succeeded, AgentQueueActionStatus.failed):
+        raise HTTPException(status_code=422, detail="Resultado deve ser succeeded ou failed")
+
+    action = (
+        db.query(AgentQueueAction)
+        .join(PrintAgent, PrintAgent.id == AgentQueueAction.agent_id)
+        .filter(
+            AgentQueueAction.organization_id == actor.organization_id,
+            AgentQueueAction.id == action_id,
+        )
+        .first()
+    )
+    if not action:
+        raise HTTPException(status_code=404, detail="Acao nao encontrada")
+
+    action.status = payload.status
+    action.result_message = _clean_optional(payload.result_message)
+    action.completed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(action)
+    return action

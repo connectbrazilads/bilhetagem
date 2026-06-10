@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
+
 
 class AgentVersionRead(BaseModel):
     latest_version: str
@@ -61,6 +63,39 @@ class AgentRecentJobRead(BaseModel):
     submitted_at: datetime
 
 
+class AgentQueueActionCreate(BaseModel):
+    action_type: AgentQueueActionType
+    queue_name: str = Field(min_length=1, max_length=180)
+    printer_id: int | None = None
+    driver_name: str | None = Field(default=None, max_length=180)
+    port_name: str | None = Field(default=None, max_length=180)
+    ip_address: str | None = Field(default=None, max_length=45)
+
+
+class AgentQueueActionResult(BaseModel):
+    status: AgentQueueActionStatus
+    result_message: str | None = Field(default=None, max_length=500)
+
+
+class AgentQueueActionRead(BaseModel):
+    id: int
+    agent_id: int
+    printer_id: int | None
+    requested_by_user_id: int | None
+    action_type: AgentQueueActionType
+    queue_name: str
+    driver_name: str | None
+    port_name: str | None
+    ip_address: str | None
+    status: AgentQueueActionStatus
+    result_message: str | None
+    requested_at: datetime
+    dispatched_at: datetime | None
+    completed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
 class PrintAgentRead(BaseModel):
     id: int
     agent_uid: str
@@ -78,3 +113,4 @@ class PrintAgentRead(BaseModel):
     status: str
     aliases: list[AgentQueueRead] = Field(default_factory=list)
     recent_jobs: list[AgentRecentJobRead] = Field(default_factory=list)
+    queue_actions: list[AgentQueueActionRead] = Field(default_factory=list)

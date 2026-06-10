@@ -107,6 +107,12 @@ class AgentConfig:
             file_config.get("PRINTBILLING_HEARTBEAT_INTERVAL", 60)
         )
     )
+    queue_action_interval_seconds: int = int(
+        os.getenv(
+            "PRINTBILLING_QUEUE_ACTION_INTERVAL",
+            file_config.get("PRINTBILLING_QUEUE_ACTION_INTERVAL", 30)
+        )
+    )
     spool_server: str | None = os.getenv(
         "PRINTBILLING_SPOOL_SERVER",
         file_config.get("PRINTBILLING_SPOOL_SERVER")

@@ -54,6 +54,7 @@ class SpoolMonitor:
         self._last_settings_poll = 0.0
         self._last_update_check = 0.0
         self._last_heartbeat = 0.0
+        self._last_queue_action_poll = 0.0
         self._update_started = False
         self._last_error: str | None = None
         self._server_safe_release_enabled = True
@@ -70,6 +71,7 @@ class SpoolMonitor:
         while not should_stop():
             self._refresh_server_settings_if_due()
             self._send_heartbeat_if_due()
+            self._process_queue_actions_if_due()
             if self._should_process_spool_jobs():
                 for printer_name in self._enum_printers():
                     try:
@@ -161,6 +163,117 @@ class SpoolMonitor:
         except Exception as exc:
             logger.warning("Falha ao enviar heartbeat do agent: %s", exc)
             self._record_error(f"Falha ao enviar heartbeat: {exc}")
+
+    def _process_queue_actions_if_due(self) -> None:
+        now = time.monotonic()
+        if now - self._last_queue_action_poll < self.config.queue_action_interval_seconds:
+            return
+        self._last_queue_action_poll = now
+
+        try:
+            actions = self.api_client.get_queue_actions(self._agent_uid)
+        except Exception as exc:
+            logger.warning("Falha ao buscar acoes remotas de filas: %s", exc)
+            self._record_error(f"Falha ao buscar acoes remotas de filas: {exc}")
+            return
+
+        for action in actions:
+            action_id = int(action["id"])
+            try:
+                message = self._execute_queue_action(action)
+                self.api_client.finish_queue_action(action_id, "succeeded", message)
+                logger.info("Acao remota de fila concluida: id=%s %s", action_id, message)
+            except Exception as exc:
+                message = str(exc)[:500]
+                logger.exception("Falha ao executar acao remota de fila id=%s", action_id)
+                self._record_error(f"Falha em acao remota de fila {action_id}: {message}")
+                try:
+                    self.api_client.finish_queue_action(action_id, "failed", message)
+                except Exception:
+                    logger.exception("Falha ao confirmar erro da acao remota de fila id=%s", action_id)
+
+    def _execute_queue_action(self, action: dict) -> str:
+        action_type = action.get("action_type")
+        queue_name = self._clean_metadata(action.get("queue_name"))
+        if not queue_name:
+            raise RuntimeError("Nome da fila nao informado")
+        if action_type == "create_queue":
+            return self._create_managed_queue(
+                queue_name=queue_name,
+                driver_name=self._clean_metadata(action.get("driver_name")),
+                port_name=self._clean_metadata(action.get("port_name")),
+                ip_address=self._clean_metadata(action.get("ip_address")),
+            )
+        if action_type == "remove_queue":
+            return self._remove_managed_queue(queue_name)
+        raise RuntimeError(f"Acao desconhecida: {action_type}")
+
+    @staticmethod
+    def _ps_quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    def _run_powershell(self, script: str) -> str:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+            text=True,
+            capture_output=True,
+            timeout=90,
+        )
+        output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+        if result.returncode != 0:
+            raise RuntimeError(output or f"PowerShell retornou codigo {result.returncode}")
+        return output[:500] or "OK"
+
+    def _create_managed_queue(
+        self,
+        queue_name: str,
+        driver_name: str | None,
+        port_name: str | None,
+        ip_address: str | None,
+    ) -> str:
+        if not driver_name:
+            raise RuntimeError("Driver nao informado")
+        if not port_name and not ip_address:
+            raise RuntimeError("Porta/IP nao informado")
+
+        queue = self._ps_quote(queue_name)
+        driver = self._ps_quote(driver_name)
+        port = self._ps_quote(port_name or "")
+        ip = self._ps_quote(ip_address or "")
+        script = f"""
+$ErrorActionPreference = 'Stop'
+$queueName = {queue}
+$driverName = {driver}
+$portName = {port}
+$ipAddress = {ip}
+if ([string]::IsNullOrWhiteSpace($portName)) {{ $portName = "IP_$ipAddress" }}
+if (-not (Get-PrinterDriver -Name $driverName -ErrorAction SilentlyContinue)) {{ throw "Driver nao instalado: $driverName" }}
+if (-not (Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue)) {{
+  if ([string]::IsNullOrWhiteSpace($ipAddress)) {{ throw "Porta nao existe e IP nao informado: $portName" }}
+  Add-PrinterPort -Name $portName -PrinterHostAddress $ipAddress
+}}
+if (-not (Get-Printer -Name $queueName -ErrorAction SilentlyContinue)) {{
+  Add-Printer -Name $queueName -DriverName $driverName -PortName $portName
+  "Fila criada: $queueName"
+}} else {{
+  "Fila ja existia: $queueName"
+}}
+"""
+        return self._run_powershell(script)
+
+    def _remove_managed_queue(self, queue_name: str) -> str:
+        queue = self._ps_quote(queue_name)
+        script = f"""
+$ErrorActionPreference = 'Stop'
+$queueName = {queue}
+if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
+  Remove-Printer -Name $queueName
+  "Fila removida: $queueName"
+}} else {{
+  "Fila nao encontrada: $queueName"
+}}
+"""
+        return self._run_powershell(script)
 
     def _refresh_server_settings_if_due(self) -> None:
         now = time.monotonic()

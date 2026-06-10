@@ -246,6 +246,44 @@ class BillingApiClient:
         return response.json()
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    def get_queue_actions(self, agent_uid: str) -> list[dict]:
+        response = self.session.get(
+            f"{self.config.api_base_url}/agent/queue-actions",
+            params={"agent_uid": agent_uid},
+            headers={**self._headers()},
+            timeout=15,
+        )
+        if response.status_code == 401:
+            self._token = None
+            response = self.session.get(
+                f"{self.config.api_base_url}/agent/queue-actions",
+                params={"agent_uid": agent_uid},
+                headers={**self._headers()},
+                timeout=15,
+            )
+        response.raise_for_status()
+        return response.json()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    def finish_queue_action(self, action_id: int, status: str, result_message: str | None = None) -> dict:
+        response = self.session.post(
+            f"{self.config.api_base_url}/agent/queue-actions/{action_id}/result",
+            json={"status": status, "result_message": result_message},
+            headers={**self._headers()},
+            timeout=15,
+        )
+        if response.status_code == 401:
+            self._token = None
+            response = self.session.post(
+                f"{self.config.api_base_url}/agent/queue-actions/{action_id}/result",
+                json={"status": status, "result_message": result_message},
+                headers={**self._headers()},
+                timeout=15,
+            )
+        response.raise_for_status()
+        return response.json()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
     def download_agent_update(self) -> bytes:
         response = self.session.get(
             f"{self.config.api_base_url}/agent/download",

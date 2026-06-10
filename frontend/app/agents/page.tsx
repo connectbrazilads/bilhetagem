@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, Cpu, FileText, MonitorCog, Network, RefreshCw, Server, X } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, Cpu, FileText, MonitorCog, Network, Plus, RefreshCw, Server, TerminalSquare, Trash2, X } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
-import { Button, Surface } from "@/components/ui";
+import { Button, Input, Surface } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
 
 type AgentQueue = {
@@ -50,6 +50,20 @@ type AgentRow = {
   status: string;
   aliases: AgentQueue[];
   recent_jobs: AgentRecentJob[];
+  queue_actions: AgentQueueAction[];
+};
+
+type AgentQueueAction = {
+  id: number;
+  action_type: "create_queue" | "remove_queue";
+  queue_name: string;
+  driver_name: string | null;
+  port_name: string | null;
+  ip_address: string | null;
+  status: "pending" | "running" | "succeeded" | "failed";
+  result_message: string | null;
+  requested_at: string;
+  completed_at: string | null;
 };
 
 function formatDate(value: string | null) {
@@ -80,6 +94,8 @@ export default function AgentsPage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [queueForm, setQueueForm] = useState({ queue_name: "", driver_name: "", ip_address: "", port_name: "" });
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -105,6 +121,47 @@ export default function AgentsPage() {
       setSelectedAgent(data);
     } catch {
       setSelectedAgent(agent);
+    }
+  }
+
+  async function refreshSelectedAgent(agentId: number) {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const data = await apiFetch<AgentRow>(`/agent/agents/${agentId}`, token);
+    setSelectedAgent(data);
+  }
+
+  async function createQueueAction(actionType: "create_queue" | "remove_queue", queue?: AgentQueue) {
+    if (!selectedAgent) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setActionMessage(null);
+    try {
+      const payload =
+        actionType === "create_queue"
+          ? {
+              action_type: actionType,
+              queue_name: queueForm.queue_name,
+              driver_name: queueForm.driver_name,
+              ip_address: queueForm.ip_address || null,
+              port_name: queueForm.port_name || null,
+            }
+          : {
+              action_type: actionType,
+              queue_name: queue?.queue_name || queueForm.queue_name,
+            };
+      await apiFetch<AgentQueueAction>(`/agent/agents/${selectedAgent.id}/queue-actions`, token, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setActionMessage("Acao enviada para o agent.");
+      if (actionType === "create_queue") {
+        setQueueForm({ queue_name: "", driver_name: "", ip_address: "", port_name: "" });
+      }
+      await refreshSelectedAgent(selectedAgent.id);
+      await load();
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Falha ao enviar acao");
     }
   }
 
@@ -195,11 +252,11 @@ export default function AgentsPage() {
               <tr key={agent.id} className="border-t hover:bg-muted/40 cursor-pointer" onClick={() => openAgent(agent)}>
                 <td className="p-3">
                   <div className="font-semibold">{agent.computer_name || agent.agent_uid}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{agent.os_user || "-"} · {agent.ip_address || "sem IP"}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{agent.os_user || "-"} - {agent.ip_address || "sem IP"}</div>
                 </td>
                 <td className="p-3">
                   <div className="font-medium">{captureLabel(agent.capture_mode)}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">v{agent.version || "-"} · update {agent.auto_update_enabled ? "on" : "off"}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">v{agent.version || "-"} - update {agent.auto_update_enabled ? "on" : "off"}</div>
                 </td>
                 <td className="p-3">
                   <div className="font-medium">{agent.aliases.length}</div>
@@ -278,6 +335,44 @@ export default function AgentsPage() {
                 </div>
               ) : null}
 
+              <div className="rounded-md border bg-muted/20 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <TerminalSquare className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-bold">Administracao remota de filas</h3>
+                </div>
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_140px_140px_auto]">
+                  <Input
+                    placeholder="Nome da fila"
+                    value={queueForm.queue_name}
+                    onChange={(event) => setQueueForm({ ...queueForm, queue_name: event.target.value })}
+                  />
+                  <Input
+                    placeholder="Driver ja instalado"
+                    value={queueForm.driver_name}
+                    onChange={(event) => setQueueForm({ ...queueForm, driver_name: event.target.value })}
+                  />
+                  <Input
+                    placeholder="IP"
+                    value={queueForm.ip_address}
+                    onChange={(event) => setQueueForm({ ...queueForm, ip_address: event.target.value })}
+                  />
+                  <Input
+                    placeholder="Porta"
+                    value={queueForm.port_name}
+                    onChange={(event) => setQueueForm({ ...queueForm, port_name: event.target.value })}
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => createQueueAction("create_queue")}
+                    disabled={!queueForm.queue_name || !queueForm.driver_name || (!queueForm.ip_address && !queueForm.port_name)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Criar
+                  </Button>
+                </div>
+                {actionMessage ? <div className="mt-2 text-xs text-muted-foreground">{actionMessage}</div> : null}
+              </div>
+
               <div>
                 <h3 className="mb-2 text-sm font-bold">Filas locais</h3>
                 <div className="overflow-hidden rounded-md border">
@@ -288,6 +383,7 @@ export default function AgentsPage() {
                         <th className="p-3">Conexao</th>
                         <th className="p-3">IP / Porta</th>
                         <th className="p-3">Vinculo</th>
+                        <th className="p-3 text-right">Acao</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -309,12 +405,52 @@ export default function AgentsPage() {
                               <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Sem vinculo</span>
                             )}
                           </td>
+                          <td className="p-3 text-right">
+                            <Button variant="ghost" className="h-8 w-8 p-0" title="Remover fila neste PC" onClick={() => createQueueAction("remove_queue", queue)}>
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                       {selectedAgent.aliases.length === 0 ? (
                         <tr>
-                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={4}>
+                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={5}>
                             Nenhuma fila local detectada.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-sm font-bold">Acoes remotas recentes</h3>
+                <div className="overflow-hidden rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted text-left">
+                      <tr>
+                        <th className="p-3">Data</th>
+                        <th className="p-3">Acao</th>
+                        <th className="p-3">Fila</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Retorno</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedAgent.queue_actions.map((action) => (
+                        <tr key={action.id} className="border-t">
+                          <td className="p-3">{formatDate(action.requested_at)}</td>
+                          <td className="p-3">{action.action_type === "create_queue" ? "Criar" : "Remover"}</td>
+                          <td className="p-3 font-semibold">{action.queue_name}</td>
+                          <td className="p-3">{action.status}</td>
+                          <td className="p-3 text-xs text-muted-foreground">{action.result_message || "-"}</td>
+                        </tr>
+                      ))}
+                      {selectedAgent.queue_actions.length === 0 ? (
+                        <tr>
+                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={5}>
+                            Nenhuma acao remota enviada ainda.
                           </td>
                         </tr>
                       ) : null}
