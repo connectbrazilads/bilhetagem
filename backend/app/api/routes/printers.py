@@ -360,6 +360,10 @@ def merge_printer_endpoint(
         {PrintPolicy.printer_id: target.id},
         synchronize_session=False,
     )
+    moved_queue_actions = db.query(AgentQueueAction).filter(AgentQueueAction.organization_id == actor.organization_id, AgentQueueAction.printer_id == source.id).update(
+        {AgentQueueAction.printer_id: target.id},
+        synchronize_session=False,
+    )
     moved_aliases = 0
     merged_aliases = 0
     moved_alias_policies = 0
@@ -409,6 +413,7 @@ def merge_printer_endpoint(
             "target_printer": target.name,
             "moved_jobs": moved_jobs,
             "moved_policies": moved_policies,
+            "moved_queue_actions": moved_queue_actions,
             "moved_aliases": moved_aliases,
             "merged_aliases": merged_aliases,
             "moved_alias_policies": moved_alias_policies,

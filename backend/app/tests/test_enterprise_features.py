@@ -781,6 +781,36 @@ def test_merge_printer_preserves_printer_and_alias_policies(db_session: Session)
     assert audit.log_metadata["moved_alias_policies"] == 1
 
 
+def test_merge_printer_moves_queue_actions_to_target_printer(db_session: Session):
+    actor = User(username="merge-queue-action-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    source = Printer(organization_id=1, name="KONICA DUPLICADA", is_color=True)
+    target = Printer(organization_id=1, name="KONICA FINAL", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-merge-queue-action", computer_name="PC-MERGE-ACTION")
+    db_session.add_all([actor, source, target, agent])
+    db_session.flush()
+    action = AgentQueueAction(
+        organization_id=1,
+        agent_id=agent.id,
+        printer_id=source.id,
+        requested_by_user_id=actor.id,
+        action_type=AgentQueueActionType.restore_queue,
+        queue_name="KONICA Financeiro",
+        driver_name="KONICA Driver",
+        ip_address="192.168.1.125",
+        status=AgentQueueActionStatus.pending,
+    )
+    db_session.add(action)
+    db_session.commit()
+
+    merge_printer_endpoint(source.id, target.id, db_session, actor)
+    db_session.refresh(action)
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "printer_merged", AuditLog.entity_id == target.id).one()
+
+    assert action.printer_id == target.id
+    assert db_session.get(Printer, source.id) is None
+    assert audit.log_metadata["moved_queue_actions"] == 1
+
+
 def test_printer_with_linked_policies_cannot_be_deleted(db_session: Session):
     actor = User(username="admin-delete-policy-printer", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="KONICA COM POLITICA", is_color=True)
