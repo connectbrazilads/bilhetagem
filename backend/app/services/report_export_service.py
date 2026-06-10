@@ -8,6 +8,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from app.models.monthly_closing import MonthlyClosing
+from app.models.print_job import JobStatus, PrintJob
 
 PAGE_WIDTH, PAGE_HEIGHT = A4
 PRIMARY = colors.HexColor("#0f6fab")
@@ -24,9 +25,55 @@ def _money(value: float) -> str:
     return f"R$ {float(value or 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _truncate(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+    return value[: max_length - 3] + "..."
+
+
 def _org_name(closing: MonthlyClosing) -> str:
     organization = getattr(closing, "organization", None)
     return getattr(organization, "name", None) or "Sistema de Bilhetagem"
+
+
+def _job_user_name(job: PrintJob) -> str:
+    return job.user.full_name or job.user.username
+
+
+def _job_department_name(job: PrintJob) -> str:
+    return job.user.department.name if job.user and job.user.department else "Sem departamento"
+
+
+def _job_printer_name(job: PrintJob) -> str:
+    return job.printer.name if job.printer else "-"
+
+
+def _job_status_label(status: JobStatus | str) -> str:
+    value = status.value if hasattr(status, "value") else str(status)
+    labels = {
+        "authorized": "Autorizada",
+        "released": "Liberada",
+        "pending_release": "Pendente",
+        "blocked": "Bloqueada",
+        "cancelled": "Cancelada",
+    }
+    return labels.get(value, value)
+
+
+def summarize_print_jobs(jobs: list[PrintJob]) -> dict[str, float | int]:
+    billable_statuses = {JobStatus.authorized, JobStatus.released}
+    saved_statuses = {JobStatus.blocked, JobStatus.cancelled}
+    billable_jobs = [job for job in jobs if job.status in billable_statuses]
+    saved_jobs = [job for job in jobs if job.status in saved_statuses]
+    return {
+        "total_jobs": len(jobs),
+        "billable_jobs": len(billable_jobs),
+        "total_pages": sum(job.pages for job in billable_jobs),
+        "mono_pages": sum(job.pages for job in billable_jobs if not job.is_color),
+        "color_pages": sum(job.pages for job in billable_jobs if job.is_color),
+        "saved_pages": sum(job.pages for job in saved_jobs),
+        "total_cost": round(sum(job.cost for job in billable_jobs), 2),
+    }
 
 
 def _draw_header(pdf: canvas.Canvas, closing: MonthlyClosing) -> float:
@@ -134,6 +181,73 @@ def render_monthly_closing_pdf(closing: MonthlyClosing) -> bytes:
     return buffer.getvalue()
 
 
+def render_print_jobs_pdf(jobs: list[PrintJob], title: str = "Relatorio de impressoes") -> bytes:
+    summary = summarize_print_jobs(jobs)
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    pdf.setTitle(title)
+
+    pdf.setFillColor(PRIMARY)
+    pdf.rect(0, PAGE_HEIGHT - 84, PAGE_WIDTH, 84, fill=1, stroke=0)
+    pdf.setFillColor(colors.white)
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawString(40, PAGE_HEIGHT - 38, title)
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(40, PAGE_HEIGHT - 57, "Historico filtrado de trabalhos de impressao")
+    y = PAGE_HEIGHT - 112
+
+    col_w = (PAGE_WIDTH - 100) / 4
+    _draw_metric(pdf, 40, y, col_w, "Trabalhos", str(summary["total_jobs"]), f"{summary['billable_jobs']} cobraveis")
+    _draw_metric(pdf, 50 + col_w, y, col_w, "Paginas", str(summary["total_pages"]), f"{summary['saved_pages']} salvas")
+    _draw_metric(pdf, 60 + col_w * 2, y, col_w, "Coloridas", str(summary["color_pages"]), f"P&B: {summary['mono_pages']}")
+    _draw_metric(pdf, 70 + col_w * 3, y, col_w, "Custo", _money(float(summary["total_cost"])), "Base filtrada")
+    y -= 90
+
+    pdf.setFillColor(DARK)
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(40, y, "Trabalhos recentes")
+    y -= 18
+    pdf.setFillColor(LIGHT)
+    pdf.rect(40, y - 16, PAGE_WIDTH - 80, 18, fill=1, stroke=0)
+    pdf.setFillColor(MUTED)
+    pdf.setFont("Helvetica-Bold", 7)
+    pdf.drawString(48, y - 10, "Data")
+    pdf.drawString(112, y - 10, "Usuario")
+    pdf.drawString(215, y - 10, "Impressora")
+    pdf.drawString(335, y - 10, "Documento")
+    pdf.drawRightString(475, y - 10, "Pag.")
+    pdf.drawString(490, y - 10, "Status")
+    y -= 24
+    pdf.setFont("Helvetica", 7)
+
+    for job in jobs[:90]:
+        if y < 60:
+            pdf.showPage()
+            y = PAGE_HEIGHT - 52
+            pdf.setFillColor(DARK)
+            pdf.setFont("Helvetica-Bold", 10)
+            pdf.drawString(40, y, title)
+            y -= 24
+            pdf.setFont("Helvetica", 7)
+        pdf.setFillColor(DARK)
+        user_name = _truncate(_job_user_name(job), 24)
+        printer_name = _truncate(_job_printer_name(job), 28)
+        document_name = _truncate(job.document_name or "-", 28)
+        pdf.drawString(48, y, job.submitted_at.strftime("%d/%m/%y %H:%M"))
+        pdf.drawString(112, y, user_name)
+        pdf.drawString(215, y, printer_name)
+        pdf.drawString(335, y, document_name)
+        pdf.drawRightString(475, y, str(job.pages))
+        pdf.drawString(490, y, _truncate(_job_status_label(job.status), 16))
+        y -= 14
+
+    pdf.setFillColor(MUTED)
+    pdf.setFont("Helvetica", 7)
+    pdf.drawString(40, 36, "Relatorio operacional filtrado. Fechamentos mensais permanecem como snapshot congelado para cobranca.")
+    pdf.save()
+    return buffer.getvalue()
+
+
 def _style_sheet(sheet) -> None:
     header_fill = PatternFill("solid", fgColor="0F6FAB")
     header_font = Font(color="FFFFFF", bold=True)
@@ -181,6 +295,48 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
         for row in sheet.iter_rows(min_row=2, min_col=6, max_col=6):
             row[0].number_format = '"R$" #,##0.00'
         _style_sheet(sheet)
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def render_print_jobs_xlsx(jobs: list[PrintJob]) -> bytes:
+    summary = summarize_print_jobs(jobs)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Impressoes"
+    sheet.append(["Data", "Usuario", "Departamento", "Impressora", "Documento", "Paginas", "Cor", "Status", "Custo", "Politica"])
+    for job in jobs:
+        sheet.append(
+            [
+                job.submitted_at.isoformat(),
+                _job_user_name(job),
+                _job_department_name(job),
+                _job_printer_name(job),
+                job.document_name or "",
+                job.pages,
+                "Colorido" if job.is_color else "P&B",
+                _job_status_label(job.status),
+                job.cost,
+                job.policy_name or "",
+            ]
+        )
+    for row in sheet.iter_rows(min_row=2, min_col=9, max_col=9):
+        row[0].number_format = '"R$" #,##0.00'
+    _style_sheet(sheet)
+
+    summary_sheet = workbook.create_sheet("Resumo")
+    summary_sheet.append(["Indicador", "Valor"])
+    summary_sheet.append(["Trabalhos filtrados", summary["total_jobs"]])
+    summary_sheet.append(["Trabalhos cobraveis", summary["billable_jobs"]])
+    summary_sheet.append(["Paginas cobraveis", summary["total_pages"]])
+    summary_sheet.append(["Paginas P&B", summary["mono_pages"]])
+    summary_sheet.append(["Paginas coloridas", summary["color_pages"]])
+    summary_sheet.append(["Paginas salvas", summary["saved_pages"]])
+    summary_sheet.append(["Custo filtrado", summary["total_cost"]])
+    summary_sheet["B8"].number_format = '"R$" #,##0.00'
+    _style_sheet(summary_sheet)
 
     buffer = BytesIO()
     workbook.save(buffer)

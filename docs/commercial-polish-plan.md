@@ -234,6 +234,7 @@ Entregaveis:
 - Total de paginas P&B, coloridas, custo, bloqueios, liberacoes e economia estimada.
 - Fechamento mensal com snapshot para nao mudar quando dados historicos forem editados.
 - Exportacao PDF/Excel com identidade visual.
+- Exportacao operacional filtrada em PDF/Excel com resumo comercial, planilha formatada e auditoria de filtros usados.
 - Auditoria administrativa filtravel por periodo, acao e entidade, com exportacao CSV e registro de mudancas criticas de configuracao.
 - Agendamento de envio por e-mail.
 - Scheduler backend para enviar automaticamente fechamentos mensais de empresas ativas no dia configurado.

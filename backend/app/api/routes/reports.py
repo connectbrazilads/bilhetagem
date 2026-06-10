@@ -1,10 +1,6 @@
 from datetime import datetime
-from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from openpyxl import Workbook
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -20,11 +16,17 @@ from app.schemas.report import (
     MonthlyClosingEmailRequest,
     MonthlyClosingRead,
 )
+from app.services.audit_service import write_audit
 from app.services.email_service import send_due_monthly_report_email, send_monthly_closing_email
 from app.services.monthly_closing_service import create_monthly_closing
-from app.services.report_export_service import monthly_closing_filename_base, render_monthly_closing_pdf, render_monthly_closing_xlsx
+from app.services.report_export_service import (
+    monthly_closing_filename_base,
+    render_monthly_closing_pdf,
+    render_monthly_closing_xlsx,
+    render_print_jobs_pdf,
+    render_print_jobs_xlsx,
+)
 from app.services.report_service import dashboard_metrics
-from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -88,7 +90,7 @@ def send_due_monthly_closing_email_endpoint(
             db.commit()
         return result
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/monthly-closings/{closing_id}", response_model=MonthlyClosingRead)
@@ -131,7 +133,7 @@ def send_monthly_closing_email_endpoint(
         db.commit()
         return result
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _closing_or_404(db: Session, organization_id: int, closing_id: int) -> MonthlyClosing:
@@ -197,46 +199,34 @@ def export_report(
     if date_to:
         query = query.filter(PrintJob.submitted_at <= date_to)
     jobs = query.limit(5000).all()
+    write_audit(
+        db,
+        action="report_exported",
+        entity="print_jobs",
+        actor_user_id=actor.id,
+        metadata={
+            "format": format,
+            "rows": len(jobs),
+            "filters": {
+                "user_id": user_id,
+                "department_id": department_id,
+                "printer_id": printer_id,
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+            },
+        },
+    )
+    db.commit()
 
     if format == "pdf":
-        buffer = BytesIO()
-        pdf = canvas.Canvas(buffer, pagesize=A4)
-        pdf.setTitle("Relatório de Impressões")
-        pdf.drawString(40, 800, "Relatório de Impressões")
-        y = 770
-        for job in jobs[:45]:
-            doc = (job.document_name[:30] + "...") if (job.document_name and len(job.document_name) > 30) else (job.document_name or "N/A")
-            user_name = job.user.full_name or job.user.username
-            department_name = job.user.department.name if job.user.department else "Sem departamento"
-            pdf.drawString(40, y, f"{job.submitted_at:%Y-%m-%d %H:%M} | {user_name} | {department_name} | {job.printer.name} | {doc} | {job.pages} pag. | R$ {job.cost:.2f}")
-            y -= 16
-        pdf.save()
         return Response(
-            content=buffer.getvalue(),
+            content=render_print_jobs_pdf(jobs),
             media_type="application/pdf",
             headers={"Content-Disposition": "attachment; filename=relatorio-impressoes.pdf"},
         )
 
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Impressões"
-    sheet.append(["Data", "Usuário", "Departamento", "Impressora", "Documento", "Páginas", "Cor", "Status", "Custo"])
-    for job in jobs:
-        sheet.append([
-            job.submitted_at.isoformat(),
-            job.user.full_name or job.user.username,
-            job.user.department.name if job.user.department else "Sem departamento",
-            job.printer.name,
-            job.document_name or "",
-            job.pages,
-            job.is_color,
-            job.status.value,
-            job.cost,
-        ])
-    buffer = BytesIO()
-    workbook.save(buffer)
     return Response(
-        content=buffer.getvalue(),
+        content=render_print_jobs_xlsx(jobs),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=relatorio-impressoes.xlsx"},
     )

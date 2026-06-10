@@ -156,12 +156,37 @@ def test_report_export_applies_department_filter(db_session: Session):
     response = export_report(format="xlsx", department_id=user.department_id, db=db_session, actor=actor)
 
     workbook = load_workbook(BytesIO(response.body), data_only=True)
+    assert workbook.sheetnames == ["Impressoes", "Resumo"]
     sheet = workbook.active
     exported_users = [row[1].value for row in sheet.iter_rows(min_row=2)]
     assert set(exported_users) == {"Ana Financeiro"}
     assert len(exported_users) == 4
     assert sheet["C2"].value == "Financeiro"
     assert sheet["I2"].value in {0.5, 1.0, 0.75, 4.95}
+    assert workbook["Resumo"]["A8"].value == "Custo filtrado"
+    assert workbook["Resumo"]["B8"].value == 6.45
+
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "report_exported").one()
+    assert audit.actor_user_id == actor.id
+    assert audit.log_metadata["format"] == "xlsx"
+    assert audit.log_metadata["rows"] == 4
+    assert audit.log_metadata["filters"]["department_id"] == user.department_id
+
+
+def test_report_export_pdf_uses_commercial_renderer_and_audit(db_session: Session):
+    _seed_job_data(db_session)
+    actor = User(username="report-general-pdf-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    response = export_report(format="pdf", db=db_session, actor=actor)
+
+    assert response.media_type == "application/pdf"
+    assert response.body.startswith(b"%PDF")
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "report_exported").one()
+    assert audit.actor_user_id == actor.id
+    assert audit.log_metadata["format"] == "pdf"
+    assert audit.log_metadata["rows"] == 4
 
 
 def test_monthly_report_email_settings_api(db_session: Session):
