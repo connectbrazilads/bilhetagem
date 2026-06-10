@@ -38,7 +38,18 @@ SMTP_USE_TLS=true
 ```
 
 No painel, configure os destinatarios em **Configuracoes > Relatorios mensais**.
-Para automacao, chame `POST /reports/monthly-closings/email-due` diariamente por cron, worker ou ferramenta externa autenticada como admin.
+
+O backend inicia um scheduler interno no startup quando `MONTHLY_REPORT_EMAIL_SCHEDULER_ENABLED=true`.
+Ele verifica empresas ativas no intervalo `MONTHLY_REPORT_EMAIL_SCHEDULER_INTERVAL_SECONDS` e envia o fechamento
+do mes anterior uma unica vez por periodo, respeitando o dia configurado no painel.
+
+Para ambientes onde voce preferir controlar a execucao por cron, worker ou ferramenta externa, desative o scheduler:
+
+```text
+MONTHLY_REPORT_EMAIL_SCHEDULER_ENABLED=false
+```
+
+Depois chame `POST /reports/monthly-closings/email-due` diariamente com um usuario admin autenticado.
 
 ## Operacao
 
