@@ -306,6 +306,40 @@ def test_agent_heartbeat_auto_binds_queue_to_known_physical_printer(db_session: 
     assert "unbound_queues" not in {alert.code for alert in response.health_alerts}
 
 
+def test_agent_heartbeat_binds_queue_by_serial_case_insensitive(db_session: Session):
+    actor = User(username="agent-bind-case", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(
+        organization_id=1,
+        name="KONICA SERIAL FISICA",
+        serial_number="SN-CASE-123",
+        is_color=True,
+    )
+    db_session.add_all([actor, printer])
+    db_session.commit()
+
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-bind-case",
+            computer_name="PC-BIND-CASE",
+            queues=[
+                {
+                    "queue_name": "Konica Local",
+                    "driver_name": "KONICA Driver",
+                    "connection_type": "network",
+                    "serial_number": "sn-case-123",
+                    "fingerprint": "serial:sn-case-123",
+                }
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert response.aliases[0].printer_id == printer.id
+    assert db_session.query(Printer).count() == 1
+
+
 def test_agent_heartbeat_auto_binds_usb_queue_by_known_device_id(db_session: Session):
     actor = User(username="agent-usb-bind", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="BROTHER USB FISICA", is_color=False)

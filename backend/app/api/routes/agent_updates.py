@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -208,6 +208,40 @@ def _clean_optional(value: str | None) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _identity_key(value: str | None) -> str | None:
+    cleaned = _clean_optional(value)
+    return cleaned.lower() if cleaned else None
+
+
+def _find_printer_by_serial(db: Session, organization_id: int, serial_number: str | None) -> Printer | None:
+    identity = _identity_key(serial_number)
+    if not identity:
+        return None
+    return (
+        db.query(Printer)
+        .filter(
+            Printer.organization_id == organization_id,
+            Printer.serial_number.isnot(None),
+            func.lower(Printer.serial_number) == identity,
+        )
+        .first()
+    )
+
+
+def _find_alias_by_identity(db: Session, organization_id: int, column, value: str | None, *, require_printer: bool = False) -> PrinterAlias | None:
+    identity = _identity_key(value)
+    if not identity:
+        return None
+    filters = [
+        PrinterAlias.organization_id == organization_id,
+        column.isnot(None),
+        func.lower(column) == identity,
+    ]
+    if require_printer:
+        filters.append(PrinterAlias.printer_id.isnot(None))
+    return db.query(PrinterAlias).filter(*filters).first()
 
 
 def _normalize_alias_name(value: str | None) -> str | None:
@@ -495,18 +529,7 @@ def _find_bound_printer_alias(
         (PrinterAlias.fingerprint, fingerprint),
     ]
     for column, value in filters:
-        cleaned = _clean_optional(value)
-        if not cleaned:
-            continue
-        alias = (
-            db.query(PrinterAlias)
-            .filter(
-                PrinterAlias.organization_id == organization_id,
-                column == cleaned,
-                PrinterAlias.printer_id.isnot(None),
-            )
-            .first()
-        )
+        alias = _find_alias_by_identity(db, organization_id, column, value, require_printer=True)
         if alias:
             return alias
     return None
@@ -515,7 +538,7 @@ def _find_bound_printer_alias(
 def _find_printer_for_queue_metadata(db: Session, organization_id: int, queue: AgentQueuePayload) -> Printer | None:
     serial_number = _clean_optional(queue.serial_number)
     if serial_number:
-        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.serial_number == serial_number).first()
+        printer = _find_printer_by_serial(db, organization_id, serial_number)
         if printer:
             return printer
 

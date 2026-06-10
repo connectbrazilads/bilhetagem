@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -72,6 +73,42 @@ def _clean_optional(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _identity_key(value: str | None) -> str | None:
+    cleaned = _clean_optional(value)
+    return cleaned.lower() if cleaned else None
+
+
+def _find_printer_by_serial(db: Session, organization_id: int, serial_number: str | None) -> Printer | None:
+    identity = _identity_key(serial_number)
+    if not identity:
+        return None
+    return (
+        db.query(Printer)
+        .filter(
+            Printer.organization_id == organization_id,
+            Printer.serial_number.isnot(None),
+            func.lower(Printer.serial_number) == identity,
+        )
+        .first()
+    )
+
+
+def _find_bound_alias_by_identity(db: Session, organization_id: int, column, value: str | None) -> PrinterAlias | None:
+    identity = _identity_key(value)
+    if not identity:
+        return None
+    return (
+        db.query(PrinterAlias)
+        .filter(
+            PrinterAlias.organization_id == organization_id,
+            PrinterAlias.printer_id.isnot(None),
+            column.isnot(None),
+            func.lower(column) == identity,
+        )
+        .first()
+    )
+
+
 def _policy_audit_metadata(policy_decision: PolicyDecision, requested_is_color: bool, effective_is_color: bool) -> dict:
     if not policy_decision.policy:
         return {
@@ -110,18 +147,10 @@ def _upsert_agent(db: Session, payload: PrintJobCreate, organization_id: int) ->
 def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAgent | None, organization_id: int) -> Printer | None:
     serial = _clean_optional(payload.printer_serial)
     if serial:
-        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.serial_number == serial).first()
+        printer = _find_printer_by_serial(db, organization_id, serial)
         if printer:
             return printer
-        alias = (
-            db.query(PrinterAlias)
-            .filter(
-                PrinterAlias.organization_id == organization_id,
-                PrinterAlias.serial_number == serial,
-                PrinterAlias.printer_id.isnot(None),
-            )
-            .first()
-        )
+        alias = _find_bound_alias_by_identity(db, organization_id, PrinterAlias.serial_number, serial)
         if alias and alias.printer:
             return alias.printer
 
@@ -158,29 +187,13 @@ def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAge
 
     device_id = _clean_optional(payload.printer_device_id)
     if device_id:
-        alias = (
-            db.query(PrinterAlias)
-            .filter(
-                PrinterAlias.organization_id == organization_id,
-                PrinterAlias.device_id == device_id,
-                PrinterAlias.printer_id.isnot(None),
-            )
-            .first()
-        )
+        alias = _find_bound_alias_by_identity(db, organization_id, PrinterAlias.device_id, device_id)
         if alias and alias.printer:
             return alias.printer
 
     fingerprint = _clean_optional(payload.printer_fingerprint)
     if fingerprint:
-        alias = (
-            db.query(PrinterAlias)
-            .filter(
-                PrinterAlias.organization_id == organization_id,
-                PrinterAlias.fingerprint == fingerprint,
-                PrinterAlias.printer_id.isnot(None),
-            )
-            .first()
-        )
+        alias = _find_bound_alias_by_identity(db, organization_id, PrinterAlias.fingerprint, fingerprint)
         if alias and alias.printer:
             return alias.printer
 
@@ -222,11 +235,17 @@ def _upsert_printer_alias(db: Session, payload: PrintJobCreate, agent: PrintAgen
             .first()
         )
     if alias is None and not agent and payload.printer_fingerprint:
-        alias = (
-            db.query(PrinterAlias)
-            .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.fingerprint == payload.printer_fingerprint)
-            .first()
-        )
+        fingerprint_identity = _identity_key(payload.printer_fingerprint)
+        if fingerprint_identity:
+            alias = (
+                db.query(PrinterAlias)
+                .filter(
+                    PrinterAlias.organization_id == organization_id,
+                    PrinterAlias.fingerprint.isnot(None),
+                    func.lower(PrinterAlias.fingerprint) == fingerprint_identity,
+                )
+                .first()
+            )
     if alias is None:
         alias = PrinterAlias(organization_id=organization_id, agent_id=agent.id if agent else None, queue_name=queue_name)
         db.add(alias)
