@@ -15,6 +15,7 @@ from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationUpdate
 from app.services.audit_service import write_audit
+from app.services.organization_contract_service import active_printers_count, printer_contract_summary
 from app.services.organization_service import DEFAULT_ORGANIZATION_SLUG
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -55,36 +56,12 @@ def _scoped_jobs_query(db: Session, organization_id: int):
     )
 
 
-def _printer_limit_status(active_printers: int, limit: int) -> tuple[float, str]:
-    if limit <= 0:
-        return 0.0, "unlimited"
-    usage_percent = round((active_printers / limit) * 100, 1)
-    if active_printers > limit:
-        return usage_percent, "exceeded"
-    if usage_percent >= 80:
-        return usage_percent, "warning"
-    return usage_percent, "ok"
-
-
-def _active_printers_count(db: Session, organization_id: int) -> int:
-    return (
-        db.query(Printer)
-        .filter(Printer.organization_id == organization_id, Printer.is_active.is_(True))
-        .count()
-    )
-
-
 def _organization_read(db: Session, organization: Organization) -> OrganizationRead:
     now = datetime.now(timezone.utc)
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization.id).all()
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
-    printers_count = db.query(Printer).filter(Printer.organization_id == organization.id).count()
-    active_printers_count = _active_printers_count(db, organization.id)
-    printer_usage_percent, printer_limit_status = _printer_limit_status(
-        active_printers_count,
-        organization.contracted_printer_limit,
-    )
+    contract = printer_contract_summary(db, organization.id)
     monthly_billable_query = _scoped_jobs_query(db, organization.id).filter(
         PrintJob.submitted_at >= month_start,
         PrintJob.status.in_([JobStatus.authorized, JobStatus.released]),
@@ -108,10 +85,10 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         contracted_printer_limit=organization.contracted_printer_limit,
         created_at=organization.created_at,
         users_count=db.query(User).filter(User.organization_id == organization.id).count(),
-        printers_count=printers_count,
-        active_printers_count=active_printers_count,
-        contracted_printer_usage_percent=printer_usage_percent,
-        contracted_printer_limit_status=printer_limit_status,
+        printers_count=contract["printers_count"],
+        active_printers_count=contract["active_printers_count"],
+        contracted_printer_usage_percent=contract["printer_usage_percent"],
+        contracted_printer_limit_status=contract["printer_limit_status"],
         agents_count=len(agents),
         online_agents_count=online_agents,
         offline_agents_count=len(agents) - online_agents,
@@ -215,7 +192,7 @@ def update_organization(
     if payload.billing_status == "suspended" and organization.id == actor.organization_id:
         raise HTTPException(status_code=400, detail="Nao e possivel suspender a empresa em uso pelo usuario logado")
     if payload.contracted_printer_limit is not None and payload.contracted_printer_limit > 0:
-        active_printers = _active_printers_count(db, organization.id)
+        active_printers = active_printers_count(db, organization.id)
         if active_printers > payload.contracted_printer_limit:
             raise HTTPException(
                 status_code=409,

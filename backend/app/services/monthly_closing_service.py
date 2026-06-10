@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.models.department import Department
 from app.models.monthly_closing import MonthlyClosing
-from app.models.organization import Organization
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.models.user import User
+from app.services.organization_contract_service import printer_contract_summary
 
 
 def validate_period(year: int, month: int) -> None:
@@ -43,17 +43,6 @@ def _cost_per_page(cost: float, pages: int) -> float:
     return _round_money(cost / pages)
 
 
-def _printer_limit_status(active_printers: int, limit: int) -> tuple[float, str]:
-    if limit <= 0:
-        return 0.0, "unlimited"
-    usage_percent = round((active_printers / limit) * 100, 1)
-    if active_printers > limit:
-        return usage_percent, "exceeded"
-    if usage_percent >= 80:
-        return usage_percent, "warning"
-    return usage_percent, "ok"
-
-
 def _empty_policy_bucket(name: str, action: str | None) -> dict:
     return {
         "name": name,
@@ -73,15 +62,7 @@ def _empty_policy_bucket(name: str, action: str | None) -> dict:
 
 def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: int) -> dict:
     start, end = period_bounds(year, month)
-    organization = db.get(Organization, organization_id)
-    printers_count = db.query(Printer).filter(Printer.organization_id == organization_id).count()
-    active_printers_count = (
-        db.query(Printer)
-        .filter(Printer.organization_id == organization_id, Printer.is_active.is_(True))
-        .count()
-    )
-    contracted_printer_limit = organization.contracted_printer_limit if organization else 0
-    printer_usage_percent, printer_limit_status = _printer_limit_status(active_printers_count, contracted_printer_limit)
+    contract = printer_contract_summary(db, organization_id)
     jobs = (
         db.query(PrintJob)
         .join(User, User.id == PrintJob.user_id)
@@ -205,17 +186,20 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
     return {
         "organization": {
             "id": organization_id,
-            "name": organization.name if organization else "",
-            "slug": organization.slug if organization else "",
+            "name": contract.get("organization_name", ""),
+            "slug": contract.get("organization_slug", ""),
         },
         "contract": {
-            "billing_plan": organization.billing_plan if organization else "starter",
-            "billing_status": organization.billing_status if organization else "trial",
-            "contracted_printer_limit": contracted_printer_limit,
-            "printers_count": printers_count,
-            "active_printers_count": active_printers_count,
-            "printer_usage_percent": printer_usage_percent,
-            "printer_limit_status": printer_limit_status,
+            key: contract[key]
+            for key in (
+                "billing_plan",
+                "billing_status",
+                "contracted_printer_limit",
+                "printers_count",
+                "active_printers_count",
+                "printer_usage_percent",
+                "printer_limit_status",
+            )
         },
         "period": {"year": year, "month": month, "start": start.isoformat(), "end": end.isoformat()},
         "totals": totals,
