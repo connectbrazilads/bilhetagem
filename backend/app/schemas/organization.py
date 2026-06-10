@@ -44,6 +44,7 @@ class OrganizationRead(BaseModel):
     online_agents_count: int = 0
     offline_agents_count: int = 0
     jobs_count: int = 0
+    jobs_month: int = 0
     pages_month: int = 0
     cost_month: float = 0.0
 

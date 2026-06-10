@@ -60,18 +60,19 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization.id).all()
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
+    monthly_billable_query = _scoped_jobs_query(db, organization.id).filter(
+        PrintJob.submitted_at >= month_start,
+        PrintJob.status.in_([JobStatus.authorized, JobStatus.released]),
+    )
     pages_month, cost_month = (
-        _scoped_jobs_query(db, organization.id)
+        monthly_billable_query
         .with_entities(
             func.coalesce(func.sum(PrintJob.pages), 0),
             func.coalesce(func.sum(PrintJob.cost), 0.0),
         )
-        .filter(
-            PrintJob.submitted_at >= month_start,
-            PrintJob.status.in_([JobStatus.authorized, JobStatus.released]),
-        )
         .one()
     )
+    jobs_month = monthly_billable_query.count()
     return OrganizationRead(
         id=organization.id,
         name=organization.name,
@@ -84,6 +85,7 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         online_agents_count=online_agents,
         offline_agents_count=len(agents) - online_agents,
         jobs_count=_scoped_jobs_query(db, organization.id).count(),
+        jobs_month=int(jobs_month or 0),
         pages_month=int(pages_month or 0),
         cost_month=float(cost_month or 0.0),
     )

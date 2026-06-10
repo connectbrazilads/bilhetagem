@@ -623,6 +623,34 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
     assert exc.value.status_code == 400
 
 
+def test_organization_metrics_include_billable_monthly_jobs(db_session: Session):
+    actor = User(username="org-metrics-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="org-metrics-user", full_name="Usuario", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="ORG METRICS PRINTER", is_color=True)
+    db_session.add_all([actor, user, printer])
+    db_session.flush()
+
+    now = datetime.now(timezone.utc)
+    previous_month = now - timedelta(days=40)
+    db_session.add_all(
+        [
+            PrintJob(organization_id=1, user_id=user.id, printer_id=printer.id, pages=2, is_color=False, cost=0.10, status=JobStatus.authorized, submitted_at=now),
+            PrintJob(organization_id=1, user_id=user.id, printer_id=printer.id, pages=3, is_color=True, cost=0.75, status=JobStatus.released, submitted_at=now),
+            PrintJob(organization_id=1, user_id=user.id, printer_id=printer.id, pages=9, is_color=True, cost=2.25, status=JobStatus.blocked, submitted_at=now),
+            PrintJob(organization_id=1, user_id=user.id, printer_id=printer.id, pages=5, is_color=False, cost=0.25, status=JobStatus.authorized, submitted_at=previous_month),
+        ]
+    )
+    db_session.commit()
+
+    organizations = list_organizations(db=db_session, actor=actor)
+    default_org = next(organization for organization in organizations if organization.id == 1)
+
+    assert default_org.jobs_count == 4
+    assert default_org.jobs_month == 2
+    assert default_org.pages_month == 5
+    assert default_org.cost_month == 0.85
+
+
 def test_auth_context_returns_current_organization(db_session: Session):
     organization = Organization(name="Cliente Contexto", slug="cliente-contexto", is_active=True)
     user = User(username="context-admin", full_name="Context Admin", role=UserRole.admin, is_active=True, organization=organization)

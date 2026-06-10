@@ -19,6 +19,7 @@ type OrganizationRow = {
   online_agents_count: number;
   offline_agents_count: number;
   jobs_count: number;
+  jobs_month: number;
   pages_month: number;
   cost_month: number;
 };
@@ -55,6 +56,7 @@ export default function OrganizationsPage() {
       active: organizations.filter((organization) => organization.is_active).length,
       inactive: organizations.filter((organization) => !organization.is_active).length,
       jobs: organizations.reduce((total, organization) => total + organization.jobs_count, 0),
+      jobsMonth: organizations.reduce((total, organization) => total + organization.jobs_month, 0),
       onlineAgents: organizations.reduce((total, organization) => total + organization.online_agents_count, 0),
       pagesMonth: organizations.reduce((total, organization) => total + organization.pages_month, 0),
       costMonth: organizations.reduce((total, organization) => total + organization.cost_month, 0),
@@ -107,11 +109,12 @@ export default function OrganizationsPage() {
         <p className="mt-1 text-sm text-muted-foreground">Gerencie clientes e o isolamento de dados do ambiente SaaS.</p>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-7">
         <Summary label="Empresas" value={summary.total} icon={Building2} />
         <Summary label="Ativas" value={summary.active} icon={Activity} />
         <Summary label="Inativas" value={summary.inactive} icon={MonitorOff} />
         <Summary label="Agents online" value={summary.onlineAgents} icon={MonitorCheck} />
+        <Summary label="Trabalhos mes" value={summary.jobsMonth} icon={FileText} />
         <Summary label="Paginas mes" value={summary.pagesMonth} icon={FileText} />
         <Summary label="Custo mes" value={money(summary.costMonth)} icon={CircleDollarSign} />
       </div>
@@ -223,6 +226,7 @@ export default function OrganizationsPage() {
                         <MetricPill label="Online" value={organization.online_agents_count} tone="success" />
                         <MetricPill label="Offline" value={organization.offline_agents_count} tone={organization.offline_agents_count > 0 ? "danger" : "muted"} />
                         <MetricPill label="Jobs" value={organization.jobs_count} />
+                        <MetricPill label="Jobs mes" value={organization.jobs_month} />
                         <MetricPill label="Pag. mes" value={organization.pages_month} />
                         <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                           {money(organization.cost_month)} mes
