@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Building2, Download, Gauge, History, LogOut, MonitorCog, Printer, Settings, ShieldCheck, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Download, Gauge, History, LogOut, Menu, MonitorCog, Printer, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
 
 import { Button } from "@/components/ui";
 import { apiFetch, clearAuthStorage, getCurrentRole } from "@/lib/api";
@@ -41,6 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [organizationName, setOrganizationName] = useState("");
   const [organizationBillingStatus, setOrganizationBillingStatus] = useState("");
   const [role, setRole] = useState("");
+  const [mobileOpen, setMobileOpen] = useState(false);
   const visibleNavItems = navItems.filter((item) => !role || item.roles.includes(role));
 
   useEffect(() => {
@@ -67,6 +68,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   function logout() {
     clearAuthStorage();
@@ -103,11 +108,80 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
       </aside>
+      {mobileOpen ? (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button
+            type="button"
+            aria-label="Fechar menu"
+            className="absolute inset-0 bg-slate-950/50"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside className="relative flex h-full w-72 max-w-[85vw] flex-col border-r border-white/10 bg-slate-950 text-white shadow-xl">
+            <div className="flex h-16 items-center justify-between gap-3 border-b border-white/10 px-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-white">PB</div>
+                <div>
+                  <div className="text-sm font-semibold">PrintBilling</div>
+                  <div className="text-xs text-slate-400">Controle de impressao</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar menu"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-slate-300 hover:bg-white/10 hover:text-white"
+                onClick={() => setMobileOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {organizationSlug ? (
+              <div className="border-b border-white/10 px-5 py-3 text-xs text-slate-300">
+                <div className="font-semibold text-white">{organizationName || organizationSlug}</div>
+                {organizationName ? <div className="mt-0.5 text-slate-400">{organizationSlug}</div> : null}
+                {billingStatusLabel(organizationBillingStatus) ? (
+                  <span className={cn("mt-2 inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-bold", billingStatusClass(organizationBillingStatus))}>
+                    {billingStatusLabel(organizationBillingStatus)}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            <nav className="space-y-1 p-3">
+              {visibleNavItems.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex h-10 items-center gap-3 rounded-md px-3 text-sm text-slate-300 transition-colors hover:bg-white/10 hover:text-white",
+                      active && "bg-white text-slate-950 shadow-sm hover:bg-white hover:text-slate-950"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </aside>
+        </div>
+      ) : null}
       <main className="md:pl-64">
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-white/90 px-4 backdrop-blur md:px-6">
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bilhetagem de Impressao</div>
-            <div className="text-sm font-semibold">{activeItem?.label ?? "Painel"}</div>
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              aria-label="Abrir menu"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground md:hidden"
+              onClick={() => setMobileOpen(true)}
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+            <div className="min-w-0">
+              <div className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">Bilhetagem de Impressao</div>
+              <div className="truncate text-sm font-semibold">{activeItem?.label ?? "Painel"}</div>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {organizationSlug ? (
