@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 import pytest
 
-from app.api.routes.jobs import cancel_job, get_agent_actions, release_job
+from app.api.routes.jobs import cancel_job, confirm_web_printed, get_agent_actions, release_job
 from app.models.audit_log import AuditLog
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
@@ -283,6 +283,42 @@ def test_manager_can_cancel_pending_job_for_same_organization(db_session):
     assert audit.log_metadata["actor_role"] == "manager"
     assert audit.log_metadata["printer"] == "KONICA_CANCEL"
     assert audit.log_metadata["pages"] == 3
+
+
+def test_agent_confirming_web_print_writes_audit(db_session):
+    agent = User(username="agent-webprint", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    user = User(username="webprint-user", full_name="WebPrint User", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_WEBPRINT", is_color=True)
+    db_session.add_all([agent, user, printer])
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        external_job_id="webprint_77",
+        document_name="Contrato.pdf",
+        pages=7,
+        is_color=True,
+        cost=1.75,
+        status=JobStatus.authorized,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    result = confirm_web_printed(job.id, db=db_session, current_user=agent)
+
+    db_session.refresh(job)
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "web_print_confirmed", AuditLog.entity_id == job.id).one()
+    assert result["success"] is True
+    assert job.external_job_id == f"webprint_printed_{job.id}"
+    assert audit.actor_user_id == agent.id
+    assert audit.log_metadata["job_username"] == "webprint-user"
+    assert audit.log_metadata["actor_role"] == "agent"
+    assert audit.log_metadata["printer"] == "KONICA_WEBPRINT"
+    assert audit.log_metadata["document_name"] == "Contrato.pdf"
+    assert audit.log_metadata["pages"] == 7
+    assert audit.log_metadata["is_color"] is True
 
 
 def test_regular_user_cannot_release_another_users_pending_job(db_session):

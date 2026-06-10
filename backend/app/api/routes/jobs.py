@@ -420,6 +420,21 @@ def confirm_web_printed(
     # Mark it as printed by renaming the external_job_id
     if job.external_job_id and job.external_job_id.startswith("webprint_") and not job.external_job_id.startswith("webprint_printed_"):
         job.external_job_id = f"webprint_printed_{job.id}"
+        write_audit(
+            db,
+            action="web_print_confirmed",
+            entity="print_jobs",
+            entity_id=job.id,
+            actor_user_id=current_user.id,
+            metadata={
+                "job_username": job.user.username if job.user else None,
+                "actor_role": current_user.role.value,
+                "printer": job.printer.name if job.printer else None,
+                "document_name": job.document_name,
+                "pages": job.pages,
+                "is_color": job.is_color,
+            },
+        )
         db.commit()
         return {"success": True, "message": "Impressão confirmada"}
         
