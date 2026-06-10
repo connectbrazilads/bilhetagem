@@ -366,6 +366,13 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
     assert db_session.query(Printer).filter(Printer.name == "KONICA").count() == 2
     assert token.organization_id == other_org.id
 
+    with pytest.raises(HTTPException) as exc:
+        login(
+            LoginRequest(username="admin", password="admin12345", organization_slug=None),
+            db=db_session,
+        )
+    assert exc.value.status_code == 400
+
 
 def test_inactive_organization_cannot_issue_login_token(db_session: Session):
     inactive_org = Organization(name="Cliente Inativo", slug="cliente-inativo", is_active=False)

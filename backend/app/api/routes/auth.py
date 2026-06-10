@@ -23,7 +23,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     )
     if payload.organization_slug:
         query = query.filter(Organization.slug == payload.organization_slug)
-    user = query.first()
+        user = query.first()
+    else:
+        candidates = query.limit(2).all()
+        if len(candidates) > 1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Informe a empresa para acessar")
+        user = candidates[0] if candidates else None
     if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario ou senha invalidos")
     token = create_access_token(user.username, {"role": user.role.value, "organization_id": user.organization_id})
