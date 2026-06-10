@@ -23,6 +23,23 @@ def _cost_per_page(cost: float, pages: int) -> float:
     return _round_money(cost / pages)
 
 
+def _normalize_alias_name(value: str | None) -> str | None:
+    if not value:
+        return None
+    return " ".join(value.strip().lower().split()) or None
+
+
+def _duplicate_queue_alias_count(aliases: list[PrinterAlias]) -> int:
+    grouped: dict[tuple[int | None, str], int] = {}
+    for alias in aliases:
+        normalized = alias.normalized_queue_name or _normalize_alias_name(alias.queue_name)
+        if not normalized:
+            continue
+        key = (alias.agent_id, normalized)
+        grouped[key] = grouped.get(key, 0) + 1
+    return sum(count - 1 for count in grouped.values() if count > 1)
+
+
 def _scoped_job_query(db: Session, organization_id: int):
     return (
         db.query(PrintJob)
@@ -76,18 +93,12 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         .scalar()
         or 0
     )
-    duplicate_queue_rows = (
-        db.query(func.count(PrinterAlias.id).label("alias_count"))
-        .filter(
-            PrinterAlias.organization_id == organization_id,
-            PrinterAlias.agent_id.isnot(None),
-            PrinterAlias.normalized_queue_name.isnot(None),
-        )
-        .group_by(PrinterAlias.agent_id, PrinterAlias.normalized_queue_name)
-        .having(func.count(PrinterAlias.id) > 1)
+    aliases_with_agent = (
+        db.query(PrinterAlias)
+        .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.agent_id.isnot(None))
         .all()
     )
-    duplicate_queue_aliases = sum(int(row.alias_count) - 1 for row in duplicate_queue_rows)
+    duplicate_queue_aliases = _duplicate_queue_alias_count(aliases_with_agent)
 
     return {
         "agents_total": len(agents),

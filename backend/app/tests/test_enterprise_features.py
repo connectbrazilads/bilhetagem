@@ -576,7 +576,6 @@ def test_organization_scope_isolates_core_views(db_session: Session):
                 printer_id=org_one_printer.id,
                 agent_id=org_one_online_agent.id,
                 queue_name="  org   1   printer ",
-                normalized_queue_name="org 1 printer",
                 connection_type="network",
                 last_seen_at=now,
             ),
