@@ -671,6 +671,17 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
                 submitted_at=datetime.now(timezone.utc),
             ),
             PrintJob(
+                organization_id=1,
+                user_id=other_user.id,
+                printer_id=other_printer.id,
+                agent_id=default_agent.id,
+                pages=50,
+                is_color=False,
+                cost=5.00,
+                status=JobStatus.authorized,
+                submitted_at=datetime.now(timezone.utc),
+            ),
+            PrintJob(
                 organization_id=other_org.id,
                 user_id=other_user.id,
                 printer_id=other_printer.id,

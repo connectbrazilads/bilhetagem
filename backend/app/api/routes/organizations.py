@@ -42,18 +42,31 @@ def _changed_values(before: dict, after: dict) -> dict:
     return changes
 
 
+def _scoped_jobs_query(db: Session, organization_id: int):
+    return (
+        db.query(PrintJob)
+        .join(User, User.id == PrintJob.user_id)
+        .join(Printer, Printer.id == PrintJob.printer_id)
+        .filter(
+            PrintJob.organization_id == organization_id,
+            User.organization_id == organization_id,
+            Printer.organization_id == organization_id,
+        )
+    )
+
+
 def _organization_read(db: Session, organization: Organization) -> OrganizationRead:
     now = datetime.now(timezone.utc)
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization.id).all()
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
     pages_month, cost_month = (
-        db.query(
+        _scoped_jobs_query(db, organization.id)
+        .with_entities(
             func.coalesce(func.sum(PrintJob.pages), 0),
             func.coalesce(func.sum(PrintJob.cost), 0.0),
         )
         .filter(
-            PrintJob.organization_id == organization.id,
             PrintJob.submitted_at >= month_start,
             PrintJob.status.in_([JobStatus.authorized, JobStatus.released]),
         )
@@ -70,7 +83,7 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         agents_count=len(agents),
         online_agents_count=online_agents,
         offline_agents_count=len(agents) - online_agents,
-        jobs_count=db.query(PrintJob).filter(PrintJob.organization_id == organization.id).count(),
+        jobs_count=_scoped_jobs_query(db, organization.id).count(),
         pages_month=int(pages_month or 0),
         cost_month=float(cost_month or 0.0),
     )
