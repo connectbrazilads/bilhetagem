@@ -10,7 +10,7 @@ from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate, PrintJobDecision
 from app.services.audit_service import write_audit
 from app.services.organization_service import get_or_create_default_organization
-from app.services.policy_service import evaluate_print_policies
+from app.services.policy_service import PolicyDecision, evaluate_print_policies
 from app.services.quota_service import can_consume, get_or_create_current_quota
 
 
@@ -63,6 +63,25 @@ def _clean_optional(value: str | None) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _policy_audit_metadata(policy_decision: PolicyDecision, requested_is_color: bool, effective_is_color: bool) -> dict:
+    if not policy_decision.policy:
+        return {
+            "policy_applied": False,
+            "requested_is_color": requested_is_color,
+            "effective_is_color": effective_is_color,
+        }
+    return {
+        "policy_applied": True,
+        "policy_id": policy_decision.policy.id,
+        "policy_name": policy_decision.policy.name,
+        "policy_action": policy_decision.action.value if policy_decision.action else None,
+        "policy_reason": policy_decision.reason,
+        "policy_force_mono": policy_decision.force_mono,
+        "requested_is_color": requested_is_color,
+        "effective_is_color": effective_is_color,
+    }
 
 
 def _upsert_agent(db: Session, payload: PrintJobCreate, organization_id: int) -> PrintAgent | None:
@@ -338,6 +357,7 @@ def register_print_job(db: Session, payload: PrintJobCreate, organization_id: in
             "remaining_pages": quota.remaining_pages,
             "cost": cost,
             "remaining_balance": quota.remaining_balance,
+            **_policy_audit_metadata(policy_decision, payload.is_color, effective_is_color),
         },
         organization_id=organization_id,
     )

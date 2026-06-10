@@ -58,6 +58,12 @@ def test_policy_blocks_color_jobs(db_session: Session):
     job = db_session.query(PrintJob).filter(PrintJob.id == decision.job_id).one()
     assert job.policy_name == "Bloquear colorido"
     assert job.policy_action == "block"
+    audit = db_session.query(AuditLog).filter(AuditLog.entity == "print_jobs", AuditLog.entity_id == job.id).one()
+    assert audit.action == "print_job_blocked"
+    assert audit.log_metadata["policy_applied"] is True
+    assert audit.log_metadata["policy_name"] == "Bloquear colorido"
+    assert audit.log_metadata["policy_action"] == "block"
+    assert audit.log_metadata["policy_reason"] == "Colorido bloqueado"
 
 
 def test_policy_requires_release_above_page_limit(db_session: Session):
@@ -533,6 +539,14 @@ def test_force_mono_policy_records_job_as_mono_with_mono_cost(db_session: Sessio
     assert job.reason == "Cobrado como P&B pela politica: Cobrar colorido como PB"
     assert job.policy_name == "Cobrar colorido como PB"
     assert job.policy_action == "force_mono"
+    audit = db_session.query(AuditLog).filter(AuditLog.entity == "print_jobs", AuditLog.entity_id == job.id).one()
+    assert audit.action == "print_job_authorized"
+    assert audit.log_metadata["policy_applied"] is True
+    assert audit.log_metadata["policy_name"] == "Cobrar colorido como PB"
+    assert audit.log_metadata["policy_action"] == "force_mono"
+    assert audit.log_metadata["policy_force_mono"] is True
+    assert audit.log_metadata["requested_is_color"] is True
+    assert audit.log_metadata["effective_is_color"] is False
 
 
 def test_policy_simulation_respects_organization_scope(db_session: Session):
