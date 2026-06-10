@@ -18,6 +18,8 @@ type JobRow = {
   reason: string | null;
   submitted_at: string;
   cost?: number;
+  policy_name?: string | null;
+  policy_action?: string | null;
 };
 
 function MoneyLine({ cost, costPerPage }: { cost?: number; costPerPage?: number }) {
@@ -97,6 +99,14 @@ function EcoStat({ label, value, detail }: { label: string; value: string; detai
       <div className="mt-1 text-xs text-emerald-700">{detail}</div>
     </Surface>
   );
+}
+
+function policyActionLabel(action?: string | null) {
+  if (action === "allow") return "Excecao";
+  if (action === "block") return "Bloqueio";
+  if (action === "require_release") return "Liberacao";
+  if (action === "force_mono") return "Cobrar P&B";
+  return "Politica";
 }
 
 export default function DashboardPage() {
@@ -231,6 +241,16 @@ export default function DashboardPage() {
                       {job.is_color ? "Colorido" : "Preto e branco"}
                     </span>
                   </div>
+                  {job.policy_name || job.reason ? (
+                    <div className="mt-2 flex max-w-xl flex-wrap items-center gap-2 text-xs">
+                      {job.policy_name ? (
+                        <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 font-semibold text-blue-700">
+                          {policyActionLabel(job.policy_action)}: {job.policy_name}
+                        </span>
+                      ) : null}
+                      {job.reason ? <span className="text-muted-foreground">{job.reason}</span> : null}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex gap-2">
                   <Button className="h-8 bg-green-600 px-3 text-xs text-white hover:bg-green-700" onClick={() => handleRelease(job.id)}>
