@@ -497,6 +497,33 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
     assert exc.value.status_code == 400
 
 
+def test_agent_login_requires_explicit_organization_slug(db_session: Session):
+    db_session.add(
+        User(
+            organization_id=1,
+            username="agent-login-scope",
+            full_name="Agent Login Scope",
+            password_hash=hash_password("AgentLoginScopePassword2026"),
+            role=UserRole.agent,
+            is_active=True,
+        )
+    )
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        login(
+            LoginRequest(username="agent-login-scope", password="AgentLoginScopePassword2026", organization_slug=None),
+            db=db_session,
+        )
+    assert exc.value.status_code == 400
+
+    token = login(
+        LoginRequest(username="agent-login-scope", password="AgentLoginScopePassword2026", organization_slug="default"),
+        db=db_session,
+    )
+    assert token.organization_id == 1
+
+
 def test_inactive_organization_cannot_issue_login_token(db_session: Session):
     inactive_org = Organization(name="Cliente Inativo", slug="cliente-inativo", is_active=False)
     db_session.add(inactive_org)
