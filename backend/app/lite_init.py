@@ -70,3 +70,14 @@ def _ensure_lite_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE print_jobs ADD COLUMN computer_name VARCHAR(180)")
         if "queue_name" not in job_columns:
             conn.exec_driver_sql("ALTER TABLE print_jobs ADD COLUMN queue_name VARCHAR(180)")
+        agent_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(print_agents)").fetchall()}
+        if "ip_address" not in agent_columns:
+            conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN ip_address VARCHAR(45)")
+        if "capture_mode" not in agent_columns:
+            conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN capture_mode VARCHAR(40)")
+        if "event_log_enabled" not in agent_columns:
+            conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN event_log_enabled BOOLEAN")
+        if "auto_update_enabled" not in agent_columns:
+            conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN auto_update_enabled BOOLEAN")
+        if "last_error" not in agent_columns:
+            conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN last_error VARCHAR(500)")

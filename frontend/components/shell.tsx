@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Building2, Gauge, LogOut, Printer, Settings, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Gauge, LogOut, MonitorCog, Printer, Settings, Users, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Gauge },
   { href: "/organizations", label: "Empresas", icon: Building2 },
   { href: "/users", label: "Usuarios", icon: Users },
+  { href: "/agents", label: "Agents", icon: MonitorCog },
   { href: "/printers", label: "Impressoras", icon: Printer },
   { href: "/quotas", label: "Cotas", icon: WalletCards },
   { href: "/reports", label: "Relatorios", icon: BarChart3 },

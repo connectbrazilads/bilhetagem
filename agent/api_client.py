@@ -225,6 +225,27 @@ class BillingApiClient:
         return response.json()
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    def send_heartbeat(self, payload: dict) -> dict:
+        response = self.session.post(
+            f"{self.config.api_base_url}/agent/heartbeat",
+            json=payload,
+            headers={**self._headers()},
+            timeout=15,
+        )
+        if response.status_code == 401:
+            self._token = None
+            response = self.session.post(
+                f"{self.config.api_base_url}/agent/heartbeat",
+                json=payload,
+                headers={**self._headers()},
+                timeout=15,
+            )
+        if response.status_code >= 400:
+            logger.error("API recusou heartbeat do agent (%s): %s", response.status_code, response.text[:1000])
+        response.raise_for_status()
+        return response.json()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
     def download_agent_update(self) -> bytes:
         response = self.session.get(
             f"{self.config.api_base_url}/agent/download",

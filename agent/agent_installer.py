@@ -121,6 +121,8 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         "PRINTBILLING_SNMP_RETRIES": int(existing.get("PRINTBILLING_SNMP_RETRIES") or template.get("PRINTBILLING_SNMP_RETRIES", 1)),
         "PRINTBILLING_USE_PRINT_EVENT_LOG": True,
         "PRINTBILLING_AUTO_UPDATE": True,
+        "PRINTBILLING_UPDATE_CHECK_INTERVAL": int(existing.get("PRINTBILLING_UPDATE_CHECK_INTERVAL") or template.get("PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600)),
+        "PRINTBILLING_HEARTBEAT_INTERVAL": int(existing.get("PRINTBILLING_HEARTBEAT_INTERVAL") or template.get("PRINTBILLING_HEARTBEAT_INTERVAL", 60)),
     }
 
 

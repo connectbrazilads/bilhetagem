@@ -12,6 +12,7 @@ O agente deve ser instalado no servidor de impressao Windows ou em uma estacao q
 - `PRINTBILLING_POLL_INTERVAL`: intervalo de varredura em segundos
 - `PRINTBILLING_AUTO_UPDATE`: `true` para permitir auto-update do agent
 - `PRINTBILLING_UPDATE_CHECK_INTERVAL`: intervalo de checagem de update em segundos
+- `PRINTBILLING_HEARTBEAT_INTERVAL`: intervalo para enviar saude do PC e filas locais em segundos
 
 ## Instalacao
 

@@ -101,6 +101,12 @@ class AgentConfig:
             file_config.get("PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600)
         )
     )
+    heartbeat_interval_seconds: int = int(
+        os.getenv(
+            "PRINTBILLING_HEARTBEAT_INTERVAL",
+            file_config.get("PRINTBILLING_HEARTBEAT_INTERVAL", 60)
+        )
+    )
     spool_server: str | None = os.getenv(
         "PRINTBILLING_SPOOL_SERVER",
         file_config.get("PRINTBILLING_SPOOL_SERVER")

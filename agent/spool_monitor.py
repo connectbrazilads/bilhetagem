@@ -53,7 +53,9 @@ class SpoolMonitor:
         self._last_snmp_poll = 0.0
         self._last_settings_poll = 0.0
         self._last_update_check = 0.0
+        self._last_heartbeat = 0.0
         self._update_started = False
+        self._last_error: str | None = None
         self._server_safe_release_enabled = True
         self._event_log_reader = PrintEventLogReader(agent_config=self.config)
         self._agent_uid = self._load_agent_uid()
@@ -67,21 +69,25 @@ class SpoolMonitor:
         logger.info("PrintBilling Agent iniciado")
         while not should_stop():
             self._refresh_server_settings_if_due()
+            self._send_heartbeat_if_due()
             if self._should_process_spool_jobs():
                 for printer_name in self._enum_printers():
                     try:
                         self._process_printer(printer_name)
-                    except Exception:
+                    except Exception as exc:
                         logger.exception("Falha ao processar fila da impressora %s", printer_name)
+                        self._record_error(f"Falha ao processar fila {printer_name}: {exc}")
             self._check_paused_jobs_actions()
             try:
                 self._process_web_prints()
-            except Exception:
+            except Exception as exc:
                 logger.exception("Falha ao processar impressoes web")
+                self._record_error(f"Falha ao processar impressoes web: {exc}")
             try:
                 self._process_print_event_log()
-            except Exception:
+            except Exception as exc:
                 logger.exception("Falha ao processar Event Log de impressao")
+                self._record_error(f"Falha ao processar Event Log de impressao: {exc}")
             self._process_printer_statuses_if_due()
             self._check_agent_update_if_due()
             self.sleep(self.config.poll_interval_seconds)
@@ -103,6 +109,58 @@ class SpoolMonitor:
         except Exception:
             logger.warning("Nao foi possivel persistir identidade do agent")
             return f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}"
+
+    def _record_error(self, message: str) -> None:
+        self._last_error = message[:500]
+
+    def _heartbeat_os_user(self) -> str | None:
+        return self._active_windows_username() or self._clean_username(os.getenv("USERNAME"))
+
+    def _send_heartbeat_if_due(self) -> None:
+        now = time.monotonic()
+        if now - self._last_heartbeat < self.config.heartbeat_interval_seconds:
+            return
+        self._last_heartbeat = now
+
+        queues = []
+        try:
+            for printer_name in self._enum_printers():
+                metadata = self._queue_metadata(printer_name)
+                queues.append(
+                    {
+                        "queue_name": printer_name,
+                        "driver_name": metadata.get("printer_driver_name"),
+                        "port_name": metadata.get("printer_port_name"),
+                        "connection_type": metadata.get("printer_connection_type"),
+                        "ip_address": metadata.get("printer_ip_address"),
+                        "serial_number": metadata.get("printer_serial"),
+                        "device_id": metadata.get("printer_device_id"),
+                        "fingerprint": metadata.get("printer_fingerprint"),
+                    }
+                )
+        except Exception as exc:
+            logger.exception("Falha ao coletar filas para heartbeat")
+            self._record_error(f"Falha ao coletar filas para heartbeat: {exc}")
+
+        payload = {
+            "agent_uid": self._agent_uid,
+            "computer_name": self._computer_name,
+            "os_user": self._heartbeat_os_user(),
+            "version": AGENT_VERSION,
+            "capture_mode": "event_log" if self.config.use_print_event_log else "spool",
+            "event_log_enabled": self.config.use_print_event_log,
+            "auto_update_enabled": self.config.auto_update_enabled,
+            "last_error": self._last_error,
+            "queues": queues,
+        }
+        try:
+            self.api_client.send_heartbeat(payload)
+            if queues:
+                logger.debug("Heartbeat enviado com %d fila(s)", len(queues))
+            self._last_error = None
+        except Exception as exc:
+            logger.warning("Falha ao enviar heartbeat do agent: %s", exc)
+            self._record_error(f"Falha ao enviar heartbeat: {exc}")
 
     def _refresh_server_settings_if_due(self) -> None:
         now = time.monotonic()
