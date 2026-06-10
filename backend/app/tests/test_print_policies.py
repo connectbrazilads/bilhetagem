@@ -5,9 +5,11 @@ from sqlalchemy.orm import Session
 from app.api.routes.policies import reorder_policies, update_policy
 from app.models.audit_log import AuditLog
 from app.models.department import Department
+from app.models.print_agent import PrintAgent
 from app.models.print_job import JobStatus, PrintJob
 from app.models.print_policy import PolicyAction, PolicyRuleType, PrintPolicy
 from app.models.printer import Printer
+from app.models.printer_alias import PrinterAlias
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate
 from app.schemas.policy import PrintPolicyReorder, PrintPolicyUpdate
@@ -251,6 +253,118 @@ def test_department_policy_does_not_affect_other_departments(db_session: Session
     assert blocked.reason == "Bloqueado pela politica: Bloquear colorido financeiro"
     assert allowed.status == JobStatus.authorized
     assert allowed.reason is None
+
+
+def test_printer_alias_policy_only_affects_selected_local_queue(db_session: Session):
+    _admin(db_session)
+    printer = _printer(db_session)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-policy-alias", computer_name="PC-FIN")
+    db_session.add(agent)
+    db_session.flush()
+    blocked_alias = PrinterAlias(
+        organization_id=1,
+        printer_id=printer.id,
+        agent_id=agent.id,
+        queue_name="KONICA BLOQUEADA",
+        fingerprint="queue:pc-fin|konica-bloqueada|ip_192.168.1.125|driver",
+    )
+    allowed_alias = PrinterAlias(
+        organization_id=1,
+        printer_id=printer.id,
+        agent_id=agent.id,
+        queue_name="KONICA LIVRE",
+        fingerprint="queue:pc-fin|konica-livre|ip_192.168.1.125|driver",
+    )
+    db_session.add_all([blocked_alias, allowed_alias])
+    db_session.flush()
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Bloquear fila local",
+            priority=10,
+            rule_type=PolicyRuleType.always,
+            action=PolicyAction.block,
+            printer_alias_id=blocked_alias.id,
+        )
+    )
+    db_session.commit()
+
+    blocked = register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="fila-user",
+            printer_name=printer.name,
+            queue_name="KONICA BLOQUEADA",
+            pages=1,
+            is_color=False,
+            agent_uid=agent.agent_uid,
+            external_job_id="eventlog:blocked-alias",
+        ),
+        organization_id=1,
+    )
+    allowed = register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="fila-user",
+            printer_name=printer.name,
+            queue_name="KONICA LIVRE",
+            pages=1,
+            is_color=False,
+            agent_uid=agent.agent_uid,
+            external_job_id="eventlog:allowed-alias",
+        ),
+        organization_id=1,
+    )
+
+    assert blocked.status == JobStatus.blocked
+    assert blocked.reason == "Bloqueado pela politica: Bloquear fila local"
+    assert allowed.status == JobStatus.authorized
+    assert allowed.reason is None
+
+
+def test_queue_name_policy_matches_normalized_queue_name(db_session: Session):
+    _admin(db_session)
+    _printer(db_session)
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Bloquear fila por nome",
+            priority=10,
+            rule_type=PolicyRuleType.always,
+            action=PolicyAction.block,
+            queue_name="konica financeiro",
+        )
+    )
+    db_session.commit()
+
+    blocked = register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="fila-user",
+            printer_name="KONICA_POLICY",
+            queue_name="  KONICA   FINANCEIRO  ",
+            pages=1,
+            is_color=False,
+            external_job_id="eventlog:queue-name-block",
+        ),
+        organization_id=1,
+    )
+    allowed = register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="fila-user",
+            printer_name="KONICA_POLICY",
+            queue_name="KONICA JURIDICO",
+            pages=1,
+            is_color=False,
+            external_job_id="eventlog:queue-name-allow",
+        ),
+        organization_id=1,
+    )
+
+    assert blocked.status == JobStatus.blocked
+    assert blocked.reason == "Bloqueado pela politica: Bloquear fila por nome"
+    assert allowed.status == JobStatus.authorized
 
 
 def test_inactive_policy_does_not_interfere_with_new_jobs(db_session: Session):
