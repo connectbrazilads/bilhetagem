@@ -436,6 +436,47 @@ def test_report_export_applies_cost_center_filter(db_session: Session):
     assert audit.log_metadata["filter_summary"] == {"Centro de Custo": "CC-FIN"}
 
 
+def test_report_export_audit_and_summary_warn_when_limited(db_session: Session):
+    user = User(username="bulk-report-user", full_name="Usuario Relatorio Grande", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_RELATORIO_GRANDE", is_color=False, cost_mono=0.05, cost_color=0.25)
+    actor = User(username="bulk-report-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add_all([user, printer, actor])
+    db_session.flush()
+    db_session.bulk_save_objects(
+        [
+            PrintJob(
+                organization_id=1,
+                user_id=user.id,
+                printer_id=printer.id,
+                document_name=f"Relatorio {index}",
+                pages=1,
+                is_color=False,
+                cost=0.05,
+                status=JobStatus.authorized,
+                submitted_at=datetime(2026, 5, 13, 10, index % 60, tzinfo=timezone.utc),
+            )
+            for index in range(5001)
+        ]
+    )
+    db_session.commit()
+
+    response = export_report(format="xlsx", db=db_session, actor=actor)
+
+    workbook = load_workbook(BytesIO(response.body), data_only=True)
+    sheet = workbook["Impressoes"]
+    summary = workbook["Resumo"]
+    exported_rows = list(sheet.iter_rows(min_row=2, values_only=True))
+    assert len(exported_rows) == 5000
+    assert summary["A11"].value == "Limite da Exportacao"
+    assert summary["B11"].value == "5000 de 5001 registros exportados"
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "report_exported").one()
+    assert audit.log_metadata["rows"] == 5000
+    assert audit.log_metadata["total_matching_rows"] == 5001
+    assert audit.log_metadata["limit"] == 5000
+    assert audit.log_metadata["truncated"] is True
+    assert audit.log_metadata["filter_summary"] == {"Limite da Exportacao": "5000 de 5001 registros exportados"}
+
+
 def test_report_export_xlsx_escapes_formula_like_text(db_session: Session):
     department = Department(organization_id=1, name="+Financeiro", cost_center="-CC")
     user = User(username="formula-user", full_name="=Ana Financeiro", role=UserRole.user, department=department, is_active=True, organization_id=1)

@@ -288,7 +288,9 @@ def export_report(
         query = query.filter(PrintJob.submitted_at >= date_from)
     if date_to:
         query = query.filter(PrintJob.submitted_at <= date_to)
-    jobs = query.limit(5000).all()
+    export_limit = 5000
+    total_matching_rows = query.count()
+    jobs = query.limit(export_limit).all()
     filter_summary = _report_filter_summary(
         db,
         actor.organization_id,
@@ -299,6 +301,9 @@ def export_report(
         date_from=date_from,
         date_to=date_to,
     )
+    truncated = total_matching_rows > len(jobs)
+    if truncated:
+        filter_summary["Limite da Exportacao"] = f"{len(jobs)} de {total_matching_rows} registros exportados"
     write_audit(
         db,
         action="report_exported",
@@ -307,6 +312,9 @@ def export_report(
         metadata={
             "format": format,
             "rows": len(jobs),
+            "total_matching_rows": total_matching_rows,
+            "limit": export_limit,
+            "truncated": truncated,
             "filters": {
                 "user_id": user_id,
                 "department_id": department_id,
