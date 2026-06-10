@@ -21,11 +21,15 @@ CONFIG_NAME = "config.json"
 EVENT_LOG_CHANNEL = "Microsoft-Windows-PrintService/Operational"
 UNSAFE_AGENT_PASSWORDS = {
     "",
+    "admin",
     "agent",
     "agent12345",
     "admin12345",
     "change-me-agent-password",
     "change-me-admin-password",
+    "password",
+    "senha123",
+    "12345678",
 }
 
 

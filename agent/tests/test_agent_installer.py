@@ -135,6 +135,37 @@ def test_silent_install_rejects_invalid_organization_slug():
         raise AssertionError("Instalador nao deve aceitar slug com espacos")
 
 
+def test_silent_install_rejects_unsafe_agent_passwords():
+    unsafe_passwords = (
+        "",
+        "admin",
+        "agent",
+        "admin12345",
+        "agent12345",
+        "change-me-agent-password",
+        "change-me-admin-password",
+        "password",
+        "senha123",
+        "12345678",
+    )
+    for password in unsafe_passwords:
+        try:
+            build_config(
+                {},
+                {},
+                args(
+                    api_url="https://billing.example.com",
+                    username="agent",
+                    password=password,
+                    organization="cliente-a",
+                ),
+            )
+        except RuntimeError as exc:
+            assert "--password" in str(exc) or "senha exclusiva" in str(exc)
+        else:
+            raise AssertionError(f"Instalador nao deve aceitar senha insegura: {password!r}")
+
+
 def test_silent_reinstall_preserves_capture_and_update_flags():
     existing = {
         "PRINTBILLING_API_URL": "https://billing.example.com",
