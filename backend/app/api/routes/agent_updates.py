@@ -74,6 +74,15 @@ def _is_safe_release_filename(filename: str) -> bool:
     return bool(filename) and Path(filename).name == filename and "/" not in filename and "\\" not in filename
 
 
+def _manifest_str(value, default: str | None = None) -> str | None:
+    if value is None:
+        return default
+    if isinstance(value, (str, int, float, bool)):
+        text = str(value).strip()
+        return text or default
+    return default
+
+
 def _release_signature_summary(files: list[AgentReleaseFileRead]) -> tuple[str, str]:
     if not files:
         return "empty", "Nenhum arquivo publicado"
@@ -125,8 +134,8 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                         filename=filename,
                         size_bytes=actual_size,
                         sha256=actual_sha256,
-                        signature_status=raw_file.get("signature_status"),
-                        signer_subject=raw_file.get("signer_subject"),
+                        signature_status=_manifest_str(raw_file.get("signature_status")),
+                        signer_subject=_manifest_str(raw_file.get("signer_subject")),
                         download_url=f"/agent/releases/{version}/download?filename={filename}",
                     )
                 )
@@ -134,9 +143,9 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
             releases.append(
                 AgentReleaseRead(
                     version=version,
-                    channel=str(raw_release.get("channel") or "stable"),
-                    published_at=raw_release.get("published_at"),
-                    notes=raw_release.get("notes"),
+                    channel=_manifest_str(raw_release.get("channel"), "stable") or "stable",
+                    published_at=_manifest_str(raw_release.get("published_at")),
+                    notes=_manifest_str(raw_release.get("notes")),
                     checksums_url=f"/agent/releases/{version}/checksums",
                     signature_status=signature_status,
                     signature_summary=signature_summary,

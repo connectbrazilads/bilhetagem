@@ -101,8 +101,10 @@ def test_agent_releases_ignore_manifest_entries_without_safe_filename(db_session
             },
             {
               "version": "0.3.0",
+              "channel": 123,
               "published_at": "2026-03-01T00:00:00Z",
-              "files": [{"kind": "agent", "filename": "PrintBillingAgent.exe"}]
+              "notes": {"bad": true},
+              "files": [{"kind": "agent", "filename": "PrintBillingAgent.exe", "signature_status": 456, "signer_subject": ["bad"]}]
             }
           ]
         }
@@ -121,6 +123,10 @@ def test_agent_releases_ignore_manifest_entries_without_safe_filename(db_session
     assert [release.version for release in releases] == ["0.4.0", "0.3.0"]
     assert releases[0].files == []
     assert releases[0].signature_status == "empty"
+    assert releases[1].channel == "123"
+    assert releases[1].notes is None
+    assert releases[1].files[0].signature_status == "456"
+    assert releases[1].files[0].signer_subject is None
     assert version.latest_version == "0.3.0"
     assert version.update_available is True
     assert version.sha256 == hashlib.sha256(b"agent-v3").hexdigest()
