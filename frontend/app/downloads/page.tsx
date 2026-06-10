@@ -87,6 +87,7 @@ export default function DownloadsPage() {
   const [usePrintEventLog, setUsePrintEventLog] = useState(true);
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [copiedCommand, setCopiedCommand] = useState<"exe" | "msi" | null>(null);
+  const [copiedSha, setCopiedSha] = useState<string | null>(null);
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -155,6 +156,12 @@ export default function DownloadsPage() {
     await navigator.clipboard.writeText(command);
     setCopiedCommand(kind);
     window.setTimeout(() => setCopiedCommand(null), 1800);
+  }
+
+  async function copySha(file: ReleaseFile) {
+    await navigator.clipboard.writeText(file.sha256);
+    setCopiedSha(file.filename);
+    window.setTimeout(() => setCopiedSha(null), 1800);
   }
 
   const latest = releases[0];
@@ -341,8 +348,16 @@ export default function DownloadsPage() {
                         </span>
                       </td>
                       <td className="p-4 text-right">{formatBytes(file.size_bytes)}</td>
-                      <td className="max-w-[340px] truncate p-4 font-mono text-xs" title={file.sha256}>
-                        {file.sha256}
+                      <td className="max-w-[380px] p-4">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate font-mono text-xs" title={file.sha256}>
+                            {file.sha256}
+                          </span>
+                          <Button variant="outline" className="h-7 shrink-0 px-2 text-xs" onClick={() => copySha(file)} title="Copiar SHA256">
+                            {copiedSha === file.filename ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            {copiedSha === file.filename ? "Copiado" : "Copiar"}
+                          </Button>
+                        </div>
                       </td>
                       <td className="p-4 text-right">
                         <Button onClick={() => downloadFile(file)}>
