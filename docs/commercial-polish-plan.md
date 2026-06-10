@@ -222,6 +222,7 @@ Mitigacao:
 
 - Exibir simulador de politica antes de salvar.
 - Separar "bloquear colorido" de "converter colorido" quando o driver nao permitir conversao.
+- Apresentar a acao `force_mono` como cobranca/contabilizacao P&B, sem prometer conversao fisica quando o driver ou a fila nao permitirem.
 
 ## 6. Relatorios comerciais e fechamento mensal
 

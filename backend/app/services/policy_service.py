@@ -124,7 +124,7 @@ def _reason(policy: PrintPolicy) -> str:
     if policy.action == PolicyAction.require_release:
         return f"Liberacao exigida pela politica: {policy.name}"
     if policy.action == PolicyAction.force_mono:
-        return f"Convertido/cobrado como P&B pela politica: {policy.name}"
+        return f"Cobrado como P&B pela politica: {policy.name}"
     return f"Permitido pela excecao: {policy.name}"
 
 

@@ -156,6 +156,7 @@ def test_policy_simulation_does_not_create_job_or_debit_quota(db_session: Sessio
     assert simulation.decision.policy.name == "Simular colorido"
     assert simulation.decision.action == PolicyAction.force_mono
     assert simulation.decision.force_mono is True
+    assert simulation.decision.reason == "Cobrado como P&B pela politica: Simular colorido"
     assert db_session.query(PrintJob).count() == 0
 
 

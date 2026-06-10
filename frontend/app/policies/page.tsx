@@ -106,7 +106,7 @@ const actionLabels: Record<PolicyAction, string> = {
   allow: "Permitir excecao",
   block: "Bloquear",
   require_release: "Exigir liberacao",
-  force_mono: "Forcar P&B",
+  force_mono: "Cobrar como P&B",
 };
 
 export default function PoliciesPage() {
@@ -397,6 +397,11 @@ export default function PoliciesPage() {
           {selectedDepartment ? <span className="rounded-full bg-muted px-2 py-1">Departamento: {selectedDepartment.name}</span> : null}
           {selectedPrinter ? <span className="rounded-full bg-muted px-2 py-1">Impressora: {selectedPrinter.name}</span> : null}
           {selectedAlias ? <span className="rounded-full bg-muted px-2 py-1">Fila: {selectedAlias.queue_name}</span> : null}
+          {form.action === "force_mono" ? (
+            <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">
+              Contabiliza como P&B; conversao fisica depende do driver/fila.
+            </span>
+          ) : null}
         </div>
       </Surface>
 
@@ -477,7 +482,7 @@ export default function PoliciesPage() {
             {simulation.matched ? (
               <span>
                 Politica aplicada: <strong>{simulation.policy_name}</strong> ({simulation.action ? actionLabels[simulation.action] : "-"})
-                {simulation.force_mono ? " - cobraria como P&B" : ""}. {simulation.reason || ""}
+                {simulation.force_mono ? " - cobraria como P&B, sem alterar o driver" : ""}. {simulation.reason || ""}
               </span>
             ) : (
               <span>Nenhuma politica ativa seria aplicada para este trabalho.</span>
