@@ -24,7 +24,7 @@ from app.api.routes.agent_updates import list_agents
 from app.api.routes.audit_logs import export_audit_logs, list_audit_log_facets, list_audit_logs
 from app.api.routes.organizations import create_organization, list_organizations, update_organization
 from app.api.routes.reports import export_report
-from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint, update_printer_endpoint, update_printer_status_endpoint
+from app.api.routes.printers import bind_printer_alias_endpoint, delete_printer_endpoint, merge_printer_endpoint, update_printer_endpoint, update_printer_status_endpoint
 from app.api.routes.settings import sync_ldap_endpoint
 from app.schemas.printer import PrinterAliasBind, PrinterStatusUpdate, PrinterUpdate
 from app.api.routes.jobs import list_jobs
@@ -779,6 +779,55 @@ def test_merge_printer_preserves_printer_and_alias_policies(db_session: Session)
     assert db_session.query(PrinterAlias).filter(PrinterAlias.id == source_alias.id).first() is None
     assert audit.log_metadata["moved_policies"] == 1
     assert audit.log_metadata["moved_alias_policies"] == 1
+
+
+def test_printer_with_linked_policies_cannot_be_deleted(db_session: Session):
+    actor = User(username="admin-delete-policy-printer", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA COM POLITICA", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-delete-policy-printer", computer_name="PC-POL")
+    db_session.add_all([actor, printer, agent])
+    db_session.flush()
+
+    alias = PrinterAlias(
+        organization_id=1,
+        printer_id=printer.id,
+        agent_id=agent.id,
+        queue_name="KONICA Politica",
+        normalized_queue_name="konica politica",
+    )
+    db_session.add(alias)
+    db_session.flush()
+    db_session.add_all(
+        [
+            PrintPolicy(
+                organization_id=1,
+                name="Bloquear colorido impressora",
+                priority=10,
+                rule_type=PolicyRuleType.color,
+                action=PolicyAction.block,
+                printer_id=printer.id,
+            ),
+            PrintPolicy(
+                organization_id=1,
+                name="Liberar alias impressora",
+                priority=20,
+                rule_type=PolicyRuleType.max_pages,
+                action=PolicyAction.require_release,
+                max_pages=20,
+                printer_alias_id=alias.id,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        delete_printer_endpoint(printer.id, db=db_session, actor=actor)
+
+    assert exc.value.status_code == 409
+    assert "politicas vinculadas" in exc.value.detail
+    assert db_session.get(Printer, printer.id) is not None
+    assert db_session.get(PrinterAlias, alias.id) is not None
+    assert db_session.query(PrintPolicy).filter(PrintPolicy.organization_id == 1).count() == 2
 
 
 def test_binding_alias_moves_historical_jobs_to_physical_printer(db_session: Session):

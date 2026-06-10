@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -275,6 +276,29 @@ def delete_printer_endpoint(
         raise HTTPException(
             status_code=409,
             detail="Impressora possui historico de impressoes. Desative ou mescle a impressora para preservar relatorios e auditoria.",
+        )
+
+    alias_ids = [
+        alias_id
+        for (alias_id,) in db.query(PrinterAlias.id)
+        .filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.printer_id == printer.id)
+        .all()
+    ]
+    policy_filters = [PrintPolicy.printer_id == printer.id]
+    if alias_ids:
+        policy_filters.append(PrintPolicy.printer_alias_id.in_(alias_ids))
+    policy_count = (
+        db.query(PrintPolicy)
+        .filter(
+            PrintPolicy.organization_id == actor.organization_id,
+            or_(*policy_filters),
+        )
+        .count()
+    )
+    if policy_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Impressora possui politicas vinculadas. Remova, edite ou mescle a impressora para preservar as regras comerciais.",
         )
 
     db.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.printer_id == printer.id).delete(synchronize_session=False)
