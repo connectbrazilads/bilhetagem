@@ -563,7 +563,9 @@ def test_due_monthly_report_email_sends_previous_month_once(db_session: Session,
 def test_monthly_report_email_scheduler_processes_active_organizations(db_session: Session, monkeypatch):
     active_org = Organization(name="Cliente Scheduler", slug="cliente-scheduler", is_active=True)
     inactive_org = Organization(name="Cliente Scheduler Inativo", slug="cliente-scheduler-inativo", is_active=False)
-    db_session.add_all([active_org, inactive_org])
+    suspended_org = Organization(name="Cliente Scheduler Suspenso", slug="cliente-scheduler-suspenso", is_active=True, billing_status="suspended")
+    past_due_org = Organization(name="Cliente Scheduler Atrasado", slug="cliente-scheduler-atrasado", is_active=True, billing_status="past_due")
+    db_session.add_all([active_org, inactive_org, suspended_org, past_due_org])
     db_session.commit()
 
     called_organization_ids = []
@@ -585,8 +587,8 @@ def test_monthly_report_email_scheduler_processes_active_organizations(db_sessio
 
     results = send_due_monthly_reports_once(db_session, now=datetime(2026, 6, 10, tzinfo=timezone.utc))
 
-    assert called_organization_ids == [1, active_org.id]
-    assert [result["organization_slug"] for result in results] == ["default", "cliente-scheduler"]
+    assert called_organization_ids == [1, active_org.id, past_due_org.id]
+    assert [result["organization_slug"] for result in results] == ["default", "cliente-scheduler", "cliente-scheduler-atrasado"]
     audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_due_email_sent").one()
     assert audit.organization_id == 1
     assert audit.entity_id == 99

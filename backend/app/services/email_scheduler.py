@@ -17,7 +17,12 @@ _scheduler_lock = threading.Lock()
 
 
 def send_due_monthly_reports_once(db: Session, now: datetime | None = None) -> list[dict]:
-    organizations = db.query(Organization).filter(Organization.is_active.is_(True)).order_by(Organization.id).all()
+    organizations = (
+        db.query(Organization)
+        .filter(Organization.is_active.is_(True), Organization.billing_status != "suspended")
+        .order_by(Organization.id)
+        .all()
+    )
     results: list[dict] = []
     for organization in organizations:
         try:
