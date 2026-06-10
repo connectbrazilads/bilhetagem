@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 import pytest
 
-from app.api.routes.jobs import cancel_job, confirm_web_printed, get_agent_actions, release_job
+from app.api.routes.jobs import cancel_job, confirm_web_printed, download_web_print_file, get_agent_actions, release_job
 from app.models.audit_log import AuditLog
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
@@ -349,6 +349,34 @@ def test_agent_cannot_confirm_pending_web_print_before_release(db_session):
     assert exc.value.status_code == 400
     assert job.external_job_id == "webprint_88"
     assert db_session.query(AuditLog).filter(AuditLog.action == "web_print_confirmed").count() == 0
+
+
+def test_agent_cannot_download_pending_web_print_before_release(db_session):
+    agent = User(username="agent-webprint-download-pending", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    user = User(username="webprint-download-pending-user", full_name="WebPrint Pending", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_WEBPRINT_DOWNLOAD_PENDING", is_color=True)
+    db_session.add_all([agent, user, printer])
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        external_job_id="webprint_99",
+        document_name="Pendente.pdf",
+        pages=2,
+        is_color=False,
+        cost=0.10,
+        status=JobStatus.pending_release,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        download_web_print_file(job.id, db=db_session, current_user=agent)
+
+    assert exc.value.status_code == 400
+    assert "download" in exc.value.detail
 
 
 def test_regular_user_cannot_release_another_users_pending_job(db_session):

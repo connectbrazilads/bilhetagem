@@ -394,6 +394,9 @@ def download_web_print_file(
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho de impressão não encontrado")
         
+    if job.external_job_id and job.external_job_id.startswith("webprint_") and job.status not in (JobStatus.released, JobStatus.authorized):
+        raise HTTPException(status_code=400, detail="Web Print ainda nao foi liberado para download")
+
     file_path = Path("uploads") / f"webprint_{job.id}.pdf"
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Arquivo correspondente não encontrado")
