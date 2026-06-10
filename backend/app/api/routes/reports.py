@@ -180,11 +180,11 @@ def _validate_report_filters(
     department_id: int | None,
     printer_id: int | None,
 ) -> None:
-    if user_id and not db.query(User.id).filter(User.organization_id == organization_id, User.id == user_id).first():
+    if user_id is not None and not db.query(User.id).filter(User.organization_id == organization_id, User.id == user_id).first():
         raise HTTPException(status_code=404, detail="Usuario do filtro nao encontrado")
-    if department_id and not db.query(Department.id).filter(Department.organization_id == organization_id, Department.id == department_id).first():
+    if department_id is not None and not db.query(Department.id).filter(Department.organization_id == organization_id, Department.id == department_id).first():
         raise HTTPException(status_code=404, detail="Departamento do filtro nao encontrado")
-    if printer_id and not db.query(Printer.id).filter(Printer.organization_id == organization_id, Printer.id == printer_id).first():
+    if printer_id is not None and not db.query(Printer.id).filter(Printer.organization_id == organization_id, Printer.id == printer_id).first():
         raise HTTPException(status_code=404, detail="Impressora do filtro nao encontrada")
 
 

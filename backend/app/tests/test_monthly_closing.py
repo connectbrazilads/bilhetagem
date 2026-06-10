@@ -344,6 +344,26 @@ def test_report_export_rejects_filters_from_other_organization(db_session: Sessi
     assert db_session.query(AuditLog).filter(AuditLog.action == "report_exported").count() == 0
 
 
+def test_report_export_rejects_zero_filter_ids_without_audit(db_session: Session):
+    actor = User(username="report-zero-filter-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as user_exc:
+        export_report(format="xlsx", user_id=0, db=db_session, actor=actor)
+    assert user_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as department_exc:
+        export_report(format="xlsx", department_id=0, db=db_session, actor=actor)
+    assert department_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as printer_exc:
+        export_report(format="xlsx", printer_id=0, db=db_session, actor=actor)
+    assert printer_exc.value.status_code == 404
+
+    assert db_session.query(AuditLog).filter(AuditLog.action == "report_exported").count() == 0
+
+
 def test_report_export_pdf_uses_commercial_renderer_and_audit(db_session: Session):
     _seed_job_data(db_session)
     actor = User(username="report-general-pdf-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)

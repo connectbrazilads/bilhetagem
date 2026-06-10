@@ -441,6 +441,36 @@ def test_blocked_web_print_submissions_create_distinct_jobs(db_session):
     assert all(job.external_job_id.startswith("webprint_pending_") for job in jobs)
 
 
+def test_web_print_rejects_non_pdf_uploads_without_creating_job(db_session):
+    user = User(username="webprint-invalid-user", full_name="WebPrint Invalid", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_WEBPRINT_INVALID", is_color=False)
+    db_session.add_all([user, printer])
+    db_session.commit()
+
+    upload = SimpleNamespace(filename="contrato.pdf", file=BytesIO(b"nao e pdf"))
+
+    with pytest.raises(HTTPException) as exc:
+        web_print_endpoint(file=upload, printer_id=printer.id, is_color=False, db=db_session, current_user=user)
+
+    assert exc.value.status_code == 400
+    assert "PDF" in exc.value.detail
+    assert db_session.query(PrintJob).filter(PrintJob.printer_id == printer.id).count() == 0
+
+
+def test_web_print_sanitizes_uploaded_filename(db_session):
+    user = User(username="webprint-clean-user", full_name="WebPrint Clean", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_WEBPRINT_CLEAN", is_color=False)
+    db_session.add_all([user, printer])
+    db_session.commit()
+
+    upload = SimpleNamespace(filename="C:\\temp\\Contrato Final.pdf", file=BytesIO(b"%PDF-1.4\n1 0 obj\n<< /Type /Page >>\nendobj"))
+
+    decision = web_print_endpoint(file=upload, printer_id=printer.id, is_color=False, db=db_session, current_user=user)
+
+    job = db_session.get(PrintJob, decision.job_id)
+    assert job.document_name == "Contrato Final.pdf"
+
+
 def test_regular_user_cannot_release_another_users_pending_job(db_session):
     owner = User(username="job-owner", full_name="Job Owner", role=UserRole.user, organization_id=1)
     other_user = User(username="other-user", full_name="Other User", role=UserRole.user, organization_id=1)

@@ -309,6 +309,20 @@ def _ensure_web_print_enabled(db: Session, organization_id: int) -> None:
         raise HTTPException(status_code=403, detail="Modulo Web Print desativado")
 
 
+def _clean_web_print_filename(filename: str | None) -> str:
+    name = Path((filename or "").replace("\\", "/")).name.strip()
+    if not name or not name.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Envie um arquivo PDF")
+    if len(name) > 255:
+        raise HTTPException(status_code=400, detail="Nome do arquivo PDF muito longo")
+    return name
+
+
+def _ensure_pdf_content(file_content: bytes) -> None:
+    if not file_content or not file_content.lstrip().startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="Arquivo PDF invalido")
+
+
 @router.post("/web-print", response_model=PrintJobDecision)
 def web_print_endpoint(
     file: UploadFile = File(...),
@@ -329,7 +343,9 @@ def web_print_endpoint(
         file_content = file.file.read()
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Erro ao ler arquivo enviado") from exc
-        
+
+    document_name = _clean_web_print_filename(file.filename)
+    _ensure_pdf_content(file_content)
     page_count = get_pdf_page_count(file_content)
     
     # 3. Create temp file inside uploads folder to preserve data
@@ -343,7 +359,7 @@ def web_print_endpoint(
         pages=page_count,
         is_color=is_color,
         external_job_id=f"webprint_pending_{uuid4().hex}",
-        document_name=file.filename,
+        document_name=document_name,
         submitted_at=datetime.now(timezone.utc),
     )
     

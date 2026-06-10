@@ -12,6 +12,7 @@ build/
 *.log
 postgres_data/
 backend/printbilling.db
+backend/uploads/
 frontend/tsconfig.tsbuildinfo
 agent/config.json
 agent/*.exe
