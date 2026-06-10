@@ -184,6 +184,10 @@ function printerName(printers: PrinterOption[], printerId: number | null) {
   return printers.find((printer) => printer.id === printerId)?.name || `#${printerId}`;
 }
 
+function hasAlert(agent: AgentRow, code: string) {
+  return agent.health_alerts.some((alert) => alert.code === code);
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [printers, setPrinters] = useState<PrinterOption[]>([]);
@@ -360,9 +364,10 @@ export default function AgentsPage() {
         (agentStatusFilter === "online" && agent.is_online) ||
         (agentStatusFilter === "offline" && !agent.is_online) ||
         (agentStatusFilter === "alerts" && agent.health_alerts.length > 0) ||
-        (agentStatusFilter === "outdated" && agent.health_alerts.some((alert) => alert.code === "outdated_version")) ||
-        (agentStatusFilter === "unbound" && agent.health_alerts.some((alert) => alert.code === "unbound_queues")) ||
-        (agentStatusFilter === "stale" && agent.health_alerts.some((alert) => alert.code === "stale_queues")) ||
+        (agentStatusFilter === "outdated" && hasAlert(agent, "outdated_version")) ||
+        (agentStatusFilter === "auto-update-off" && hasAlert(agent, "auto_update_disabled")) ||
+        (agentStatusFilter === "unbound" && hasAlert(agent, "unbound_queues")) ||
+        (agentStatusFilter === "stale" && hasAlert(agent, "stale_queues")) ||
         (agentStatusFilter === "usb" && agent.aliases.some((alias) => alias.is_present && alias.connection_type === "usb"));
 
       return matchesSearch && matchesStatus;
@@ -452,6 +457,7 @@ export default function AgentsPage() {
             <option value="offline">Somente offline</option>
             <option value="alerts">Com alertas</option>
             <option value="outdated">Versao desatualizada</option>
+            <option value="auto-update-off">Auto-update desligado</option>
             <option value="unbound">Filas sem vinculo</option>
             <option value="stale">Filas ausentes</option>
             <option value="usb">Filas USB</option>
@@ -579,7 +585,12 @@ export default function AgentsPage() {
                 </td>
                 <td className="p-3">
                   <div className="font-medium">{captureLabel(agent.capture_mode)}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">v{agent.version || "-"} - update {agent.auto_update_enabled ? "on" : "off"}</div>
+                  <div className={`mt-0.5 text-xs ${hasAlert(agent, "auto_update_disabled") ? "font-semibold text-amber-700" : "text-muted-foreground"}`}>
+                    v{agent.version || "-"} - update {agent.auto_update_enabled ? "on" : "off"}
+                  </div>
+                  {hasAlert(agent, "auto_update_disabled") ? (
+                    <div className="mt-1 text-xs font-semibold text-amber-700">Atualizar ou reinstalar agent</div>
+                  ) : null}
                 </td>
                 <td className="p-3">
                   <div className="font-medium">
@@ -598,7 +609,7 @@ export default function AgentsPage() {
                       ))}
                     </div>
                   ) : null}
-                  {agent.health_alerts.some((alert) => alert.code === "unbound_queues" || alert.code === "no_queues" || alert.code === "stale_queues") ? (
+                  {hasAlert(agent, "unbound_queues") || hasAlert(agent, "no_queues") || hasAlert(agent, "stale_queues") ? (
                     <div className="mt-1 text-xs font-semibold text-amber-700">Revisar vinculos de fila</div>
                   ) : null}
                 </td>
