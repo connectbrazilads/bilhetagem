@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, Cpu, FileText, MonitorCog, Network, Plus, RefreshCw, Server, TerminalSquare, Trash2, X } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, Cpu, FileText, MonitorCog, Network, Plus, RefreshCw, Search, Server, TerminalSquare, Trash2, X } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -112,6 +112,8 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [printers, setPrinters] = useState<PrinterOption[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<AgentRow | null>(null);
+  const [agentSearch, setAgentSearch] = useState("");
+  const [agentStatusFilter, setAgentStatusFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [queueForm, setQueueForm] = useState({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
@@ -251,6 +253,35 @@ export default function AgentsPage() {
     const queues = agents.reduce((total, agent) => total + agent.aliases.length, 0);
     return { total: agents.length, online, offline: agents.length - online, withError, queues };
   }, [agents]);
+  const filteredAgents = useMemo(() => {
+    const search = agentSearch.trim().toLowerCase();
+    return agents.filter((agent) => {
+      const matchesSearch =
+        !search ||
+        [
+          agent.agent_uid,
+          agent.computer_name,
+          agent.os_user,
+          agent.ip_address,
+          agent.version,
+          agent.capture_mode,
+          ...agent.aliases.map((alias) => alias.queue_name),
+          ...agent.aliases.map((alias) => alias.ip_address),
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(search));
+
+      const matchesStatus =
+        agentStatusFilter === "all" ||
+        (agentStatusFilter === "online" && agent.is_online) ||
+        (agentStatusFilter === "offline" && !agent.is_online) ||
+        (agentStatusFilter === "alerts" && agent.health_alerts.length > 0) ||
+        (agentStatusFilter === "outdated" && agent.health_alerts.some((alert) => alert.code === "outdated_version")) ||
+        (agentStatusFilter === "unbound" && agent.health_alerts.some((alert) => alert.code === "unbound_queues"));
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [agentSearch, agentStatusFilter, agents]);
   const canApplyBulkQueue =
     Boolean(bulkForm.queue_name && bulkForm.printer_id && bulkForm.driver_name && (bulkForm.ip_address || bulkForm.port_name)) &&
     (bulkScope === "all" ? agents.length > 0 : selectedBulkAgentIds.length > 0);
@@ -314,6 +345,35 @@ export default function AgentsPage() {
       ) : null}
 
       <Surface className="mb-6 p-4">
+        <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-center">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Buscar por PC, usuario, IP, versao ou fila"
+              value={agentSearch}
+              onChange={(event) => setAgentSearch(event.target.value)}
+            />
+          </label>
+          <select
+            className="h-9 rounded-md border bg-white px-3 text-sm"
+            value={agentStatusFilter}
+            onChange={(event) => setAgentStatusFilter(event.target.value)}
+          >
+            <option value="all">Todos os status</option>
+            <option value="online">Somente online</option>
+            <option value="offline">Somente offline</option>
+            <option value="alerts">Com alertas</option>
+            <option value="outdated">Versao desatualizada</option>
+            <option value="unbound">Filas sem vinculo</option>
+          </select>
+          <div className="text-sm font-semibold text-muted-foreground">
+            {filteredAgents.length} de {agents.length} agent(s)
+          </div>
+        </div>
+      </Surface>
+
+      <Surface className="mb-6 p-4">
         <div className="mb-3 flex items-center gap-2">
           <TerminalSquare className="h-4 w-4 text-primary" />
           <div>
@@ -341,7 +401,7 @@ export default function AgentsPage() {
         </div>
         {bulkScope === "selected" ? (
           <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {agents.map((agent) => {
+            {filteredAgents.map((agent) => {
               const checked = selectedBulkAgentIds.includes(agent.id);
               return (
                 <label key={agent.id} className="flex cursor-pointer items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm">
@@ -361,7 +421,7 @@ export default function AgentsPage() {
                 </label>
               );
             })}
-            {agents.length === 0 ? <div className="text-xs text-muted-foreground">Nenhum agent disponivel para selecao.</div> : null}
+            {filteredAgents.length === 0 ? <div className="text-xs text-muted-foreground">Nenhum agent disponivel para selecao.</div> : null}
           </div>
         ) : null}
         <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_140px_140px_auto]">
@@ -420,7 +480,7 @@ export default function AgentsPage() {
             </tr>
           </thead>
           <tbody>
-            {agents.map((agent) => (
+            {filteredAgents.map((agent) => (
               <tr key={agent.id} className="border-t hover:bg-muted/40 cursor-pointer" onClick={() => openAgent(agent)}>
                 <td className="p-3">
                   <div className="font-semibold">{agent.computer_name || agent.agent_uid}</div>
@@ -457,10 +517,10 @@ export default function AgentsPage() {
                 </td>
               </tr>
             ))}
-            {agents.length === 0 ? (
+            {filteredAgents.length === 0 ? (
               <tr>
                 <td className="p-6 text-center text-sm text-muted-foreground" colSpan={5}>
-                  Nenhum agent enviou heartbeat ainda.
+                  {agents.length === 0 ? "Nenhum agent enviou heartbeat ainda." : "Nenhum agent encontrado com os filtros atuais."}
                 </td>
               </tr>
             ) : null}
