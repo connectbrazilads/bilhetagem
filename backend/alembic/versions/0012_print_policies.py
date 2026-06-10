@@ -17,13 +17,32 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _create_enum_if_missing(enum_name: str, values: Sequence[str]) -> None:
+    quoted_values = ", ".join(f"'{value}'" for value in values)
+    op.execute(
+        f"""
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '{enum_name}') THEN
+        CREATE TYPE {enum_name} AS ENUM ({quoted_values});
+    END IF;
+END
+$$;
+"""
+    )
+
+
+def _existing_enum(enum_name: str, values: Sequence[str]) -> postgresql.ENUM:
+    return postgresql.ENUM(*values, name=enum_name, create_type=False, _create_events=False)
+
+
 def upgrade() -> None:
-    rule_type_enum = postgresql.ENUM("always", "max_pages", "color", "time_window", name="policyruletype")
-    action_enum = postgresql.ENUM("allow", "block", "require_release", "force_mono", name="policyaction")
-    rule_type_enum.create(op.get_bind(), checkfirst=True)
-    action_enum.create(op.get_bind(), checkfirst=True)
-    rule_type = postgresql.ENUM("always", "max_pages", "color", "time_window", name="policyruletype", create_type=False)
-    action = postgresql.ENUM("allow", "block", "require_release", "force_mono", name="policyaction", create_type=False)
+    rule_type_values = ("always", "max_pages", "color", "time_window")
+    action_values = ("allow", "block", "require_release", "force_mono")
+    _create_enum_if_missing("policyruletype", rule_type_values)
+    _create_enum_if_missing("policyaction", action_values)
+    rule_type = _existing_enum("policyruletype", rule_type_values)
+    action = _existing_enum("policyaction", action_values)
 
     op.create_table(
         "print_policies",

@@ -17,13 +17,32 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _create_enum_if_missing(enum_name: str, values: Sequence[str]) -> None:
+    quoted_values = ", ".join(f"'{value}'" for value in values)
+    op.execute(
+        f"""
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '{enum_name}') THEN
+        CREATE TYPE {enum_name} AS ENUM ({quoted_values});
+    END IF;
+END
+$$;
+"""
+    )
+
+
+def _existing_enum(enum_name: str, values: Sequence[str]) -> postgresql.ENUM:
+    return postgresql.ENUM(*values, name=enum_name, create_type=False, _create_events=False)
+
+
 def upgrade() -> None:
-    action_type_enum = postgresql.ENUM("create_queue", "remove_queue", name="agentqueueactiontype")
-    action_status_enum = postgresql.ENUM("pending", "running", "succeeded", "failed", name="agentqueueactionstatus")
-    action_type_enum.create(op.get_bind(), checkfirst=True)
-    action_status_enum.create(op.get_bind(), checkfirst=True)
-    action_type = postgresql.ENUM("create_queue", "remove_queue", name="agentqueueactiontype", create_type=False)
-    action_status = postgresql.ENUM("pending", "running", "succeeded", "failed", name="agentqueueactionstatus", create_type=False)
+    action_type_values = ("create_queue", "remove_queue")
+    action_status_values = ("pending", "running", "succeeded", "failed")
+    _create_enum_if_missing("agentqueueactiontype", action_type_values)
+    _create_enum_if_missing("agentqueueactionstatus", action_status_values)
+    action_type = _existing_enum("agentqueueactiontype", action_type_values)
+    action_status = _existing_enum("agentqueueactionstatus", action_status_values)
 
     op.create_table(
         "agent_queue_actions",
