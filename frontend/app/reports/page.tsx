@@ -116,6 +116,7 @@ export default function ReportsPage() {
   const [closingMonth, setClosingMonth] = useState(String(now.getMonth() + 1));
   const [closings, setClosings] = useState<MonthlyClosing[]>([]);
   const [closingError, setClosingError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [mailMessage, setMailMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [sendingEmailId, setSendingEmailId] = useState<number | "due" | null>(null);
 
@@ -174,16 +175,16 @@ export default function ReportsPage() {
     const token = localStorage.getItem("token");
     if (!token) return;
     const query = reportQueryParams();
-    const response = await fetch(`${API_URL}/reports/export?format=${format}${query ? `&${query}` : ""}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = format === "pdf" ? "relatorio-impressoes.pdf" : "relatorio-impressoes.xlsx";
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      setExportError(null);
+      await downloadBlob(
+        `/reports/export?format=${format}${query ? `&${query}` : ""}`,
+        format === "pdf" ? "relatorio-impressoes.pdf" : "relatorio-impressoes.xlsx",
+        token
+      );
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Falha ao exportar relatorio.");
+    }
   }
 
   async function generateClosing() {
@@ -251,14 +252,31 @@ export default function ReportsPage() {
   async function downloadClosing(closing: MonthlyClosing, format: "pdf" | "xlsx") {
     const token = localStorage.getItem("token");
     if (!token) return;
-    const response = await fetch(`${API_URL}/reports/monthly-closings/${closing.id}/export?format=${format}`, {
+    try {
+      setExportError(null);
+      await downloadBlob(
+        `/reports/monthly-closings/${closing.id}/export?format=${format}`,
+        `fechamento-${closing.year}-${String(closing.month).padStart(2, "0")}.${format === "pdf" ? "pdf" : "xlsx"}`,
+        token
+      );
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Falha ao exportar fechamento.");
+    }
+  }
+
+  async function downloadBlob(path: string, filename: string, token: string) {
+    const response = await fetch(`${API_URL}${path}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Falha ao baixar ${filename}: ${readError({ message: detail }) || `HTTP ${response.status}`}`);
+    }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `fechamento-${closing.year}-${String(closing.month).padStart(2, "0")}.${format === "pdf" ? "pdf" : "xlsx"}`;
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -303,6 +321,8 @@ export default function ReportsPage() {
           </Button>
         </div>
       </div>
+
+      {exportError ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">{exportError}</div> : null}
 
       <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-7">
         <Summary label="Trabalhos" value={summary.jobs} icon={FileText} />
@@ -592,6 +612,15 @@ function policyActionLabel(action?: string | null) {
   if (action === "require_release") return "Liberacao";
   if (action === "force_mono") return "Cobrar P&B";
   return "Politica";
+}
+
+function readError(err: { message?: string }) {
+  let errorText = err.message || "";
+  try {
+    const parsed = JSON.parse(errorText);
+    if (parsed.detail) errorText = parsed.detail;
+  } catch {}
+  return errorText || "Erro desconhecido";
 }
 
 function Summary({ label, value, icon: Icon }: { label: string; value: number | string; icon: typeof FileText }) {
