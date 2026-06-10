@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Edit, Plus, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Building2, Edit, Plus, ShieldCheck, Trash2, Users } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -19,6 +19,12 @@ type UserRow = {
   used_balance: number | null;
 };
 
+type DepartmentRow = {
+  id: number;
+  name: string;
+  created_at: string;
+};
+
 const emptyForm = {
   username: "",
   full_name: "",
@@ -28,17 +34,28 @@ const emptyForm = {
   is_active: true,
 };
 
+const emptyDepartmentForm = {
+  name: "",
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [form, setForm] = useState(emptyForm);
+  const [departmentForm, setDepartmentForm] = useState(emptyDepartmentForm);
   const [error, setError] = useState<string | null>(null);
+  const [departmentError, setDepartmentError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingDepartmentId, setEditingDepartmentId] = useState<number | null>(null);
   const [showBalance, setShowBalance] = useState(true);
 
   async function load() {
     const token = localStorage.getItem("token");
     if (!token) return;
-    await apiFetch<UserRow[]>("/users", token).then(setUsers).catch(() => setUsers([]));
+    await Promise.all([
+      apiFetch<UserRow[]>("/users", token).then(setUsers).catch(() => setUsers([])),
+      apiFetch<DepartmentRow[]>("/departments", token).then(setDepartments).catch(() => setDepartments([])),
+    ]);
 
     try {
       const settingsData = await apiFetch<{ show_balance: boolean }>("/settings", token);
@@ -57,8 +74,9 @@ export default function UsersPage() {
       total: users.length,
       active: users.filter((user) => user.is_active).length,
       admins: users.filter((user) => user.role === "admin").length,
+      departments: departments.length,
     };
-  }, [users]);
+  }, [users, departments]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -116,6 +134,55 @@ export default function UsersPage() {
     setForm(emptyForm);
   }
 
+  async function submitDepartment(event: FormEvent) {
+    event.preventDefault();
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setDepartmentError(null);
+    try {
+      if (editingDepartmentId) {
+        await apiFetch<DepartmentRow>(`/departments/${editingDepartmentId}`, token, {
+          method: "PUT",
+          body: JSON.stringify({ name: departmentForm.name }),
+        });
+      } else {
+        await apiFetch<DepartmentRow>("/departments", token, {
+          method: "POST",
+          body: JSON.stringify({ name: departmentForm.name }),
+        });
+      }
+      resetDepartmentForm();
+      await load();
+    } catch (err) {
+      setDepartmentError(err instanceof Error ? err.message : "Falha ao salvar departamento");
+    }
+  }
+
+  function startEditDepartment(department: DepartmentRow) {
+    setEditingDepartmentId(department.id);
+    setDepartmentForm({ name: department.name });
+  }
+
+  function resetDepartmentForm() {
+    setEditingDepartmentId(null);
+    setDepartmentForm(emptyDepartmentForm);
+  }
+
+  async function deleteDepartment(department: DepartmentRow) {
+    const confirmed = window.confirm(`Excluir o departamento "${department.name}"?`);
+    if (!confirmed) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setDepartmentError(null);
+    try {
+      await apiFetch<{ status: string }>(`/departments/${department.id}`, token, { method: "DELETE" });
+      if (editingDepartmentId === department.id) resetDepartmentForm();
+      await load();
+    } catch (err) {
+      setDepartmentError(err instanceof Error ? err.message : "Falha ao excluir departamento");
+    }
+  }
+
   async function deleteUser(user: UserRow) {
     if (user.username === "admin" || user.username === "agent") {
       setError("Usuarios tecnicos nao podem ser excluidos.");
@@ -144,10 +211,11 @@ export default function UsersPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-3">
+      <div className="mb-4 grid gap-4 md:grid-cols-4">
         <SummaryCard label="Usuarios cadastrados" value={summary.total} icon={Users} />
         <SummaryCard label="Usuarios ativos" value={summary.active} icon={ShieldCheck} />
         <SummaryCard label="Administradores" value={summary.admins} icon={ShieldCheck} />
+        <SummaryCard label="Departamentos" value={summary.departments} icon={Building2} />
       </div>
 
       <Surface as="form" className="mb-4 grid gap-3 p-4 lg:grid-cols-[180px_1fr_190px_130px_auto]" onSubmit={submit}>
@@ -164,11 +232,18 @@ export default function UsersPage() {
           onChange={(event) => setForm({ ...form, full_name: event.target.value })}
           required
         />
-        <Input
-          placeholder="Departamento"
+        <select
+          className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
           value={form.department_name}
           onChange={(event) => setForm({ ...form, department_name: event.target.value })}
-        />
+        >
+          <option value="">Sem departamento</option>
+          {departments.map((department) => (
+            <option key={department.id} value={department.name}>
+              {department.name}
+            </option>
+          ))}
+        </select>
         <Input
           placeholder="Limite"
           type="number"
@@ -210,6 +285,68 @@ export default function UsersPage() {
       </Surface>
 
       {error ? <Surface className="mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</Surface> : null}
+
+      <Surface className="mb-4 overflow-hidden">
+        <div className="border-b bg-muted/30 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Building2 className="h-4 w-4 text-primary" />
+            Departamentos
+          </div>
+        </div>
+        <div className="grid gap-4 p-4 lg:grid-cols-[360px_1fr]">
+          <form className="flex flex-col gap-3" onSubmit={submitDepartment}>
+            <Input
+              placeholder="Nome do departamento"
+              value={departmentForm.name}
+              onChange={(event) => setDepartmentForm({ name: event.target.value })}
+              required
+            />
+            <div className="flex gap-2">
+              <Button type="submit">
+                <Plus className="h-4 w-4" />
+                {editingDepartmentId ? "Salvar" : "Cadastrar"}
+              </Button>
+              {editingDepartmentId ? (
+                <Button type="button" variant="outline" onClick={resetDepartmentForm}>
+                  Cancelar
+                </Button>
+              ) : null}
+            </div>
+            {departmentError ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{departmentError}</div> : null}
+          </form>
+          <div className="overflow-x-auto">
+            {departments.length === 0 ? (
+              <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Nenhum departamento cadastrado.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="p-2">Departamento</th>
+                    <th className="p-2 text-right">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {departments.map((department) => (
+                    <tr key={department.id} className="border-t">
+                      <td className="p-2 font-medium">{department.name}</td>
+                      <td className="p-2 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" onClick={() => startEditDepartment(department)} title="Editar departamento" className="h-8 w-8 p-0">
+                            <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                          </Button>
+                          <Button variant="ghost" onClick={() => deleteDepartment(department)} title="Excluir departamento" className="h-8 w-8 p-0">
+                            <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </Surface>
 
       <Surface className="overflow-hidden">
         <div className="border-b bg-muted/30 p-4 text-sm font-semibold">

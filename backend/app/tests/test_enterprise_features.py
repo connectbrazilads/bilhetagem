@@ -15,10 +15,11 @@ from app.api.routes.auth import login
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
 from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
-from app.api.routes.departments import list_departments
+from app.api.routes.departments import create_department, delete_department, list_departments, update_department
 from app.api.routes.printers import list_printers
 from app.api.routes.users import list_users
 from app.core.security import hash_password
+from app.schemas.department import DepartmentCreate, DepartmentUpdate
 from app.schemas.auth import LoginRequest
 from app.services.report_service import dashboard_metrics
 from app.services.snmp_service import SnmpPrinterStatus, poll_printers_once
@@ -357,3 +358,35 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
     assert db_session.query(User).filter(User.username == "admin").count() == 2
     assert db_session.query(Printer).filter(Printer.name == "KONICA").count() == 2
     assert token.organization_id == other_org.id
+
+
+def test_department_admin_crud_is_scoped_and_protects_in_use_departments(db_session: Session):
+    other_org = Organization(name="Cliente Dept", slug="cliente-dept", is_active=True)
+    admin = User(username="dept-admin", full_name="Dept Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add_all([other_org, admin])
+    db_session.flush()
+
+    other_department = Department(organization_id=other_org.id, name="Financeiro")
+    db_session.add(other_department)
+    db_session.commit()
+
+    department = create_department(DepartmentCreate(name="Financeiro"), db=db_session, actor=admin)
+    assert department.organization_id == 1
+    assert [item.name for item in list_departments(db=db_session, actor=admin)] == ["Financeiro"]
+
+    updated = update_department(department.id, DepartmentUpdate(name="Administrativo"), db=db_session, actor=admin)
+    assert updated.name == "Administrativo"
+    assert db_session.query(Department).filter(Department.organization_id == other_org.id, Department.name == "Financeiro").one()
+
+    user = User(username="dept-user", full_name="Dept User", role=UserRole.user, is_active=True, organization_id=1, department_id=department.id)
+    db_session.add(user)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        delete_department(department.id, db=db_session, actor=admin)
+    assert exc.value.status_code == 400
+
+    user.department_id = None
+    db_session.commit()
+    result = delete_department(department.id, db=db_session, actor=admin)
+    assert result == {"status": "deleted"}
