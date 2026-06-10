@@ -1210,6 +1210,51 @@ def poll_queue_actions(
     return actions
 
 
+@router.post("/queue-actions/{action_id}/cancel", response_model=AgentQueueActionRead)
+def cancel_queue_action(
+    action_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> AgentQueueAction:
+    action = (
+        db.query(AgentQueueAction)
+        .join(PrintAgent, PrintAgent.id == AgentQueueAction.agent_id)
+        .filter(
+            AgentQueueAction.organization_id == actor.organization_id,
+            AgentQueueAction.id == action_id,
+        )
+        .first()
+    )
+    if not action:
+        raise HTTPException(status_code=404, detail="Acao nao encontrada")
+    if action.status not in (AgentQueueActionStatus.pending, AgentQueueActionStatus.running):
+        raise HTTPException(status_code=409, detail="Apenas acoes pendentes ou em execucao podem ser canceladas")
+
+    previous_status = action.status.value
+    action.status = AgentQueueActionStatus.failed
+    action.result_message = "Cancelada pelo administrador antes da confirmacao do agent"
+    action.completed_at = datetime.now(timezone.utc)
+    write_audit(
+        db,
+        action="agent_queue_action_cancelled",
+        entity="agent_queue_actions",
+        entity_id=action.id,
+        actor_user_id=actor.id,
+        metadata={
+            "agent_id": action.agent_id,
+            "agent_uid": action.agent.agent_uid if action.agent else None,
+            "action_type": action.action_type.value,
+            "queue_name": action.queue_name,
+            "previous_status": previous_status,
+            "result_message": action.result_message,
+        },
+        organization_id=actor.organization_id,
+    )
+    db.commit()
+    db.refresh(action)
+    return action
+
+
 @router.post("/queue-actions/{action_id}/result", response_model=AgentQueueActionRead)
 def finish_queue_action(
     action_id: int,

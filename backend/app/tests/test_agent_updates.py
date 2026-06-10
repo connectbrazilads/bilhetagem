@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.routes.agent_updates import (
     agent_heartbeat,
     agent_version,
+    cancel_queue_action,
     create_bulk_queue_actions,
     create_queue_action,
     download_agent_release_file,
@@ -1196,6 +1197,120 @@ def test_remote_queue_action_lifecycle(db_session: Session):
     )
     assert result_audit.log_metadata["status"] == "succeeded"
     assert result_audit.log_metadata["printer_id"] == printer.id
+
+
+def test_pending_queue_action_can_be_cancelled_by_admin(db_session: Session):
+    actor = User(username="queue-cancel-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA CANCEL", ip_address="192.168.1.140", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-cancel-pending", computer_name="PC-CANCEL-PENDING"),
+        request=_request("10.0.0.40"),
+        db=db_session,
+        actor=actor,
+    )
+    action = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA_CANCEL_PENDING",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.140",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    cancelled = cancel_queue_action(action_id=action.id, db=db_session, actor=actor)
+    pending = poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor)
+
+    assert cancelled.status == AgentQueueActionStatus.failed
+    assert cancelled.completed_at is not None
+    assert cancelled.result_message == "Cancelada pelo administrador antes da confirmacao do agent"
+    assert pending == []
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "agent_queue_action_cancelled", AuditLog.entity_id == action.id).one()
+    assert audit.actor_user_id == actor.id
+    assert audit.log_metadata["previous_status"] == "pending"
+    assert audit.log_metadata["agent_uid"] == agent.agent_uid
+
+
+def test_running_queue_action_can_be_cancelled_and_rejects_late_result(db_session: Session):
+    actor = User(username="queue-cancel-running-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA CANCEL RUNNING", ip_address="192.168.1.141", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-cancel-running", computer_name="PC-CANCEL-RUNNING"),
+        request=_request("10.0.0.41"),
+        db=db_session,
+        actor=actor,
+    )
+    action = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.restore_queue,
+            queue_name="KONICA_CANCEL_RUNNING",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.141",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+    poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor)
+
+    cancelled = cancel_queue_action(action_id=action.id, db=db_session, actor=actor)
+
+    assert cancelled.status == AgentQueueActionStatus.failed
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "agent_queue_action_cancelled", AuditLog.entity_id == action.id).one()
+    assert audit.log_metadata["previous_status"] == "running"
+    with pytest.raises(HTTPException) as exc:
+        finish_queue_action(
+            action_id=action.id,
+            payload=AgentQueueActionResult(status=AgentQueueActionStatus.succeeded, result_message="chegou tarde"),
+            db=db_session,
+            actor=actor,
+        )
+    assert exc.value.status_code == 409
+
+
+def test_completed_queue_action_cannot_be_cancelled(db_session: Session):
+    actor = User(username="queue-cancel-completed-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA CANCEL COMPLETED", ip_address="192.168.1.142", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-cancel-completed", computer_name="PC-CANCEL-COMPLETED"),
+        request=_request("10.0.0.42"),
+        db=db_session,
+        actor=actor,
+    )
+    action = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA_CANCEL_COMPLETED",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.142",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+    poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor)
+    finish_queue_action(
+        action_id=action.id,
+        payload=AgentQueueActionResult(status=AgentQueueActionStatus.succeeded, result_message="ok"),
+        db=db_session,
+        actor=actor,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        cancel_queue_action(action_id=action.id, db=db_session, actor=actor)
+
+    assert exc.value.status_code == 409
 
 
 def test_successful_queue_action_reuses_alias_by_normalized_name(db_session: Session):

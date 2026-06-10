@@ -167,6 +167,10 @@ function isStaleQueueAction(action: AgentQueueAction) {
   return Date.now() - new Date(reference).getTime() > 15 * 60 * 1000;
 }
 
+function canCancelQueueAction(action: AgentQueueAction) {
+  return action.status === "pending" || action.status === "running";
+}
+
 function canRestoreQueue(queue: AgentQueue) {
   return Boolean(queue.printer_id && queue.driver_name && (queue.ip_address || queue.port_name));
 }
@@ -296,6 +300,23 @@ export default function AgentsPage() {
       await load();
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : "Falha ao enviar acao");
+    }
+  }
+
+  async function cancelQueueAction(action: AgentQueueAction) {
+    if (!selectedAgent || !isAdmin || !canCancelQueueAction(action)) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const confirmed = window.confirm(`Cancelar a acao "${queueActionLabel(action.action_type)}" para a fila "${action.queue_name}"?`);
+    if (!confirmed) return;
+    setActionMessage(null);
+    try {
+      await apiFetch<AgentQueueAction>(`/agent/queue-actions/${action.id}/cancel`, token, { method: "POST" });
+      setActionMessage("Acao remota cancelada.");
+      await refreshSelectedAgent(selectedAgent.id);
+      await load();
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Falha ao cancelar acao");
     }
   }
 
@@ -979,6 +1000,7 @@ export default function AgentsPage() {
                         <th className="p-3">Fila</th>
                         <th className="p-3">Status</th>
                         <th className="p-3">Retorno</th>
+                        {isAdmin ? <th className="p-3 text-right">Acao</th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -994,11 +1016,25 @@ export default function AgentsPage() {
                             {action.dispatched_at ? <div className="mt-1 text-[10px] text-muted-foreground">Despacho: {formatDate(action.dispatched_at)}</div> : null}
                           </td>
                           <td className="p-3 text-xs text-muted-foreground">{action.result_message || "-"}</td>
+                          {isAdmin ? (
+                            <td className="p-3 text-right">
+                              {canCancelQueueAction(action) ? (
+                                <Button
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  title="Cancelar acao remota"
+                                  onClick={() => cancelQueueAction(action)}
+                                >
+                                  <X className="h-4 w-4 text-red-600" />
+                                </Button>
+                              ) : null}
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                       {selectedAgent.queue_actions.length === 0 ? (
                         <tr>
-                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={5}>
+                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={isAdmin ? 6 : 5}>
                             Nenhuma acao remota enviada ainda.
                           </td>
                         </tr>
