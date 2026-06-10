@@ -1778,6 +1778,7 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
     assert token.organization_id == created.id
 
     audit = db_session.query(AuditLog).filter(AuditLog.action == "organization_created").one()
+    assert audit.log_metadata["target_organization_id"] == created.id
     assert audit.log_metadata["admin_username"] == "admin"
     assert audit.log_metadata["agent_username"] == "agent"
     assert audit.log_metadata["billing_plan"] == "professional"
@@ -1830,6 +1831,9 @@ def test_updating_organization_writes_changed_fields_to_audit(db_session: Sessio
     assert updated.contracted_printer_limit == 75
 
     audit = db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").one()
+    assert audit.log_metadata["target_organization_id"] == organization.id
+    assert audit.log_metadata["target_organization_slug"] == "cliente-audit-update"
+    assert audit.log_metadata["target_organization_name"] == "Cliente Audit Renomeado"
     assert audit.log_metadata["changes"]["name"] == {
         "before": "Cliente Audit Update",
         "after": "Cliente Audit Renomeado",

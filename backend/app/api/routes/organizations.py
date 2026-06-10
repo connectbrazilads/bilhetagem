@@ -178,6 +178,7 @@ def create_organization(
             entity_id=organization.id,
             actor_user_id=actor.id,
             metadata={
+                "target_organization_id": organization.id,
                 "name": organization.name,
                 "slug": organization.slug,
                 "billing_plan": organization.billing_plan,
@@ -260,7 +261,12 @@ def update_organization(
                 entity="organizations",
                 entity_id=organization.id,
                 actor_user_id=actor.id,
-                metadata={"changes": changes},
+                metadata={
+                    "target_organization_id": organization.id,
+                    "target_organization_slug": organization.slug,
+                    "target_organization_name": organization.name,
+                    "changes": changes,
+                },
                 organization_id=actor.organization_id,
             )
         db.commit()
