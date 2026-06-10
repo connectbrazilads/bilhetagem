@@ -427,6 +427,7 @@ export default function AgentsPage() {
         (agentStatusFilter === "local-admin-missing" && hasAlert(agent, "local_admin_missing")) ||
         (agentStatusFilter === "unbound" && hasAlert(agent, "unbound_queues")) ||
         (agentStatusFilter === "identity-conflict" && hasAlert(agent, "hardware_identity_conflict")) ||
+        (agentStatusFilter === "weak-identity" && hasAlert(agent, "weak_queue_identity")) ||
         (agentStatusFilter === "generic" && hasAlert(agent, "generic_queue_names")) ||
         (agentStatusFilter === "stale" && hasAlert(agent, "stale_queues")) ||
         (agentStatusFilter === "usb" && agent.aliases.some((alias) => alias.is_present && alias.connection_type === "usb"));
@@ -525,6 +526,7 @@ export default function AgentsPage() {
             <option value="local-admin-missing">Sem admin local</option>
             <option value="unbound">Filas sem vinculo</option>
             <option value="identity-conflict">Conflito fisico</option>
+            <option value="weak-identity">Identidade fraca</option>
             <option value="generic">Filas genericas</option>
             <option value="stale">Filas ausentes</option>
             <option value="usb">Filas USB</option>

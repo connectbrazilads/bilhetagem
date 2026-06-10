@@ -522,6 +522,7 @@ def _agent_health_alerts(
     unbound_queues = [alias.queue_name for alias in present_aliases if alias.printer_id is None]
     duplicate_queues = _duplicate_present_queue_aliases(present_aliases)
     generic_queues = [alias.queue_name for alias in present_aliases if _is_generic_queue_name(alias.queue_name)]
+    weak_identity_queues = _weak_identity_queue_aliases(present_aliases)
     identity_conflict_queues = [
         alias.queue_name
         for alias in present_aliases
@@ -569,6 +570,17 @@ def _agent_health_alerts(
         sample = ", ".join(generic_queues[:3])
         suffix = f": {sample}" if sample else ""
         alerts.append(AgentHealthAlertRead(code="generic_queue_names", severity="warning", message=f"{count} fila(s) com nome generico; padronize ou vincule a fila correta{suffix}"))
+    if weak_identity_queues:
+        count = len(weak_identity_queues)
+        sample = ", ".join(weak_identity_queues[:3])
+        suffix = f": {sample}" if sample else ""
+        alerts.append(
+            AgentHealthAlertRead(
+                code="weak_queue_identity",
+                severity="warning",
+                message=f"{count} fila(s) sem serial/IP/device confiavel; revise metadata para evitar duplicidade{suffix}",
+            )
+        )
     if identity_conflict_queues:
         count = len(identity_conflict_queues)
         sample = ", ".join(identity_conflict_queues[:3])
@@ -612,6 +624,18 @@ def _duplicate_present_queue_aliases(aliases: list[PrinterAlias]) -> list[str]:
         if len(names) > 1:
             duplicates.extend(names[1:])
     return duplicates
+
+
+def _weak_identity_queue_aliases(aliases: list[PrinterAlias]) -> list[str]:
+    weak: list[str] = []
+    for alias in aliases:
+        fingerprint = (alias.fingerprint or "").strip().lower()
+        has_strong_identity = bool(alias.serial_number or alias.ip_address or alias.device_id) or fingerprint.startswith(
+            ("serial:", "ip:", "device:", "usb:", "network:")
+        )
+        if not has_strong_identity:
+            weak.append(alias.queue_name)
+    return weak
 
 
 def _stale_queue_actions(agent: PrintAgent) -> list[AgentQueueAction]:

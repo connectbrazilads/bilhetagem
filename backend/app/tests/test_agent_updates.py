@@ -1025,6 +1025,45 @@ def test_agent_health_alerts_report_generic_queue_names(db_session: Session):
     assert "USER" in alerts["generic_queue_names"].message
 
 
+def test_agent_health_alerts_report_weak_queue_identity(db_session: Session):
+    now = datetime.now(timezone.utc)
+    actor = User(username="agent-weak-identity", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
+    agent = PrintAgent(organization_id=1, agent_uid="pc-weak-identity", computer_name="PC-WEAK", last_seen_at=now)
+    printer = Printer(organization_id=1, name="KONICA IDENTIDADE", is_color=True)
+    db_session.add_all([actor, agent, printer])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PrinterAlias(
+                organization_id=1,
+                agent_id=agent.id,
+                printer_id=printer.id,
+                queue_name="Fila Sem Metadata",
+                normalized_queue_name="fila sem metadata",
+                fingerprint="queue:pc-weak|fila sem metadata||driver",
+                last_seen_at=now,
+            ),
+            PrinterAlias(
+                organization_id=1,
+                agent_id=agent.id,
+                printer_id=printer.id,
+                queue_name="Fila Rede Forte",
+                normalized_queue_name="fila rede forte",
+                fingerprint="network:wsd-12345|konica driver",
+                last_seen_at=now,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = get_agent_detail(agent.id, db=db_session, actor=actor)
+
+    alerts = {alert.code: alert for alert in response.health_alerts}
+    assert alerts["weak_queue_identity"].severity == "warning"
+    assert "Fila Sem Metadata" in alerts["weak_queue_identity"].message
+    assert "Fila Rede Forte" not in alerts["weak_queue_identity"].message
+
+
 def test_agent_health_alerts_report_operational_issues(db_session: Session, monkeypatch, tmp_path: Path):
     monkeypatch.setattr(settings, "agent_latest_version", "0.3.0")
     monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
