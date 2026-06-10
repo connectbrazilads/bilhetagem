@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.password_policy import is_unsafe_initial_password
+
 
 class OrganizationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=180)
@@ -16,6 +18,12 @@ class OrganizationCreate(BaseModel):
     def validate_initial_users(self):
         if self.admin_username.strip().lower() == self.agent_username.strip().lower():
             raise ValueError("Admin inicial e usuario do agent devem ser diferentes")
+        if is_unsafe_initial_password(self.admin_password):
+            raise ValueError("Senha inicial do admin deve ser propria e nao pode usar valor padrao")
+        if is_unsafe_initial_password(self.agent_password):
+            raise ValueError("Senha inicial do agent deve ser propria e nao pode usar valor padrao")
+        if self.admin_password.strip() == self.agent_password.strip():
+            raise ValueError("Senhas iniciais do admin e do agent devem ser diferentes")
         return self
 
 

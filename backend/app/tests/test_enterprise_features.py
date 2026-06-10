@@ -3,6 +3,7 @@ from io import BytesIO
 import pytest
 from fastapi import HTTPException
 from openpyxl import load_workbook
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
@@ -560,6 +561,24 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
     assert audit.log_metadata["agent_username"] == "agent"
     assert "ClienteNovoAdminPassword2026" not in str(audit.log_metadata)
     assert "ClienteNovoAgentPassword2026" not in str(audit.log_metadata)
+
+
+def test_organization_create_rejects_default_or_shared_initial_passwords():
+    with pytest.raises(ValidationError):
+        OrganizationCreate(
+            name="Cliente Senha Padrao",
+            slug="cliente-senha-padrao",
+            admin_password="AdminSeguro2026",
+            agent_password="agent12345",
+        )
+
+    with pytest.raises(ValidationError):
+        OrganizationCreate(
+            name="Cliente Senha Igual",
+            slug="cliente-senha-igual",
+            admin_password="MesmaSenhaSegura2026",
+            agent_password="MesmaSenhaSegura2026",
+        )
 
 
 def test_updating_organization_writes_changed_fields_to_audit(db_session: Session):

@@ -2,22 +2,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.password_policy import is_unsafe_initial_password
 from app.core.security import hash_password
 from app.models.user import User, UserRole
 from app.services.organization_service import get_or_create_default_organization
 
 
-UNSAFE_SEED_PASSWORDS = {
-    "",
-    "admin12345",
-    "agent12345",
-    "change-me-admin-password",
-    "change-me-agent-password",
-}
-
-
 def validate_seed_password(password: str, setting_name: str) -> None:
-    if password.strip() in UNSAFE_SEED_PASSWORDS:
+    if is_unsafe_initial_password(password):
         raise RuntimeError(f"{setting_name} deve ser definido com uma senha propria antes de criar usuarios iniciais.")
 
 
