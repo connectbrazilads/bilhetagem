@@ -397,6 +397,54 @@ def test_job_reuses_agent_alias_by_normalized_queue_name(db_session: Session):
     assert db_session.query(Printer).count() == 1
 
 
+def test_job_does_not_clear_known_alias_metadata_when_payload_is_incomplete(db_session: Session):
+    printer = Printer(organization_id=1, name="KONICA METADATA", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-metadata", computer_name="PC-META")
+    db_session.add_all([printer, agent])
+    db_session.flush()
+    alias = PrinterAlias(
+        organization_id=1,
+        printer=printer,
+        agent=agent,
+        queue_name="KONICA Financeiro",
+        normalized_queue_name="konica financeiro",
+        computer_name="PC-META",
+        driver_name="KONICA Driver",
+        port_name="IP_192.168.1.125",
+        connection_type="network",
+        ip_address="192.168.1.125",
+        serial_number="SN-META-001",
+        device_id="MFG:KONICA;MDL:C368;",
+        fingerprint="serial:sn-meta-001",
+    )
+    db_session.add(alias)
+    db_session.commit()
+
+    register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="diego",
+            printer_name="KONICA Financeiro",
+            queue_name="  konica   financeiro ",
+            pages=1,
+            is_color=False,
+            agent_uid=agent.agent_uid,
+            external_job_id="eventlog:metadata-preserved",
+        ),
+    )
+
+    db_session.refresh(alias)
+    assert alias.printer_id == printer.id
+    assert alias.computer_name == "PC-META"
+    assert alias.driver_name == "KONICA Driver"
+    assert alias.port_name == "IP_192.168.1.125"
+    assert alias.connection_type == "network"
+    assert alias.ip_address == "192.168.1.125"
+    assert alias.serial_number == "SN-META-001"
+    assert alias.device_id == "MFG:KONICA;MDL:C368;"
+    assert alias.fingerprint == "serial:sn-meta-001"
+
+
 def test_usb_job_uses_known_alias_device_id_instead_of_creating_queue_printer(db_session: Session):
     printer = Printer(organization_id=1, name="BROTHER DCP-T420W", is_color=False)
     alias = PrinterAlias(

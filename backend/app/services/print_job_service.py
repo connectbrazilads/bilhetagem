@@ -314,14 +314,14 @@ def _upsert_printer_alias(db: Session, payload: PrintJobCreate, agent: PrintAgen
 
     alias.printer_id = printer.id
     alias.normalized_queue_name = _normalize_alias_name(queue_name)
-    alias.computer_name = _clean_optional(payload.computer_name)
-    alias.driver_name = _clean_optional(payload.printer_driver_name)
-    alias.port_name = _clean_optional(payload.printer_port_name)
-    alias.connection_type = _clean_optional(payload.printer_connection_type)
-    alias.ip_address = _clean_optional(payload.printer_ip_address)
-    alias.serial_number = _clean_optional(payload.printer_serial)
-    alias.device_id = _clean_optional(payload.printer_device_id)
-    alias.fingerprint = _clean_optional(payload.printer_fingerprint)
+    alias.computer_name = _clean_optional(payload.computer_name) or alias.computer_name
+    alias.driver_name = _clean_optional(payload.printer_driver_name) or alias.driver_name
+    alias.port_name = _clean_optional(payload.printer_port_name) or alias.port_name
+    alias.connection_type = _clean_optional(payload.printer_connection_type) or alias.connection_type
+    alias.ip_address = _clean_optional(payload.printer_ip_address) or alias.ip_address
+    alias.serial_number = _clean_optional(payload.printer_serial) or alias.serial_number
+    alias.device_id = _clean_optional(payload.printer_device_id) or alias.device_id
+    alias.fingerprint = _clean_optional(payload.printer_fingerprint) or alias.fingerprint
     alias.last_seen_at = datetime.now(timezone.utc)
     return alias
 
