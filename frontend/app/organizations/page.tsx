@@ -7,6 +7,10 @@ import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
 
+type AuthContext = {
+  organization_slug: string;
+};
+
 type OrganizationRow = {
   id: number;
   name: string;
@@ -39,6 +43,7 @@ export default function OrganizationsPage() {
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState<OrganizationRow | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState<boolean | null>(null);
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -47,6 +52,12 @@ export default function OrganizationsPage() {
   }
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      apiFetch<AuthContext>("/auth/me", token)
+        .then((context) => setIsPlatformAdmin(context.organization_slug === "default"))
+        .catch(() => setIsPlatformAdmin(localStorage.getItem("organization_slug") === "default"));
+    }
     load();
   }, []);
 
@@ -106,7 +117,9 @@ export default function OrganizationsPage() {
     <ProtectedPage roles={["admin"]}>
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">Empresas</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Gerencie clientes e o isolamento de dados do ambiente SaaS.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isPlatformAdmin === false ? "Acompanhe os indicadores da sua empresa neste ambiente SaaS." : "Gerencie clientes e o isolamento de dados do ambiente SaaS."}
+        </p>
       </div>
 
       <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-7">
@@ -119,78 +132,84 @@ export default function OrganizationsPage() {
         <Summary label="Custo mes" value={money(summary.costMonth)} icon={CircleDollarSign} />
       </div>
 
-      <Surface as="form" className="mb-4 p-4" onSubmit={submit}>
-        <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
-          <Input
-            placeholder="Nome da empresa"
-            value={form.name}
-            onChange={(event) => setForm({ ...form, name: event.target.value })}
-            required
-          />
-          <Input
-            placeholder="slug-da-empresa"
-            value={form.slug}
-            onChange={(event) => setForm({ ...form, slug: event.target.value.toLowerCase().replace(/\s+/g, "-") })}
-            required
-            disabled={editing !== null}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            {editing ? (
-              <label className="flex items-center gap-2 px-2 text-sm font-medium">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                  checked={form.is_active}
-                  onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
-                />
-                Ativa
-              </label>
-            ) : null}
-            <Button type="submit">
-              <Plus className="h-4 w-4" />
-              {editing ? "Salvar" : "Cadastrar"}
-            </Button>
-            {editing ? (
-              <Button type="button" variant="outline" onClick={resetForm}>
-                Cancelar
+      {isPlatformAdmin === true ? (
+        <Surface as="form" className="mb-4 p-4" onSubmit={submit}>
+          <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
+            <Input
+              placeholder="Nome da empresa"
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              required
+            />
+            <Input
+              placeholder="slug-da-empresa"
+              value={form.slug}
+              onChange={(event) => setForm({ ...form, slug: event.target.value.toLowerCase().replace(/\s+/g, "-") })}
+              required
+              disabled={editing !== null}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              {editing ? (
+                <label className="flex items-center gap-2 px-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    checked={form.is_active}
+                    onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
+                  />
+                  Ativa
+                </label>
+              ) : null}
+              <Button type="submit">
+                <Plus className="h-4 w-4" />
+                {editing ? "Salvar" : "Cadastrar"}
               </Button>
-            ) : null}
+              {editing ? (
+                <Button type="button" variant="outline" onClick={resetForm}>
+                  Cancelar
+                </Button>
+              ) : null}
+            </div>
           </div>
-        </div>
 
-        {!editing ? (
-          <div className="mt-4 grid gap-3 border-t pt-4 md:grid-cols-2 lg:grid-cols-4">
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Admin inicial
-              <Input value={form.admin_username} onChange={(event) => setForm({ ...form, admin_username: event.target.value })} required />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              <span className="flex items-center justify-between gap-2">
-                Senha do admin
-                <Button type="button" variant="outline" className="h-7 px-2 text-xs" onClick={() => fillPassword("admin_password")} title="Gerar senha forte para o admin">
-                  <KeyRound className="h-3.5 w-3.5" />
-                  Gerar
-                </Button>
-              </span>
-              <Input type="password" value={form.admin_password} onChange={(event) => setForm({ ...form, admin_password: event.target.value })} required minLength={8} autoComplete="new-password" />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Usuario do agent
-              <Input value={form.agent_username} onChange={(event) => setForm({ ...form, agent_username: event.target.value })} required />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              <span className="flex items-center justify-between gap-2">
-                Senha do agent
-                <Button type="button" variant="outline" className="h-7 px-2 text-xs" onClick={() => fillPassword("agent_password")} title="Gerar senha forte para o agent">
-                  <KeyRound className="h-3.5 w-3.5" />
-                  Gerar
-                </Button>
-              </span>
-              <Input type="password" value={form.agent_password} onChange={(event) => setForm({ ...form, agent_password: event.target.value })} required minLength={8} autoComplete="new-password" />
-            </label>
-          </div>
-        ) : null}
-      </Surface>
+          {!editing ? (
+            <div className="mt-4 grid gap-3 border-t pt-4 md:grid-cols-2 lg:grid-cols-4">
+              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                Admin inicial
+                <Input value={form.admin_username} onChange={(event) => setForm({ ...form, admin_username: event.target.value })} required />
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                <span className="flex items-center justify-between gap-2">
+                  Senha do admin
+                  <Button type="button" variant="outline" className="h-7 px-2 text-xs" onClick={() => fillPassword("admin_password")} title="Gerar senha forte para o admin">
+                    <KeyRound className="h-3.5 w-3.5" />
+                    Gerar
+                  </Button>
+                </span>
+                <Input type="password" value={form.admin_password} onChange={(event) => setForm({ ...form, admin_password: event.target.value })} required minLength={8} autoComplete="new-password" />
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                Usuario do agent
+                <Input value={form.agent_username} onChange={(event) => setForm({ ...form, agent_username: event.target.value })} required />
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                <span className="flex items-center justify-between gap-2">
+                  Senha do agent
+                  <Button type="button" variant="outline" className="h-7 px-2 text-xs" onClick={() => fillPassword("agent_password")} title="Gerar senha forte para o agent">
+                    <KeyRound className="h-3.5 w-3.5" />
+                    Gerar
+                  </Button>
+                </span>
+                <Input type="password" value={form.agent_password} onChange={(event) => setForm({ ...form, agent_password: event.target.value })} required minLength={8} autoComplete="new-password" />
+              </label>
+            </div>
+          ) : null}
+        </Surface>
+      ) : isPlatformAdmin === false ? (
+        <Surface className="mb-4 border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
+          Esta visao mostra apenas a empresa vinculada ao seu login. Criacao e ativacao de clientes ficam restritas ao admin da plataforma.
+        </Surface>
+      ) : null}
 
       {error ? <Surface className="mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</Surface> : null}
 
@@ -245,9 +264,13 @@ export default function OrganizationsPage() {
                       </span>
                     </td>
                     <td className="p-4 text-right">
-                      <Button variant="ghost" onClick={() => startEdit(organization)} title="Editar" className="h-8 w-8 p-0">
-                        <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                      </Button>
+                      {isPlatformAdmin === true ? (
+                        <Button variant="ghost" onClick={() => startEdit(organization)} title="Editar" className="h-8 w-8 p-0">
+                          <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                        </Button>
+                      ) : isPlatformAdmin === false ? (
+                        <span className="text-xs text-muted-foreground">Somente leitura</span>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
