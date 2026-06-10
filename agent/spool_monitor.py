@@ -215,12 +215,14 @@ class SpoolMonitor:
         queue_name = self._clean_metadata(action.get("queue_name"))
         if not queue_name:
             raise RuntimeError("Nome da fila nao informado")
-        if action_type == "create_queue":
+        if action_type in ("create_queue", "restore_queue"):
+            verb = "restaurada" if action_type == "restore_queue" else "criada"
             return self._create_managed_queue(
                 queue_name=queue_name,
                 driver_name=self._clean_metadata(action.get("driver_name")),
                 port_name=self._clean_metadata(action.get("port_name")),
                 ip_address=self._clean_metadata(action.get("ip_address")),
+                success_verb=verb,
             )
         if action_type == "remove_queue":
             return self._remove_managed_queue(queue_name)
@@ -248,6 +250,7 @@ class SpoolMonitor:
         driver_name: str | None,
         port_name: str | None,
         ip_address: str | None,
+        success_verb: str = "criada",
     ) -> str:
         if not driver_name:
             raise RuntimeError("Driver nao informado")
@@ -258,12 +261,14 @@ class SpoolMonitor:
         driver = self._ps_quote(driver_name)
         port = self._ps_quote(port_name or "")
         ip = self._ps_quote(ip_address or "")
+        verb = self._ps_quote(success_verb)
         script = f"""
 $ErrorActionPreference = 'Stop'
 $queueName = {queue}
 $driverName = {driver}
 $portName = {port}
 $ipAddress = {ip}
+$successVerb = {verb}
 if ([string]::IsNullOrWhiteSpace($portName)) {{ $portName = "IP_$ipAddress" }}
 if (-not (Get-PrinterDriver -Name $driverName -ErrorAction SilentlyContinue)) {{ throw "Driver nao instalado: $driverName" }}
 if (-not (Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue)) {{
@@ -272,7 +277,7 @@ if (-not (Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue)) {{
 }}
 if (-not (Get-Printer -Name $queueName -ErrorAction SilentlyContinue)) {{
   Add-Printer -Name $queueName -DriverName $driverName -PortName $portName
-  "Fila criada: $queueName"
+  ("Fila {0}: {1}" -f $successVerb, $queueName)
 }} else {{
   "Fila ja existia: $queueName"
 }}

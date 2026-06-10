@@ -161,6 +161,7 @@ Entregaveis:
 
 - Modelo de fila gerenciada: nome padrao, driver, porta/IP, impressora fisica, empresa e escopo.
 - Endpoint para o painel solicitar criacao, remocao ou restauracao de fila em um agent.
+- Acao remota `restore_queue` para recriar fila removida mantendo vinculo com a impressora fisica.
 - Agent consultar acoes pendentes.
 - Agent criar porta TCP/IP e instalar/vincular fila quando driver ja existir.
 - Agent remover fila gerenciada quando solicitado.

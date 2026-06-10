@@ -10,6 +10,7 @@ from app.models.base import Base
 class AgentQueueActionType(str, enum.Enum):
     create_queue = "create_queue"
     remove_queue = "remove_queue"
+    restore_queue = "restore_queue"
 
 
 class AgentQueueActionStatus(str, enum.Enum):

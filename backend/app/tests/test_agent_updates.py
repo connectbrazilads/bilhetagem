@@ -308,6 +308,47 @@ def test_remote_queue_action_lifecycle(db_session: Session):
     assert result_audit.log_metadata["printer_id"] == printer.id
 
 
+def test_restore_queue_action_rebinds_physical_printer(db_session: Session):
+    actor = User(username="queue-restore-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA RESTAURAR", ip_address="192.168.1.126", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-restore-1", computer_name="PC-RESTORE"),
+        request=_request("10.0.0.6"),
+        db=db_session,
+        actor=actor,
+    )
+
+    action = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.restore_queue,
+            queue_name="KONICA_RESTAURADA",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            port_name="IP_192.168.1.126",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    pending = poll_queue_actions(agent_uid="agent-restore-1", db=db_session, actor=actor)
+    assert [item.action_type for item in pending] == [AgentQueueActionType.restore_queue]
+
+    finish_queue_action(
+        action_id=action.id,
+        payload=AgentQueueActionResult(status=AgentQueueActionStatus.succeeded, result_message="Fila restaurada"),
+        db=db_session,
+        actor=actor,
+    )
+
+    alias = db_session.query(PrinterAlias).filter(PrinterAlias.queue_name == "KONICA_RESTAURADA").one()
+    assert alias.printer_id == printer.id
+    assert alias.driver_name == "KONICA Driver"
+    assert alias.port_name == "IP_192.168.1.126"
+
+
 def test_remote_queue_actions_are_scoped_by_organization(db_session: Session):
     other_org = Organization(name="Cliente B", slug="cliente-b", is_active=True)
     db_session.add(other_org)

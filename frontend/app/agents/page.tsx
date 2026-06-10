@@ -72,7 +72,7 @@ type AgentRow = {
 
 type AgentQueueAction = {
   id: number;
-  action_type: "create_queue" | "remove_queue";
+  action_type: QueueActionType;
   queue_name: string;
   driver_name: string | null;
   port_name: string | null;
@@ -82,6 +82,8 @@ type AgentQueueAction = {
   requested_at: string;
   completed_at: string | null;
 };
+
+type QueueActionType = "create_queue" | "remove_queue" | "restore_queue";
 
 type PrinterOption = {
   id: number;
@@ -122,6 +124,16 @@ function logLevelClass(level: string) {
   if (level === "error" || level === "critical") return "border-red-200 bg-red-50 text-red-700";
   if (level === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function queueActionLabel(actionType: QueueActionType) {
+  if (actionType === "create_queue") return "Criar";
+  if (actionType === "restore_queue") return "Restaurar";
+  return "Remover";
+}
+
+function canRestoreQueue(queue: AgentQueue) {
+  return Boolean(queue.printer_id && queue.driver_name && (queue.ip_address || queue.port_name));
 }
 
 export default function AgentsPage() {
@@ -175,21 +187,21 @@ export default function AgentsPage() {
     setSelectedAgent(data);
   }
 
-  async function createQueueAction(actionType: "create_queue" | "remove_queue", queue?: AgentQueue) {
+  async function createQueueAction(actionType: QueueActionType, queue?: AgentQueue) {
     if (!selectedAgent) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setActionMessage(null);
     try {
       const payload =
-        actionType === "create_queue"
+        actionType === "create_queue" || actionType === "restore_queue"
           ? {
               action_type: actionType,
-              queue_name: queueForm.queue_name,
-              printer_id: queueForm.printer_id ? Number(queueForm.printer_id) : null,
-              driver_name: queueForm.driver_name,
-              ip_address: queueForm.ip_address || null,
-              port_name: queueForm.port_name || null,
+              queue_name: queue?.queue_name || queueForm.queue_name,
+              printer_id: queue?.printer_id ?? (queueForm.printer_id ? Number(queueForm.printer_id) : null),
+              driver_name: queue?.driver_name || queueForm.driver_name,
+              ip_address: queue?.ip_address || queueForm.ip_address || null,
+              port_name: queue?.port_name || queueForm.port_name || null,
             }
           : {
               action_type: actionType,
@@ -200,7 +212,7 @@ export default function AgentsPage() {
         body: JSON.stringify(payload),
       });
       setActionMessage("Acao enviada para o agent.");
-      if (actionType === "create_queue") {
+      if (actionType === "create_queue" || actionType === "restore_queue") {
         setQueueForm({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
       }
       await refreshSelectedAgent(selectedAgent.id);
@@ -613,7 +625,7 @@ export default function AgentsPage() {
                   <TerminalSquare className="h-4 w-4 text-primary" />
                   <h3 className="text-sm font-bold">Administracao remota de filas</h3>
                 </div>
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_130px_130px_auto]">
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_130px_130px_auto_auto]">
                   <Input
                     placeholder="Nome da fila"
                     value={queueForm.queue_name}
@@ -660,6 +672,15 @@ export default function AgentsPage() {
                   >
                     <Plus className="h-4 w-4" />
                     Criar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => createQueueAction("restore_queue")}
+                    disabled={!queueForm.queue_name || !queueForm.printer_id || !queueForm.driver_name || (!queueForm.ip_address && !queueForm.port_name)}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Restaurar
                   </Button>
                 </div>
                 {actionMessage ? <div className="mt-2 text-xs text-muted-foreground">{actionMessage}</div> : null}
@@ -708,9 +729,20 @@ export default function AgentsPage() {
                             </select>
                           </td>
                           <td className="p-3 text-right">
-                            <Button variant="ghost" className="h-8 w-8 p-0" title="Remover fila neste PC" onClick={() => createQueueAction("remove_queue", queue)}>
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                title={canRestoreQueue(queue) ? "Restaurar fila neste PC" : "Restaurar exige impressora, driver e IP/porta"}
+                                disabled={!canRestoreQueue(queue)}
+                                onClick={() => createQueueAction("restore_queue", queue)}
+                              >
+                                <RefreshCw className="h-4 w-4 text-primary" />
+                              </Button>
+                              <Button variant="ghost" className="h-8 w-8 p-0" title="Remover fila neste PC" onClick={() => createQueueAction("remove_queue", queue)}>
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -743,7 +775,7 @@ export default function AgentsPage() {
                       {selectedAgent.queue_actions.map((action) => (
                         <tr key={action.id} className="border-t">
                           <td className="p-3">{formatDate(action.requested_at)}</td>
-                          <td className="p-3">{action.action_type === "create_queue" ? "Criar" : "Remover"}</td>
+                          <td className="p-3">{queueActionLabel(action.action_type)}</td>
                           <td className="p-3 font-semibold">{action.queue_name}</td>
                           <td className="p-3">{action.status}</td>
                           <td className="p-3 text-xs text-muted-foreground">{action.result_message || "-"}</td>

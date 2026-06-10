@@ -325,7 +325,7 @@ def _bind_successful_queue_action(db: Session, action: AgentQueueAction) -> None
         return
 
     queue_name = action.queue_name.strip()
-    if action.action_type == AgentQueueActionType.create_queue:
+    if action.action_type in (AgentQueueActionType.create_queue, AgentQueueActionType.restore_queue):
         if not action.printer_id:
             return
         alias = (
@@ -380,10 +380,10 @@ def _validate_queue_action_payload(
         printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.id == payload.printer_id).first()
         if not printer:
             raise HTTPException(status_code=404, detail="Impressora nao encontrada")
-    elif require_printer_for_create and payload.action_type == AgentQueueActionType.create_queue:
-        raise HTTPException(status_code=422, detail="Impressora fisica obrigatoria para criar fila em lote")
+    elif require_printer_for_create and payload.action_type in (AgentQueueActionType.create_queue, AgentQueueActionType.restore_queue):
+        raise HTTPException(status_code=422, detail="Impressora fisica obrigatoria para criar ou restaurar fila em lote")
 
-    if payload.action_type == AgentQueueActionType.create_queue:
+    if payload.action_type in (AgentQueueActionType.create_queue, AgentQueueActionType.restore_queue):
         if not _clean_optional(payload.driver_name):
             raise HTTPException(status_code=422, detail="Driver obrigatorio para criar fila")
         if not _clean_optional(payload.port_name) and not _clean_optional(payload.ip_address):
