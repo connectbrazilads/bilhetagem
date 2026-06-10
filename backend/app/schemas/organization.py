@@ -60,5 +60,8 @@ class OrganizationRead(BaseModel):
     jobs_month: int = 0
     pages_month: int = 0
     cost_month: float = 0.0
+    pending_jobs_month: int = 0
+    blocked_jobs_month: int = 0
+    saved_pages_month: int = 0
 
     model_config = {"from_attributes": True}

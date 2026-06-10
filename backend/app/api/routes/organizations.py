@@ -66,6 +66,10 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         PrintJob.submitted_at >= month_start,
         PrintJob.status.in_([JobStatus.authorized, JobStatus.released]),
     )
+    monthly_blocked_query = _scoped_jobs_query(db, organization.id).filter(
+        PrintJob.submitted_at >= month_start,
+        PrintJob.status.in_([JobStatus.blocked, JobStatus.cancelled]),
+    )
     pages_month, cost_month = (
         monthly_billable_query
         .with_entities(
@@ -75,6 +79,20 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         .one()
     )
     jobs_month = monthly_billable_query.count()
+    pending_jobs_month = (
+        _scoped_jobs_query(db, organization.id)
+        .filter(
+            PrintJob.submitted_at >= month_start,
+            PrintJob.status == JobStatus.pending_release,
+        )
+        .count()
+    )
+    blocked_jobs_month = monthly_blocked_query.count()
+    saved_pages_month = (
+        monthly_blocked_query
+        .with_entities(func.coalesce(func.sum(PrintJob.pages), 0))
+        .scalar()
+    )
     return OrganizationRead(
         id=organization.id,
         name=organization.name,
@@ -96,6 +114,9 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         jobs_month=int(jobs_month or 0),
         pages_month=int(pages_month or 0),
         cost_month=float(cost_month or 0.0),
+        pending_jobs_month=int(pending_jobs_month or 0),
+        blocked_jobs_month=int(blocked_jobs_month or 0),
+        saved_pages_month=int(saved_pages_month or 0),
     )
 
 

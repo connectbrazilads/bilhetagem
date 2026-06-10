@@ -32,6 +32,9 @@ type OrganizationRow = {
   jobs_month: number;
   pages_month: number;
   cost_month: number;
+  pending_jobs_month: number;
+  blocked_jobs_month: number;
+  saved_pages_month: number;
 };
 
 const emptyForm = {
@@ -77,8 +80,11 @@ export default function OrganizationsPage() {
       inactive: organizations.filter((organization) => !organization.is_active).length,
       jobs: organizations.reduce((total, organization) => total + organization.jobs_count, 0),
       jobsMonth: organizations.reduce((total, organization) => total + organization.jobs_month, 0),
+      pendingJobsMonth: organizations.reduce((total, organization) => total + organization.pending_jobs_month, 0),
+      blockedJobsMonth: organizations.reduce((total, organization) => total + organization.blocked_jobs_month, 0),
       onlineAgents: organizations.reduce((total, organization) => total + organization.online_agents_count, 0),
       pagesMonth: organizations.reduce((total, organization) => total + organization.pages_month, 0),
+      savedPagesMonth: organizations.reduce((total, organization) => total + organization.saved_pages_month, 0),
       costMonth: organizations.reduce((total, organization) => total + organization.cost_month, 0),
     };
   }, [organizations]);
@@ -145,13 +151,16 @@ export default function OrganizationsPage() {
         </p>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-7">
+      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-10">
         <Summary label="Empresas" value={summary.total} icon={Building2} />
         <Summary label="Ativas" value={summary.active} icon={Activity} />
         <Summary label="Inativas" value={summary.inactive} icon={MonitorOff} />
         <Summary label="Agents online" value={summary.onlineAgents} icon={MonitorCheck} />
         <Summary label="Trabalhos mes" value={summary.jobsMonth} icon={FileText} />
+        <Summary label="Pendentes mes" value={summary.pendingJobsMonth} icon={FileText} />
+        <Summary label="Bloqueios mes" value={summary.blockedJobsMonth} icon={FileText} />
         <Summary label="Paginas mes" value={summary.pagesMonth} icon={FileText} />
+        <Summary label="Salvas mes" value={summary.savedPagesMonth} icon={FileText} />
         <Summary label="Custo mes" value={money(summary.costMonth)} icon={CircleDollarSign} />
       </div>
 
@@ -310,7 +319,10 @@ export default function OrganizationsPage() {
                         <MetricPill label="Offline" value={organization.offline_agents_count} tone={organization.offline_agents_count > 0 ? "danger" : "muted"} />
                         <MetricPill label="Jobs" value={organization.jobs_count} />
                         <MetricPill label="Jobs mes" value={organization.jobs_month} />
+                        <MetricPill label="Pend. mes" value={organization.pending_jobs_month} tone={organization.pending_jobs_month > 0 ? "warning" : "muted"} />
+                        <MetricPill label="Bloq. mes" value={organization.blocked_jobs_month} tone={organization.blocked_jobs_month > 0 ? "danger" : "muted"} />
                         <MetricPill label="Pag. mes" value={organization.pages_month} />
+                        <MetricPill label="Salvas mes" value={organization.saved_pages_month} tone={organization.saved_pages_month > 0 ? "success" : "muted"} />
                         <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                           {money(organization.cost_month)} mes
                         </span>

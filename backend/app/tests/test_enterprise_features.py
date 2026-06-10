@@ -1191,6 +1191,7 @@ def test_organization_metrics_include_billable_monthly_jobs(db_session: Session)
         [
             PrintJob(organization_id=1, user_id=user.id, printer_id=printer.id, pages=2, is_color=False, cost=0.10, status=JobStatus.authorized, submitted_at=now),
             PrintJob(organization_id=1, user_id=user.id, printer_id=printer.id, pages=3, is_color=True, cost=0.75, status=JobStatus.released, submitted_at=now),
+            PrintJob(organization_id=1, user_id=user.id, printer_id=printer.id, pages=7, is_color=False, cost=0.35, status=JobStatus.pending_release, submitted_at=now),
             PrintJob(organization_id=1, user_id=user.id, printer_id=printer.id, pages=9, is_color=True, cost=2.25, status=JobStatus.blocked, submitted_at=now),
             PrintJob(organization_id=1, user_id=user.id, printer_id=printer.id, pages=5, is_color=False, cost=0.25, status=JobStatus.authorized, submitted_at=previous_month),
         ]
@@ -1200,10 +1201,13 @@ def test_organization_metrics_include_billable_monthly_jobs(db_session: Session)
     organizations = list_organizations(db=db_session, actor=actor)
     default_org = next(organization for organization in organizations if organization.id == 1)
 
-    assert default_org.jobs_count == 4
+    assert default_org.jobs_count == 5
     assert default_org.jobs_month == 2
     assert default_org.pages_month == 5
     assert default_org.cost_month == 0.85
+    assert default_org.pending_jobs_month == 1
+    assert default_org.blocked_jobs_month == 1
+    assert default_org.saved_pages_month == 9
 
 
 def test_auth_context_returns_current_organization(db_session: Session):
@@ -1643,6 +1647,9 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
     assert default_row.jobs_count == 2
     assert default_row.pages_month == 1
     assert default_row.cost_month == 0.05
+    assert default_row.pending_jobs_month == 0
+    assert default_row.blocked_jobs_month == 1
+    assert default_row.saved_pages_month == 99
     assert other_row.users_count == 1
     assert other_row.printers_count == 1
     assert other_row.active_printers_count == 1
@@ -1654,6 +1661,9 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
     assert other_row.jobs_count == 1
     assert other_row.pages_month == 2
     assert other_row.cost_month == 0.10
+    assert other_row.pending_jobs_month == 0
+    assert other_row.blocked_jobs_month == 0
+    assert other_row.saved_pages_month == 0
 
 
 def test_organization_list_marks_printer_contract_overage(db_session: Session):
