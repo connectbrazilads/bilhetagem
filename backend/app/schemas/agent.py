@@ -141,6 +141,7 @@ class AgentQueueBulkActionCreate(AgentQueueActionCreate):
 class AgentQueueActionResult(BaseModel):
     status: AgentQueueActionStatus
     result_message: str | None = Field(default=None, max_length=500)
+    agent_uid: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class AgentQueueActionRead(BaseModel):

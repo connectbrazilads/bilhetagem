@@ -879,6 +879,11 @@ def finish_queue_action(
     )
     if not action:
         raise HTTPException(status_code=404, detail="Acao nao encontrada")
+    if actor.role == UserRole.agent:
+        if not payload.agent_uid:
+            raise HTTPException(status_code=403, detail="agent_uid obrigatorio para confirmar acao remota")
+        if not action.agent or action.agent.agent_uid != payload.agent_uid:
+            raise HTTPException(status_code=403, detail="Agent nao autorizado para confirmar esta acao")
 
     action.status = payload.status
     action.result_message = _clean_optional(payload.result_message)
@@ -897,6 +902,7 @@ def finish_queue_action(
             "status": action.status.value,
             "result_message": action.result_message,
             "printer_id": action.printer_id,
+            "agent_uid": action.agent.agent_uid if action.agent else None,
         },
         organization_id=actor.organization_id,
     )

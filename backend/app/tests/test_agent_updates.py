@@ -1,6 +1,8 @@
 import hashlib
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
 from starlette.requests import Request
 from sqlalchemy.orm import Session
 
@@ -616,6 +618,62 @@ def test_remote_queue_actions_are_scoped_by_organization(db_session: Session):
     pending_default = poll_queue_actions(agent_uid="shared-agent-id", db=db_session, actor=actor_default)
 
     assert pending_default == []
+
+
+def test_agent_queue_action_result_requires_matching_agent_uid_for_agent_role(db_session: Session):
+    admin = User(username="queue-result-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    agent_user = User(username="queue-result-agent", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_RESULT", ip_address="192.168.1.128", is_color=True)
+    db_session.add_all([admin, agent_user, printer])
+    db_session.commit()
+    agent_a = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-result-a", computer_name="PC-A"),
+        request=_request("10.0.0.31"),
+        db=db_session,
+        actor=admin,
+    )
+    agent_b = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-result-b", computer_name="PC-B"),
+        request=_request("10.0.0.32"),
+        db=db_session,
+        actor=admin,
+    )
+    action = create_queue_action(
+        agent_id=agent_b.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA_RESULT",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.128",
+        ),
+        db=db_session,
+        actor=admin,
+    )
+    poll_queue_actions(agent_uid=agent_b.agent_uid, db=db_session, actor=agent_user)
+
+    with pytest.raises(HTTPException) as exc:
+        finish_queue_action(
+            action_id=action.id,
+            payload=AgentQueueActionResult(status=AgentQueueActionStatus.succeeded, result_message="errado", agent_uid=agent_a.agent_uid),
+            db=db_session,
+            actor=agent_user,
+        )
+
+    assert exc.value.status_code == 403
+    db_session.rollback()
+    unchanged = db_session.get(type(action), action.id)
+    assert unchanged.status == AgentQueueActionStatus.running
+
+    finished = finish_queue_action(
+        action_id=action.id,
+        payload=AgentQueueActionResult(status=AgentQueueActionStatus.succeeded, result_message="correto", agent_uid=agent_b.agent_uid),
+        db=db_session,
+        actor=agent_user,
+    )
+
+    assert finished.status == AgentQueueActionStatus.succeeded
+    assert finished.result_message == "correto"
 
 
 def test_bulk_queue_action_applies_to_all_agents_in_organization(db_session: Session):

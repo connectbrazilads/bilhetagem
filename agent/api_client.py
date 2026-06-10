@@ -265,10 +265,10 @@ class BillingApiClient:
         return response.json()
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
-    def finish_queue_action(self, action_id: int, status: str, result_message: str | None = None) -> dict:
+    def finish_queue_action(self, action_id: int, status: str, result_message: str | None = None, agent_uid: str | None = None) -> dict:
         response = self.session.post(
             f"{self.config.api_base_url}/agent/queue-actions/{action_id}/result",
-            json={"status": status, "result_message": result_message},
+            json={"status": status, "result_message": result_message, "agent_uid": agent_uid},
             headers={**self._headers()},
             timeout=15,
         )
@@ -276,7 +276,7 @@ class BillingApiClient:
             self._token = None
             response = self.session.post(
                 f"{self.config.api_base_url}/agent/queue-actions/{action_id}/result",
-                json={"status": status, "result_message": result_message},
+                json={"status": status, "result_message": result_message, "agent_uid": agent_uid},
                 headers={**self._headers()},
                 timeout=15,
             )
