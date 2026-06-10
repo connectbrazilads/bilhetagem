@@ -226,7 +226,16 @@ def export_monthly_closing(
         entity="monthly_closings",
         entity_id=closing.id,
         actor_user_id=actor.id,
-        metadata={"format": format},
+        metadata={
+            "format": format,
+            "filename": f"{filename_base}.{format}",
+            "year": closing.year,
+            "month": closing.month,
+            "total_jobs": closing.total_jobs,
+            "billable_jobs": closing.billable_jobs,
+            "total_pages": closing.total_pages,
+            "total_cost": closing.total_cost,
+        },
     )
     db.commit()
 

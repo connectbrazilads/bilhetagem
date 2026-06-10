@@ -346,7 +346,16 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert workbook["Politicas"]["I2"].value == 0.75
     assert workbook["Politicas"]["M2"].value == 3
     audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_exported", AuditLog.entity_id == closing.id).one()
-    assert audit.log_metadata == {"format": "xlsx"}
+    assert audit.log_metadata == {
+        "format": "xlsx",
+        "filename": "fechamento-2026-05.xlsx",
+        "year": 2026,
+        "month": 5,
+        "total_jobs": 4,
+        "billable_jobs": 2,
+        "total_pages": 14,
+        "total_cost": 1.5,
+    }
 
 
 def test_monthly_closing_export_pdf(db_session: Session):
