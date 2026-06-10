@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 from starlette.requests import Request
 from sqlalchemy.orm import Session
 
@@ -418,6 +419,19 @@ def test_agent_heartbeat_creates_agent_and_local_queues(db_session: Session):
     assert response.is_online is True
     assert response.aliases[0].queue_name == "KONICA Financeiro"
     assert response.aliases[0].ip_address == "192.168.1.125"
+
+
+def test_agent_heartbeat_rejects_blank_queue_names():
+    with pytest.raises(ValidationError):
+        AgentHeartbeatPayload(
+            agent_uid="pc-blank-queue",
+            queues=[
+                {
+                    "queue_name": "   ",
+                    "driver_name": "KONICA Driver",
+                }
+            ],
+        )
 
 
 def test_agent_heartbeat_auto_binds_queue_to_known_physical_printer(db_session: Session):
@@ -1011,6 +1025,16 @@ def test_remote_queue_action_lifecycle(db_session: Session):
     )
     assert result_audit.log_metadata["status"] == "succeeded"
     assert result_audit.log_metadata["printer_id"] == printer.id
+
+
+def test_remote_queue_action_rejects_blank_queue_name():
+    with pytest.raises(ValidationError):
+        AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="   ",
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.125",
+        )
 
 
 def test_queue_action_result_requires_running_status(db_session: Session):

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
 
@@ -52,6 +52,13 @@ class AgentQueuePayload(BaseModel):
     serial_number: str | None = Field(default=None, max_length=80)
     device_id: str | None = Field(default=None, max_length=255)
     fingerprint: str | None = Field(default=None, max_length=255)
+
+    @field_validator("queue_name")
+    @classmethod
+    def queue_name_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Nome da fila obrigatorio")
+        return value
 
 
 class AgentLogPayload(BaseModel):
@@ -129,6 +136,13 @@ class AgentQueueActionCreate(BaseModel):
     driver_name: str | None = Field(default=None, max_length=180)
     port_name: str | None = Field(default=None, max_length=180)
     ip_address: str | None = Field(default=None, max_length=45)
+
+    @field_validator("queue_name")
+    @classmethod
+    def queue_name_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Nome da fila obrigatorio")
+        return value
 
 
 class AgentQueueBulkActionCreate(AgentQueueActionCreate):
