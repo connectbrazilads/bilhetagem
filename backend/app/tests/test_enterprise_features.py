@@ -1161,10 +1161,14 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert validated_metrics.top_users[0].username == "Org 1 User"
     assert validated_metrics.top_printers[0].printer == "Org 1 Printer"
     assert validated_metrics.department_usage[0].department == "Financeiro"
+    assert validated_metrics.cost_center_usage[0].cost_center == "CC-FIN"
     assert validated_metrics.eco_metrics is not None
     assert validated_metrics.eco_metrics.pages_saved == 0
     assert metrics["department_usage"] == [
         {"department": "Financeiro", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
+    ]
+    assert metrics["cost_center_usage"] == [
+        {"cost_center": "CC-FIN", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
     ]
     assert exported_users == ["Org 1 User"]
     assert snapshot["totals"]["total_jobs"] == 1

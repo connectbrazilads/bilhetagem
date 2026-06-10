@@ -347,6 +347,34 @@ def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
         .order_by(func.sum(PrintJob.pages).desc())
         .all()
     ]
+    cost_center_usage = [
+        {
+            "cost_center": cost_center or "Sem centro de custo",
+            "pages": int(pages or 0),
+            "cost": _round_money(cost),
+            "cost_per_page": _cost_per_page(cost, int(pages or 0)),
+        }
+        for cost_center, pages, cost in db.query(
+            Department.cost_center,
+            func.sum(PrintJob.pages),
+            func.coalesce(func.sum(PrintJob.cost), 0.0),
+        )
+        .select_from(PrintJob)
+        .join(User, User.id == PrintJob.user_id)
+        .join(Printer, Printer.id == PrintJob.printer_id)
+        .outerjoin(Department, Department.id == User.department_id)
+        .filter(
+            PrintJob.organization_id == organization_id,
+            User.organization_id == organization_id,
+            Printer.organization_id == organization_id,
+            or_(Department.id.is_(None), Department.organization_id == organization_id),
+            authorized,
+            PrintJob.submitted_at >= month_start,
+        )
+        .group_by(Department.cost_center)
+        .order_by(func.sum(PrintJob.pages).desc())
+        .all()
+    ]
     color_usage = [
         {
             "type": "Colorido" if is_color else "Preto e branco",
@@ -392,6 +420,7 @@ def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
         "top_users": top_users,
         "top_printers": top_printers,
         "department_usage": department_usage,
+        "cost_center_usage": cost_center_usage,
         "color_usage": color_usage,
         "eco_metrics": {
             "pages_saved": pages_saved_month,

@@ -55,6 +55,13 @@ class DashboardDepartmentUsage(BaseModel):
     cost_per_page: float = 0.0
 
 
+class DashboardCostCenterUsage(BaseModel):
+    cost_center: str
+    pages: int = Field(ge=0)
+    cost: float = 0.0
+    cost_per_page: float = 0.0
+
+
 class DashboardColorUsage(BaseModel):
     type: str
     pages: int = Field(ge=0)
@@ -79,6 +86,7 @@ class DashboardMetrics(BaseModel):
     top_users: list[DashboardUserUsage]
     top_printers: list[DashboardPrinterUsage]
     department_usage: list[DashboardDepartmentUsage]
+    cost_center_usage: list[DashboardCostCenterUsage]
     color_usage: list[DashboardColorUsage]
     eco_metrics: DashboardEcoMetrics | None = None
 

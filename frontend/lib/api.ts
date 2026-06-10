@@ -37,6 +37,7 @@ export type DashboardMetrics = {
   top_users: { username: string; pages: number; cost?: number; cost_per_page?: number }[];
   top_printers: { printer: string; pages: number; cost?: number; cost_per_page?: number }[];
   department_usage: { department: string; pages: number; cost?: number; cost_per_page?: number }[];
+  cost_center_usage: { cost_center: string; pages: number; cost?: number; cost_per_page?: number }[];
   color_usage: { type: string; pages: number; cost?: number; cost_per_page?: number }[];
   eco_metrics?: {
     pages_saved: number;

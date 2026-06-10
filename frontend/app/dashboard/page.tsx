@@ -399,7 +399,7 @@ export default function DashboardPage() {
         </Surface>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <Surface className="p-5">
           <h2 className="mb-4 text-sm font-semibold text-muted-foreground">Consumo por departamento</h2>
           {(data?.department_usage ?? []).map((item) => (
@@ -413,6 +413,23 @@ export default function DashboardPage() {
               </div>
               <div className="h-2 overflow-hidden rounded bg-muted">
                 <div className="h-full rounded bg-primary transition-all duration-500" style={{ width: `${Math.min(item.pages, 100)}%` }} />
+              </div>
+            </div>
+          ))}
+        </Surface>
+        <Surface className="p-5">
+          <h2 className="mb-4 text-sm font-semibold text-muted-foreground">Consumo por centro de custo</h2>
+          {(data?.cost_center_usage ?? []).map((item) => (
+            <div key={item.cost_center} className="mb-4 last:mb-0">
+              <div className="mb-1 flex justify-between text-sm">
+                <span className="font-medium">{item.cost_center}</span>
+                <span className="text-right">
+                  <span className="font-medium text-foreground">{item.pages} pag.</span>
+                  <MoneyLine cost={item.cost} costPerPage={item.cost_per_page} />
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded bg-muted">
+                <div className="h-full rounded bg-cyan-600 transition-all duration-500" style={{ width: `${Math.min(item.pages, 100)}%` }} />
               </div>
             </div>
           ))}
