@@ -17,6 +17,11 @@ def validate_period(year: int, month: int) -> None:
         raise ValueError("Ano do fechamento deve estar entre 2000 e 2100")
     if month < 1 or month > 12:
         raise ValueError("Mes do fechamento deve estar entre 1 e 12")
+    now = datetime.now(timezone.utc)
+    current_month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    period_start = datetime(year, month, 1, tzinfo=timezone.utc)
+    if period_start > current_month_start:
+        raise ValueError("Fechamento nao pode ser gerado para periodo futuro")
 
 
 def period_bounds(year: int, month: int) -> tuple[datetime, datetime]:

@@ -12,6 +12,7 @@ from app.api.routes.settings import get_monthly_report_email_settings_endpoint, 
 from app.api.routes.users import delete_user_endpoint
 from app.models.department import Department
 from app.models.audit_log import AuditLog
+from app.models.monthly_closing import MonthlyClosing
 from app.models.organization import Organization
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
@@ -21,6 +22,13 @@ from app.services.email_service import send_due_monthly_report_email, send_month
 from app.services.email_scheduler import send_due_monthly_reports_once
 from app.models.user import User, UserRole
 from app.services.monthly_closing_service import create_monthly_closing
+
+
+def _next_month_period() -> tuple[int, int]:
+    now = datetime.now(timezone.utc)
+    if now.month == 12:
+        return now.year + 1, 1
+    return now.year, now.month + 1
 
 
 def _seed_job_data(db_session: Session) -> tuple[User, Printer]:
@@ -235,6 +243,15 @@ def test_monthly_closing_rejects_invalid_period(db_session: Session):
 
     with pytest.raises(ValueError, match="Ano do fechamento deve estar entre 2000 e 2100"):
         create_monthly_closing(db_session, organization_id=1, year=1999, month=5)
+
+
+def test_monthly_closing_rejects_future_period(db_session: Session):
+    year, month = _next_month_period()
+
+    with pytest.raises(ValueError, match="periodo futuro"):
+        create_monthly_closing(db_session, organization_id=1, year=year, month=month)
+
+    assert db_session.query(MonthlyClosing).filter(MonthlyClosing.year == year, MonthlyClosing.month == month).count() == 0
 
 
 def test_user_with_print_history_cannot_be_deleted(db_session: Session):
@@ -639,6 +656,21 @@ def test_generate_monthly_closing_endpoint_writes_audit(db_session: Session):
     assert audit.log_metadata["month"] == 5
     assert audit.log_metadata["total_pages"] == 14
     assert audit.log_metadata["total_cost"] == 1.5
+
+
+def test_generate_monthly_closing_endpoint_rejects_future_period_without_audit(db_session: Session):
+    actor = User(username="closing-future-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    year, month = _next_month_period()
+
+    with pytest.raises(HTTPException) as exc:
+        generate_monthly_closing(MonthlyClosingCreate(year=year, month=month), db=db_session, actor=actor)
+
+    assert exc.value.status_code == 400
+    assert "periodo futuro" in exc.value.detail
+    assert db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_generated").count() == 0
+    assert db_session.query(MonthlyClosing).filter(MonthlyClosing.year == year, MonthlyClosing.month == month).count() == 0
 
 
 def test_send_monthly_closing_email_with_attachments(db_session: Session, monkeypatch):

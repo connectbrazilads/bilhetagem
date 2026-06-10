@@ -60,7 +60,10 @@ def generate_monthly_closing(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> MonthlyClosing:
-    closing = create_monthly_closing(db, actor.organization_id, payload.year, payload.month)
+    try:
+        closing = create_monthly_closing(db, actor.organization_id, payload.year, payload.month)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     write_audit(
         db,
         action="monthly_closing_generated",
