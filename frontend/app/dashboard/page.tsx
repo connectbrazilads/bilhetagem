@@ -321,7 +321,7 @@ export default function DashboardPage() {
           <HealthStat
             label="Agents com alerta"
             value={health.agents_with_alerts}
-            detail={`${health.agents_offline.toLocaleString("pt-BR")} offline agora`}
+            detail={`${health.agents_offline.toLocaleString("pt-BR")} offline, ${health.pending_queue_actions.toLocaleString("pt-BR")} acao(oes), ${health.stale_queue_actions.toLocaleString("pt-BR")} atrasada(s)`}
             tone={health.agents_with_alerts > 0 ? "danger" : "ok"}
             icon={AlertTriangle}
           />

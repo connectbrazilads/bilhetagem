@@ -1037,6 +1037,8 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         "usb_queues": 1,
         "duplicate_queue_aliases": 1,
         "generic_queue_aliases": 1,
+        "pending_queue_actions": 1,
+        "stale_queue_actions": 1,
     }
     validated_metrics = DashboardMetrics.model_validate(metrics)
     assert validated_metrics.contract_overview is not None
@@ -1044,6 +1046,8 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert validated_metrics.operational_health is not None
     assert validated_metrics.operational_health.duplicate_queue_aliases == 1
     assert validated_metrics.operational_health.generic_queue_aliases == 1
+    assert validated_metrics.operational_health.pending_queue_actions == 1
+    assert validated_metrics.operational_health.stale_queue_actions == 1
     assert validated_metrics.top_users[0].username == "Org 1 User"
     assert validated_metrics.top_printers[0].printer == "Org 1 Printer"
     assert validated_metrics.department_usage[0].department == "Financeiro"

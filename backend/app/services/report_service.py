@@ -189,6 +189,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     queue_actions_by_agent: dict[int, list[AgentQueueAction]] = defaultdict(list)
     for action in pending_queue_actions:
         queue_actions_by_agent[action.agent_id].append(action)
+    stale_queue_actions = sum(1 for action in pending_queue_actions if _queue_action_is_stale(action, now))
     recent_log_cutoff = now - RECENT_AGENT_LOG_ALERT_WINDOW
     recent_error_agent_ids = {
         int(row[0])
@@ -230,6 +231,8 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         "usb_queues": int(usb_queues),
         "duplicate_queue_aliases": duplicate_queue_aliases,
         "generic_queue_aliases": int(generic_queue_aliases),
+        "pending_queue_actions": len(pending_queue_actions),
+        "stale_queue_actions": int(stale_queue_actions),
     }
 
 
