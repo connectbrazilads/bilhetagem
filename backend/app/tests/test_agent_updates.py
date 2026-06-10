@@ -277,7 +277,7 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     assert checksums.headers["content-disposition"] == "attachment; filename=SHA256SUMS-0.3.0.txt"
 
 
-def test_agent_releases_publish_actual_file_hash_when_manifest_is_stale(db_session: Session, monkeypatch, tmp_path: Path):
+def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_session: Session, monkeypatch, tmp_path: Path):
     release_dir = tmp_path / "0.3.1"
     release_dir.mkdir()
     release_file = release_dir / "PrintBillingAgent.exe"
@@ -303,18 +303,25 @@ def test_agent_releases_publish_actual_file_hash_when_manifest_is_stale(db_sessi
         """,
         encoding="utf-8",
     )
+    monkeypatch.setattr(settings, "agent_latest_version", "0.3.1")
     monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
     actor = User(username="stale-manifest-admin", full_name="Release Admin", role=UserRole.admin, is_active=True)
     db_session.add(actor)
     db_session.commit()
 
     release = list_agent_releases(_=actor)[0]
+    version = agent_version(current_version="0.3.0", _=actor)
     checksums = download_agent_release_checksums(version="0.3.1", _=actor)
+    with pytest.raises(HTTPException) as download_exc:
+        download_agent_release_file(version="0.3.1", filename="PrintBillingAgent.exe", _=actor)
 
-    actual_sha = hashlib.sha256(b"real-agent-binary").hexdigest()
-    assert release.files[0].size_bytes == len(b"real-agent-binary")
-    assert release.files[0].sha256 == actual_sha
-    assert checksums.body.decode("utf-8") == f"{actual_sha}  PrintBillingAgent.exe\n"
+    assert release.files == []
+    assert release.signature_status == "empty"
+    assert release.signature_summary == "Nenhum arquivo publicado"
+    assert version.update_available is False
+    assert version.sha256 is None
+    assert checksums.body.decode("utf-8") == ""
+    assert download_exc.value.status_code == 404
 
 
 def test_agent_version_uses_newest_published_manifest_release(db_session: Session, monkeypatch, tmp_path: Path):

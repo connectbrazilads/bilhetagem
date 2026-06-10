@@ -89,6 +89,26 @@ def _manifest_str(value, default: str | None = None) -> str | None:
     return default
 
 
+def _manifest_sha256(value) -> str | None:
+    expected = _manifest_str(value)
+    if not expected:
+        return None
+    expected = expected.lower()
+    if len(expected) != 64 or any(char not in "0123456789abcdef" for char in expected):
+        return ""
+    return expected
+
+
+def _manifest_int(value) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
 def _release_signature_summary(files: list[AgentReleaseFileRead]) -> tuple[str, str]:
     if not files:
         return "empty", "Nenhum arquivo publicado"
@@ -137,6 +157,12 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                     continue
                 actual_sha256 = _sha256(path)
                 actual_size = path.stat().st_size
+                expected_sha256 = _manifest_sha256(raw_file.get("sha256"))
+                expected_size = _manifest_int(raw_file.get("size_bytes"))
+                if expected_sha256 is not None and expected_sha256 != actual_sha256:
+                    continue
+                if expected_size is not None and expected_size != actual_size:
+                    continue
                 files.append(
                     AgentReleaseFileRead(
                         kind=str(raw_file.get("kind") or "agent"),
