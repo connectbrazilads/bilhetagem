@@ -66,6 +66,12 @@ type AgentQueueAction = {
   completed_at: string | null;
 };
 
+type PrinterOption = {
+  id: number;
+  name: string;
+  ip_address?: string | null;
+};
+
 function formatDate(value: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("pt-BR", {
@@ -91,10 +97,11 @@ function statusClass(agent: AgentRow) {
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [printers, setPrinters] = useState<PrinterOption[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<AgentRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [queueForm, setQueueForm] = useState({ queue_name: "", driver_name: "", ip_address: "", port_name: "" });
+  const [queueForm, setQueueForm] = useState({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   async function load() {
@@ -105,6 +112,7 @@ export default function AgentsPage() {
     try {
       const data = await apiFetch<AgentRow[]>("/agent/agents", token);
       setAgents(data);
+      apiFetch<PrinterOption[]>("/printers", token).then(setPrinters).catch(() => setPrinters([]));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar agents");
       setAgents([]);
@@ -142,6 +150,7 @@ export default function AgentsPage() {
           ? {
               action_type: actionType,
               queue_name: queueForm.queue_name,
+              printer_id: queueForm.printer_id ? Number(queueForm.printer_id) : null,
               driver_name: queueForm.driver_name,
               ip_address: queueForm.ip_address || null,
               port_name: queueForm.port_name || null,
@@ -156,7 +165,7 @@ export default function AgentsPage() {
       });
       setActionMessage("Acao enviada para o agent.");
       if (actionType === "create_queue") {
-        setQueueForm({ queue_name: "", driver_name: "", ip_address: "", port_name: "" });
+        setQueueForm({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
       }
       await refreshSelectedAgent(selectedAgent.id);
       await load();
@@ -340,12 +349,31 @@ export default function AgentsPage() {
                   <TerminalSquare className="h-4 w-4 text-primary" />
                   <h3 className="text-sm font-bold">Administracao remota de filas</h3>
                 </div>
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr_140px_140px_auto]">
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_130px_130px_auto]">
                   <Input
                     placeholder="Nome da fila"
                     value={queueForm.queue_name}
                     onChange={(event) => setQueueForm({ ...queueForm, queue_name: event.target.value })}
                   />
+                  <select
+                    className="h-9 rounded-md border bg-white px-3 text-sm"
+                    value={queueForm.printer_id}
+                    onChange={(event) => {
+                      const printer = printers.find((item) => item.id.toString() === event.target.value);
+                      setQueueForm({
+                        ...queueForm,
+                        printer_id: event.target.value,
+                        ip_address: queueForm.ip_address || printer?.ip_address || "",
+                      });
+                    }}
+                  >
+                    <option value="">Impressora fisica</option>
+                    {printers.map((printer) => (
+                      <option key={printer.id} value={printer.id}>
+                        {printer.name}
+                      </option>
+                    ))}
+                  </select>
                   <Input
                     placeholder="Driver ja instalado"
                     value={queueForm.driver_name}
@@ -364,7 +392,7 @@ export default function AgentsPage() {
                   <Button
                     type="button"
                     onClick={() => createQueueAction("create_queue")}
-                    disabled={!queueForm.queue_name || !queueForm.driver_name || (!queueForm.ip_address && !queueForm.port_name)}
+                    disabled={!queueForm.queue_name || !queueForm.printer_id || !queueForm.driver_name || (!queueForm.ip_address && !queueForm.port_name)}
                   >
                     <Plus className="h-4 w-4" />
                     Criar

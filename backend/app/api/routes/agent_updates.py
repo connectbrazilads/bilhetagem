@@ -239,6 +239,54 @@ def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | 
     )
 
 
+def _bind_successful_queue_action(db: Session, action: AgentQueueAction) -> None:
+    if action.status != AgentQueueActionStatus.succeeded:
+        return
+
+    queue_name = action.queue_name.strip()
+    if action.action_type == AgentQueueActionType.create_queue:
+        if not action.printer_id:
+            return
+        alias = (
+            db.query(PrinterAlias)
+            .filter(
+                PrinterAlias.organization_id == action.organization_id,
+                PrinterAlias.agent_id == action.agent_id,
+                PrinterAlias.queue_name == queue_name,
+            )
+            .first()
+        )
+        if not alias:
+            alias = PrinterAlias(
+                organization_id=action.organization_id,
+                agent_id=action.agent_id,
+                queue_name=queue_name,
+            )
+            db.add(alias)
+            db.flush()
+        alias.printer_id = action.printer_id
+        alias.normalized_queue_name = _normalize_alias_name(queue_name)
+        alias.driver_name = _clean_optional(action.driver_name) or alias.driver_name
+        alias.port_name = _clean_optional(action.port_name) or alias.port_name
+        alias.ip_address = _clean_optional(action.ip_address) or alias.ip_address
+        alias.connection_type = alias.connection_type or ("network" if action.ip_address else None)
+        alias.last_seen_at = datetime.now(timezone.utc)
+        return
+
+    if action.action_type == AgentQueueActionType.remove_queue:
+        alias = (
+            db.query(PrinterAlias)
+            .filter(
+                PrinterAlias.organization_id == action.organization_id,
+                PrinterAlias.agent_id == action.agent_id,
+                PrinterAlias.queue_name == queue_name,
+            )
+            .first()
+        )
+        if alias:
+            alias.printer_id = None
+
+
 @router.get("/version", response_model=AgentVersionRead)
 def agent_version(
     current_version: str | None = Query(default=None),
@@ -519,6 +567,23 @@ def finish_queue_action(
     action.status = payload.status
     action.result_message = _clean_optional(payload.result_message)
     action.completed_at = datetime.now(timezone.utc)
+    _bind_successful_queue_action(db, action)
+    write_audit(
+        db,
+        action="agent_queue_action_finished",
+        entity="agent_queue_actions",
+        entity_id=action.id,
+        actor_user_id=actor.id,
+        metadata={
+            "agent_id": action.agent_id,
+            "action_type": action.action_type.value,
+            "queue_name": action.queue_name,
+            "status": action.status.value,
+            "result_message": action.result_message,
+            "printer_id": action.printer_id,
+        },
+        organization_id=actor.organization_id,
+    )
     db.commit()
     db.refresh(action)
     return action

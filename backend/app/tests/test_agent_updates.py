@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session
 from app.api.routes.agent_updates import agent_heartbeat, agent_version, create_queue_action, finish_queue_action, list_agent_releases, list_agents, poll_queue_actions
 from app.core.config import settings
 from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
+from app.models.audit_log import AuditLog
 from app.models.organization import Organization
+from app.models.printer import Printer
+from app.models.printer_alias import PrinterAlias
 from app.models.user import User, UserRole
 from app.schemas.agent import AgentHeartbeatPayload, AgentQueueActionCreate, AgentQueueActionResult
 
@@ -152,7 +155,8 @@ def test_list_agents_is_scoped_by_organization(db_session: Session):
 
 def test_remote_queue_action_lifecycle(db_session: Session):
     actor = User(username="queue-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
-    db_session.add(actor)
+    printer = Printer(organization_id=1, name="KONICA FISICA", ip_address="192.168.1.125", is_color=True)
+    db_session.add_all([actor, printer])
     db_session.commit()
     agent = agent_heartbeat(
         payload=AgentHeartbeatPayload(agent_uid="agent-queue-1", computer_name="PC-QUEUE"),
@@ -166,6 +170,7 @@ def test_remote_queue_action_lifecycle(db_session: Session):
         payload=AgentQueueActionCreate(
             action_type=AgentQueueActionType.create_queue,
             queue_name="KONICA_FINANCEIRO",
+            printer_id=printer.id,
             driver_name="KONICA Driver",
             ip_address="192.168.1.125",
         ),
@@ -191,6 +196,17 @@ def test_remote_queue_action_lifecycle(db_session: Session):
     assert finished.status == AgentQueueActionStatus.succeeded
     assert finished.result_message == "Fila criada"
     assert finished.completed_at is not None
+    alias = db_session.query(PrinterAlias).filter(PrinterAlias.queue_name == "KONICA_FINANCEIRO").one()
+    assert alias.printer_id == printer.id
+    assert alias.driver_name == "KONICA Driver"
+    assert alias.ip_address == "192.168.1.125"
+    result_audit = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "agent_queue_action_finished", AuditLog.entity_id == action.id)
+        .one()
+    )
+    assert result_audit.log_metadata["status"] == "succeeded"
+    assert result_audit.log_metadata["printer_id"] == printer.id
 
 
 def test_remote_queue_actions_are_scoped_by_organization(db_session: Session):
