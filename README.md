@@ -36,6 +36,23 @@ python -m venv .venv
 .\\.venv\\Scripts\\pytest
 ```
 
+## Verificacao antes de publicar
+
+Depois que as dependencias dos tres projetos estiverem instaladas, rode a esteira local:
+
+```powershell
+.\\verify.ps1
+```
+
+Esse comando executa testes do backend, testes do agent, lint do frontend e build do frontend.
+Para validar tambem os artefatos versionados do agent:
+
+```powershell
+.\\verify.ps1 -VerifyAgentRelease
+```
+
+Quando o certificado real estiver configurado, use `-RequireAgentSignature` para exigir assinatura valida.
+
 ## Endpoints principais
 
 - `POST /auth/login`
