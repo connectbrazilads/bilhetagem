@@ -28,9 +28,9 @@ const emptyForm = {
   slug: "",
   is_active: true,
   admin_username: "admin",
-  admin_password: "admin12345",
+  admin_password: "",
   agent_username: "agent",
-  agent_password: "agent12345",
+  agent_password: "",
 };
 
 export default function OrganizationsPage() {

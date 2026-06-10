@@ -8,9 +8,9 @@ class OrganizationCreate(BaseModel):
     slug: str = Field(min_length=2, max_length=120, pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$")
     is_active: bool = True
     admin_username: str = Field(default="admin", min_length=2, max_length=120)
-    admin_password: str = Field(default="admin12345", min_length=8, max_length=120)
+    admin_password: str = Field(min_length=8, max_length=120)
     agent_username: str = Field(default="agent", min_length=2, max_length=120)
-    agent_password: str = Field(default="agent12345", min_length=8, max_length=120)
+    agent_password: str = Field(min_length=8, max_length=120)
 
     @model_validator(mode="after")
     def validate_initial_users(self):

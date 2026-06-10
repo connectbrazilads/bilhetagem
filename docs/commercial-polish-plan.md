@@ -48,6 +48,7 @@ Entregaveis:
 - Adicionar `organization_id` em usuarios, departamentos, impressoras, aliases, agents, jobs, cotas, auditoria e configuracoes.
 - Criar empresa padrao para migrar os dados atuais.
 - Provisionar admin inicial e usuario tecnico do agent ao criar uma nova empresa.
+- Exigir senhas proprias para admin inicial e agent, sem credenciais padrao em novos clientes.
 - Alterar JWT para carregar `organization_id`.
 - Filtrar todas as consultas por empresa.
 - Separar configuracoes por empresa: bloqueio, Follow-Me, Web Print, LDAP, custos padrao e criacao automatica.
