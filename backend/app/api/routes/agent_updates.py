@@ -25,6 +25,7 @@ from app.schemas.agent import (
     AgentHealthAlertRead,
     AgentLogRead,
     AgentQueuePayload,
+    AgentQueueRead,
     AgentQueueBulkActionCreate,
     AgentReleaseFileRead,
     AgentReleaseRead,
@@ -297,7 +298,9 @@ def _store_agent_logs(db: Session, agent: PrintAgent, payload: AgentHeartbeatPay
 def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealthAlertRead]:
     alerts: list[AgentHealthAlertRead] = []
     aliases = list(agent.aliases)
-    unbound_queues = [alias.queue_name for alias in aliases if alias.printer_id is None]
+    present_aliases = [alias for alias in aliases if _alias_is_present(agent, alias)]
+    stale_queues = [alias.queue_name for alias in aliases if not _alias_is_present(agent, alias)]
+    unbound_queues = [alias.queue_name for alias in present_aliases if alias.printer_id is None]
 
     if not is_online:
         alerts.append(AgentHealthAlertRead(code="offline", severity="error", message="Agent offline ou sem contato recente"))
@@ -305,8 +308,13 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealth
         alerts.append(AgentHealthAlertRead(code="last_error", severity="warning", message=agent.last_error))
     if agent.event_log_enabled is False:
         alerts.append(AgentHealthAlertRead(code="event_log_disabled", severity="warning", message="Event Log de impressao desativado no agent"))
-    if agent.last_seen_at and not aliases:
+    if agent.last_seen_at and not present_aliases:
         alerts.append(AgentHealthAlertRead(code="no_queues", severity="warning", message="Nenhuma fila local detectada no ultimo heartbeat"))
+    if stale_queues:
+        count = len(stale_queues)
+        sample = ", ".join(stale_queues[:3])
+        suffix = f": {sample}" if sample else ""
+        alerts.append(AgentHealthAlertRead(code="stale_queues", severity="warning", message=f"{count} fila(s) nao detectada(s) no ultimo heartbeat{suffix}"))
     if unbound_queues:
         count = len(unbound_queues)
         sample = ", ".join(unbound_queues[:3])
@@ -317,6 +325,36 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealth
         alerts.append(AgentHealthAlertRead(code="outdated_version", severity="info", message=f"Agent abaixo da versao publicada {latest_version}"))
 
     return alerts
+
+
+def _alias_is_present(agent: PrintAgent, alias: PrinterAlias) -> bool:
+    if not agent.last_seen_at or not alias.last_seen_at:
+        return False
+    agent_seen = agent.last_seen_at
+    alias_seen = alias.last_seen_at
+    if agent_seen.tzinfo is None:
+        agent_seen = agent_seen.replace(tzinfo=timezone.utc)
+    if alias_seen.tzinfo is None:
+        alias_seen = alias_seen.replace(tzinfo=timezone.utc)
+    return alias_seen >= agent_seen
+
+
+def _alias_to_read(agent: PrintAgent, alias: PrinterAlias) -> AgentQueueRead:
+    return AgentQueueRead(
+        id=alias.id,
+        printer_id=alias.printer_id,
+        queue_name=alias.queue_name,
+        computer_name=alias.computer_name,
+        driver_name=alias.driver_name,
+        port_name=alias.port_name,
+        connection_type=alias.connection_type,
+        ip_address=alias.ip_address,
+        serial_number=alias.serial_number,
+        device_id=alias.device_id,
+        fingerprint=alias.fingerprint,
+        last_seen_at=alias.last_seen_at,
+        is_present=_alias_is_present(agent, alias),
+    )
 
 
 def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | None = None) -> PrintAgentRead:
@@ -342,7 +380,7 @@ def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | 
         is_online=is_online,
         status=status_text,
         health_alerts=_agent_health_alerts(agent, is_online),
-        aliases=list(agent.aliases),
+        aliases=[_alias_to_read(agent, alias) for alias in agent.aliases],
         recent_jobs=_recent_jobs(db, agent) if include_jobs and db is not None else [],
         queue_actions=queue_actions,
         recent_logs=_recent_logs(db, agent) if include_jobs and db is not None else [],

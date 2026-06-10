@@ -85,6 +85,7 @@ class AgentQueueRead(BaseModel):
     device_id: str | None
     fingerprint: str | None
     last_seen_at: datetime | None
+    is_present: bool = True
 
     model_config = {"from_attributes": True}
 

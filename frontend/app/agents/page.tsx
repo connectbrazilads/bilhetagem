@@ -20,6 +20,7 @@ type AgentQueue = {
   device_id: string | null;
   fingerprint: string | null;
   last_seen_at: string | null;
+  is_present: boolean;
 };
 
 type AgentRecentJob = {
@@ -278,7 +279,7 @@ export default function AgentsPage() {
   const summary = useMemo(() => {
     const online = agents.filter((agent) => agent.is_online).length;
     const withError = agents.filter((agent) => agent.health_alerts.length > 0).length;
-    const queues = agents.reduce((total, agent) => total + agent.aliases.length, 0);
+    const queues = agents.reduce((total, agent) => total + agent.aliases.filter((alias) => alias.is_present).length, 0);
     return { total: agents.length, online, offline: agents.length - online, withError, queues };
   }, [agents]);
   const filteredAgents = useMemo(() => {
@@ -305,7 +306,8 @@ export default function AgentsPage() {
         (agentStatusFilter === "offline" && !agent.is_online) ||
         (agentStatusFilter === "alerts" && agent.health_alerts.length > 0) ||
         (agentStatusFilter === "outdated" && agent.health_alerts.some((alert) => alert.code === "outdated_version")) ||
-        (agentStatusFilter === "unbound" && agent.health_alerts.some((alert) => alert.code === "unbound_queues"));
+        (agentStatusFilter === "unbound" && agent.health_alerts.some((alert) => alert.code === "unbound_queues")) ||
+        (agentStatusFilter === "stale" && agent.health_alerts.some((alert) => alert.code === "stale_queues"));
 
       return matchesSearch && matchesStatus;
     });
@@ -394,6 +396,7 @@ export default function AgentsPage() {
             <option value="alerts">Com alertas</option>
             <option value="outdated">Versao desatualizada</option>
             <option value="unbound">Filas sem vinculo</option>
+            <option value="stale">Filas ausentes</option>
           </select>
           <div className="text-sm font-semibold text-muted-foreground">
             {filteredAgents.length} de {agents.length} agent(s)
@@ -519,11 +522,14 @@ export default function AgentsPage() {
                   <div className="mt-0.5 text-xs text-muted-foreground">v{agent.version || "-"} - update {agent.auto_update_enabled ? "on" : "off"}</div>
                 </td>
                 <td className="p-3">
-                  <div className="font-medium">{agent.aliases.length}</div>
-                  <div className="mt-0.5 max-w-[320px] truncate text-xs text-muted-foreground">
-                    {agent.aliases.map((alias) => alias.queue_name).join(", ") || "-"}
+                  <div className="font-medium">
+                    {agent.aliases.filter((alias) => alias.is_present).length}
+                    {agent.aliases.some((alias) => !alias.is_present) ? <span className="text-xs text-muted-foreground"> / {agent.aliases.length}</span> : null}
                   </div>
-                  {agent.health_alerts.some((alert) => alert.code === "unbound_queues" || alert.code === "no_queues") ? (
+                  <div className="mt-0.5 max-w-[320px] truncate text-xs text-muted-foreground">
+                    {agent.aliases.filter((alias) => alias.is_present).map((alias) => alias.queue_name).join(", ") || "-"}
+                  </div>
+                  {agent.health_alerts.some((alert) => alert.code === "unbound_queues" || alert.code === "no_queues" || alert.code === "stale_queues") ? (
                     <div className="mt-1 text-xs font-semibold text-amber-700">Revisar vinculos de fila</div>
                   ) : null}
                 </td>
@@ -705,6 +711,13 @@ export default function AgentsPage() {
                           <td className="p-3">
                             <div className="font-semibold">{queue.queue_name}</div>
                             <div className="text-xs text-muted-foreground">{queue.driver_name || "-"}</div>
+                            <span
+                              className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                                queue.is_present ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"
+                              }`}
+                            >
+                              {queue.is_present ? "Presente" : "Ausente"}
+                            </span>
                           </td>
                           <td className="p-3">{queue.connection_type || "-"}</td>
                           <td className="p-3">

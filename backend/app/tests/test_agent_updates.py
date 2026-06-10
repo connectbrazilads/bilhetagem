@@ -336,6 +336,44 @@ def test_agent_heartbeat_auto_binds_usb_queue_by_known_device_id(db_session: Ses
     assert db_session.query(Printer).count() == 1
 
 
+def test_agent_heartbeat_marks_missing_local_queues_as_stale(db_session: Session):
+    actor = User(username="agent-stale-queues", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-stale-queues",
+            computer_name="PC-STALE",
+            queues=[
+                {"queue_name": "KONICA Financeiro", "driver_name": "KONICA Driver", "port_name": "IP_192.168.1.125"},
+                {"queue_name": "Brother USB", "driver_name": "Brother Driver", "port_name": "USB001"},
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-stale-queues",
+            computer_name="PC-STALE",
+            queues=[
+                {"queue_name": "Brother USB", "driver_name": "Brother Driver", "port_name": "USB001"},
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    queues = {queue.queue_name: queue for queue in response.aliases}
+    assert queues["Brother USB"].is_present is True
+    assert queues["KONICA Financeiro"].is_present is False
+    assert any(alert.code == "stale_queues" and "KONICA Financeiro" in alert.message for alert in response.health_alerts)
+
+
 def test_agent_health_alerts_report_operational_issues(db_session: Session, monkeypatch):
     monkeypatch.setattr(settings, "agent_latest_version", "0.3.0")
     actor = User(username="agent-alerts", full_name="Agent Alerts", role=UserRole.admin, is_active=True, organization_id=1)
