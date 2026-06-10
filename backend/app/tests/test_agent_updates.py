@@ -529,6 +529,44 @@ def test_list_agents_reports_stale_running_queue_actions(db_session: Session):
     )
 
 
+def test_poll_queue_actions_redispatches_stale_running_actions(db_session: Session):
+    actor = User(username="agent-redispatch-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA REDISPATCH", ip_address="192.168.1.131", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-redispatch", computer_name="PC-REDISPATCH"),
+        request=_request("10.0.0.35"),
+        db=db_session,
+        actor=actor,
+    )
+    action = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA_REDISPATCH",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.131",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+    first_dispatch = poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor)
+    old_dispatched_at = first_dispatch[0].dispatched_at
+    persisted_action = db_session.get(type(action), action.id)
+    persisted_action.dispatched_at = datetime.now(timezone.utc) - timedelta(minutes=16)
+    db_session.commit()
+
+    redispatched = poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor)
+
+    assert [item.id for item in redispatched] == [action.id]
+    assert redispatched[0].status == AgentQueueActionStatus.running
+    assert redispatched[0].dispatched_at is not None
+    assert old_dispatched_at is not None
+    assert redispatched[0].dispatched_at > old_dispatched_at
+
+
 def test_remote_queue_action_lifecycle(db_session: Session):
     actor = User(username="queue-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="KONICA FISICA", ip_address="192.168.1.125", is_color=True)

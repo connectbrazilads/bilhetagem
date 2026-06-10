@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -861,12 +862,22 @@ def poll_queue_actions(
         return []
 
     now = datetime.now(timezone.utc)
+    stale_cutoff = now - QUEUE_ACTION_STALE_AFTER
     actions = (
         db.query(AgentQueueAction)
         .filter(
             AgentQueueAction.organization_id == actor.organization_id,
             AgentQueueAction.agent_id == agent.id,
-            AgentQueueAction.status == AgentQueueActionStatus.pending,
+            or_(
+                AgentQueueAction.status == AgentQueueActionStatus.pending,
+                and_(
+                    AgentQueueAction.status == AgentQueueActionStatus.running,
+                    or_(
+                        AgentQueueAction.dispatched_at.is_(None),
+                        AgentQueueAction.dispatched_at < stale_cutoff,
+                    ),
+                ),
+            ),
         )
         .order_by(AgentQueueAction.requested_at, AgentQueueAction.id)
         .limit(10)
