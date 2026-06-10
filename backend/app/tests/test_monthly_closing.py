@@ -368,6 +368,44 @@ def test_report_export_applies_department_filter(db_session: Session):
     assert audit.log_metadata["filter_summary"] == {"Departamento": "Financeiro"}
 
 
+def test_report_export_xlsx_escapes_formula_like_text(db_session: Session):
+    department = Department(organization_id=1, name="+Financeiro")
+    user = User(username="formula-user", full_name="=Ana Financeiro", role=UserRole.user, department=department, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="@KONICA_FORMULA", is_color=True, cost_mono=0.05, cost_color=0.25)
+    actor = User(username="report-formula-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add_all([department, user, printer, actor])
+    db_session.flush()
+    db_session.add(
+        PrintJob(
+            organization_id=1,
+            user_id=user.id,
+            printer_id=printer.id,
+            document_name="-Relatorio.xlsx",
+            pages=1,
+            is_color=False,
+            cost=0.05,
+            status=JobStatus.authorized,
+            policy_name="+Politica",
+            policy_action="block",
+            reason="@Motivo",
+            submitted_at=datetime(2026, 5, 13, 10, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    response = export_report(format="xlsx", db=db_session, actor=actor)
+
+    workbook = load_workbook(BytesIO(response.body), data_only=False)
+    sheet = workbook["Impressoes"]
+    assert sheet["B2"].value == "'=Ana Financeiro"
+    assert sheet["B2"].data_type == "s"
+    assert sheet["C2"].value == "'+Financeiro"
+    assert sheet["D2"].value == "'@KONICA_FORMULA"
+    assert sheet["E2"].value == "'-Relatorio.xlsx"
+    assert sheet["J2"].value == "'+Politica"
+    assert sheet["L2"].value == "'@Motivo"
+
+
 def test_report_export_rejects_filters_from_other_organization(db_session: Session):
     other_org = Organization(name="Cliente Relatorio B", slug="cliente-relatorio-b", is_active=True)
     actor = User(username="report-scope-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)

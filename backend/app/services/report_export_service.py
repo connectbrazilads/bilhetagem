@@ -31,6 +31,14 @@ def _truncate(value: str, max_length: int) -> str:
     return value[: max_length - 3] + "..."
 
 
+def _xlsx_safe(value):
+    if not isinstance(value, str):
+        return value
+    if value[:1] in {"=", "+", "-", "@"}:
+        return "'" + value
+    return value
+
+
 def _org_name(closing: MonthlyClosing) -> str:
     snapshot_org = closing.snapshot.get("organization", {}) if closing.snapshot else {}
     if snapshot_org.get("name"):
@@ -385,7 +393,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     summary.title = "Resumo"
     contract = _contract_snapshot(closing)
     summary.append(["Indicador", "Valor"])
-    summary.append(["Empresa", _org_name(closing)])
+    summary.append(["Empresa", _xlsx_safe(_org_name(closing))])
     summary.append(["Periodo", f"{closing.month:02d}/{closing.year}"])
     summary.append(["Trabalhos", closing.total_jobs])
     summary.append(["Trabalhos cobraveis", closing.billable_jobs])
@@ -405,13 +413,13 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     summary.append(["Agua preservada (L)", eco.get("water_saved_l", 0)])
     summary.append(["Arvores salvas", eco.get("trees_saved", 0)])
     if contract:
-        summary.append(["Plano", _billing_plan_label(contract.get("billing_plan"))])
-        summary.append(["Status comercial", _billing_status_label(contract.get("billing_status"))])
+        summary.append(["Plano", _xlsx_safe(_billing_plan_label(contract.get("billing_plan")))])
+        summary.append(["Status comercial", _xlsx_safe(_billing_status_label(contract.get("billing_status")))])
         summary.append(["Limite contratado de impressoras", contract.get("contracted_printer_limit", 0)])
         summary.append(["Impressoras cadastradas", contract.get("printers_count", 0)])
         summary.append(["Impressoras ativas", contract.get("active_printers_count", 0)])
         summary.append(["Uso do contrato de impressoras (%)", contract.get("printer_usage_percent", 0.0)])
-        summary.append(["Status do limite de impressoras", contract.get("printer_limit_status", "unlimited")])
+        summary.append(["Status do limite de impressoras", _xlsx_safe(contract.get("printer_limit_status", "unlimited"))])
     for cell in ("B9", "B15", "B16"):
         summary[cell].number_format = '"R$" #,##0.00'
     _style_sheet(summary)
@@ -420,7 +428,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
         sheet = workbook.create_sheet(sheet_name)
         sheet.append(["Nome", "Trabalhos", "Paginas", "P&B", "Coloridas", "Custo", "Custo/Pag."])
         for row in closing.snapshot.get(key, []):
-            sheet.append([row["name"], row["jobs"], row["pages"], row["mono_pages"], row["color_pages"], row["cost"], row.get("cost_per_page", 0)])
+            sheet.append([_xlsx_safe(row["name"]), row["jobs"], row["pages"], row["mono_pages"], row["color_pages"], row["cost"], row.get("cost_per_page", 0)])
         for row in sheet.iter_rows(min_row=2, min_col=6, max_col=7):
             for cell in row:
                 cell.number_format = '"R$" #,##0.00'
@@ -431,8 +439,8 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     for row in closing.snapshot.get("by_policy", []):
         policies.append(
             [
-                row["name"],
-                _policy_action_label(row.get("action")),
+                _xlsx_safe(row["name"]),
+                _xlsx_safe(_policy_action_label(row.get("action"))),
                 row["jobs"],
                 row["billable_jobs"],
                 row["pending_jobs"],
@@ -469,17 +477,17 @@ def render_print_jobs_xlsx(jobs: list[PrintJob], filters: dict[str, str] | None 
         sheet.append(
             [
                 job.submitted_at.isoformat(),
-                _job_user_name(job),
-                _job_department_name(job),
-                _job_printer_name(job),
-                job.document_name or "",
+                _xlsx_safe(_job_user_name(job)),
+                _xlsx_safe(_job_department_name(job)),
+                _xlsx_safe(_job_printer_name(job)),
+                _xlsx_safe(job.document_name or ""),
                 job.pages,
                 "Colorido" if job.is_color else "P&B",
-                _job_status_label(job.status),
+                _xlsx_safe(_job_status_label(job.status)),
                 job.cost,
-                job.policy_name or "",
-                _job_policy_action_label(job.policy_action),
-                job.reason or "",
+                _xlsx_safe(job.policy_name or ""),
+                _xlsx_safe(_job_policy_action_label(job.policy_action)),
+                _xlsx_safe(job.reason or ""),
             ]
         )
     for row in sheet.iter_rows(min_row=2, min_col=9, max_col=9):
@@ -499,7 +507,7 @@ def render_print_jobs_xlsx(jobs: list[PrintJob], filters: dict[str, str] | None 
     summary_sheet.append([])
     summary_sheet.append(["Filtros aplicados", "Valor"])
     for label, value in (filters or {}).items():
-        summary_sheet.append([label, value])
+        summary_sheet.append([_xlsx_safe(label), _xlsx_safe(value)])
     if not filters:
         summary_sheet.append(["Filtro", "Nenhum"])
     _style_sheet(summary_sheet)
