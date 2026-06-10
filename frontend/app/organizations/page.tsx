@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, Edit, KeyRound, Plus, Power } from "lucide-react";
+import { Activity, Building2, CircleDollarSign, Edit, FileText, KeyRound, MonitorCheck, MonitorOff, Plus } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -107,13 +107,13 @@ export default function OrganizationsPage() {
         <p className="mt-1 text-sm text-muted-foreground">Gerencie clientes e o isolamento de dados do ambiente SaaS.</p>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-6">
+      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <Summary label="Empresas" value={summary.total} icon={Building2} />
-        <Summary label="Ativas" value={summary.active} icon={Power} />
-        <Summary label="Inativas" value={summary.inactive} icon={Power} />
-        <Summary label="Agents online" value={summary.onlineAgents} icon={Power} />
-        <Summary label="Páginas mês" value={summary.pagesMonth} icon={Power} />
-        <Summary label="Custo mês" value={money(summary.costMonth)} icon={Power} />
+        <Summary label="Ativas" value={summary.active} icon={Activity} />
+        <Summary label="Inativas" value={summary.inactive} icon={MonitorOff} />
+        <Summary label="Agents online" value={summary.onlineAgents} icon={MonitorCheck} />
+        <Summary label="Paginas mes" value={summary.pagesMonth} icon={FileText} />
+        <Summary label="Custo mes" value={money(summary.costMonth)} icon={CircleDollarSign} />
       </div>
 
       <Surface as="form" className="mb-4 p-4" onSubmit={submit}>
@@ -172,7 +172,7 @@ export default function OrganizationsPage() {
               <Input type="password" value={form.admin_password} onChange={(event) => setForm({ ...form, admin_password: event.target.value })} required minLength={8} autoComplete="new-password" />
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Usuário do agent
+              Usuario do agent
               <Input value={form.agent_username} onChange={(event) => setForm({ ...form, agent_username: event.target.value })} required />
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
@@ -217,16 +217,21 @@ export default function OrganizationsPage() {
                     <td className="p-4 font-mono text-xs text-muted-foreground">{organization.slug}</td>
                     <td className="p-4">
                       <div className="flex flex-wrap gap-1.5">
-                        <MetricPill label="Usuários" value={organization.users_count} />
+                        <MetricPill label="Usuarios" value={organization.users_count} />
                         <MetricPill label="Impressoras" value={organization.printers_count} />
                         <MetricPill label="Agents" value={organization.agents_count} />
                         <MetricPill label="Online" value={organization.online_agents_count} tone="success" />
                         <MetricPill label="Offline" value={organization.offline_agents_count} tone={organization.offline_agents_count > 0 ? "danger" : "muted"} />
                         <MetricPill label="Jobs" value={organization.jobs_count} />
-                        <MetricPill label="Pág. mês" value={organization.pages_month} />
+                        <MetricPill label="Pag. mes" value={organization.pages_month} />
                         <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                          {money(organization.cost_month)} mês
+                          {money(organization.cost_month)} mes
                         </span>
+                        {organization.pages_month > 0 ? (
+                          <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                            {money(organization.cost_month / organization.pages_month)} / pag.
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="p-4 text-muted-foreground">{new Date(organization.created_at).toLocaleDateString("pt-BR")}</td>
