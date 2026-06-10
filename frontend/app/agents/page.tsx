@@ -160,6 +160,25 @@ function canRestoreQueue(queue: AgentQueue) {
   return Boolean(queue.printer_id && queue.driver_name && (queue.ip_address || queue.port_name));
 }
 
+function connectionLabel(type: string | null) {
+  if (type === "usb") return "USB";
+  if (type === "network") return "Rede";
+  if (type === "shared") return "Compartilhada";
+  if (type === "local") return "Local";
+  return "Desconhecida";
+}
+
+function connectionClass(type: string | null) {
+  if (type === "usb") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (type === "network") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (type === "shared") return "border-violet-200 bg-violet-50 text-violet-700";
+  return "border-slate-200 bg-slate-100 text-slate-700";
+}
+
+function presentConnectionTypes(agent: AgentRow) {
+  return Array.from(new Set(agent.aliases.filter((alias) => alias.is_present).map((alias) => alias.connection_type || null)));
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [printers, setPrinters] = useState<PrinterOption[]>([]);
@@ -319,6 +338,9 @@ export default function AgentsPage() {
           agent.capture_mode,
           ...agent.aliases.map((alias) => alias.queue_name),
           ...agent.aliases.map((alias) => alias.ip_address),
+          ...agent.aliases.map((alias) => alias.serial_number),
+          ...agent.aliases.map((alias) => alias.device_id),
+          ...agent.aliases.map((alias) => alias.fingerprint),
         ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(search));
@@ -330,7 +352,8 @@ export default function AgentsPage() {
         (agentStatusFilter === "alerts" && agent.health_alerts.length > 0) ||
         (agentStatusFilter === "outdated" && agent.health_alerts.some((alert) => alert.code === "outdated_version")) ||
         (agentStatusFilter === "unbound" && agent.health_alerts.some((alert) => alert.code === "unbound_queues")) ||
-        (agentStatusFilter === "stale" && agent.health_alerts.some((alert) => alert.code === "stale_queues"));
+        (agentStatusFilter === "stale" && agent.health_alerts.some((alert) => alert.code === "stale_queues")) ||
+        (agentStatusFilter === "usb" && agent.aliases.some((alias) => alias.is_present && alias.connection_type === "usb"));
 
       return matchesSearch && matchesStatus;
     });
@@ -420,6 +443,7 @@ export default function AgentsPage() {
             <option value="outdated">Versao desatualizada</option>
             <option value="unbound">Filas sem vinculo</option>
             <option value="stale">Filas ausentes</option>
+            <option value="usb">Filas USB</option>
           </select>
           <div className="text-sm font-semibold text-muted-foreground">
             {filteredAgents.length} de {agents.length} agent(s)
@@ -552,6 +576,15 @@ export default function AgentsPage() {
                   <div className="mt-0.5 max-w-[320px] truncate text-xs text-muted-foreground">
                     {agent.aliases.filter((alias) => alias.is_present).map((alias) => alias.queue_name).join(", ") || "-"}
                   </div>
+                  {presentConnectionTypes(agent).length > 0 ? (
+                    <div className="mt-1 flex max-w-[320px] flex-wrap gap-1">
+                      {presentConnectionTypes(agent).map((type) => (
+                        <span key={type || "unknown"} className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${connectionClass(type)}`}>
+                          {connectionLabel(type)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   {agent.health_alerts.some((alert) => alert.code === "unbound_queues" || alert.code === "no_queues" || alert.code === "stale_queues") ? (
                     <div className="mt-1 text-xs font-semibold text-amber-700">Revisar vinculos de fila</div>
                   ) : null}
@@ -742,10 +775,24 @@ export default function AgentsPage() {
                               {queue.is_present ? "Presente" : "Ausente"}
                             </span>
                           </td>
-                          <td className="p-3">{queue.connection_type || "-"}</td>
+                          <td className="p-3">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${connectionClass(queue.connection_type)}`}>
+                              {connectionLabel(queue.connection_type)}
+                            </span>
+                            {queue.connection_type === "usb" ? (
+                              <div className="mt-1 max-w-[180px] text-[10px] text-amber-700">
+                                Bilhetagem ativa; SNMP indisponivel sem IP.
+                              </div>
+                            ) : null}
+                          </td>
                           <td className="p-3">
                             <div className="font-mono text-xs">{queue.ip_address || "-"}</div>
                             <div className="text-xs text-muted-foreground">{queue.port_name || "-"}</div>
+                            {queue.device_id ? (
+                              <div className="mt-1 max-w-[220px] truncate font-mono text-[10px] text-muted-foreground" title={queue.device_id}>
+                                {queue.device_id}
+                              </div>
+                            ) : null}
                           </td>
                           <td className="p-3">
                             <select
