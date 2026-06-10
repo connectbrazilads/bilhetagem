@@ -34,6 +34,7 @@ class UserRead(BaseModel):
 
 class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=180)
+    password: str | None = Field(default=None, min_length=8, max_length=120)
     role: UserRole | None = None
     department_id: int | None = None
     department_name: str | None = None

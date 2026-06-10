@@ -89,7 +89,7 @@ Depois chame `POST /reports/monthly-closings/email-due` diariamente com um usuar
 
 ## Operacao
 
-- Rotacionar senhas do usuario tecnico do agente.
+- Rotacionar senhas do usuario tecnico do agente em **Usuarios** editando o perfil `Tecnico agent`.
 - Revisar logs de auditoria mensalmente.
 - Exportar relatorios por periodo para fechamento financeiro.
 - Conferir **Downloads** apos cada release para validar versao, EXE/MSI, assinatura e SHA256.

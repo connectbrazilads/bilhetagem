@@ -30,6 +30,7 @@ type DepartmentRow = {
 const emptyForm = {
   username: "",
   full_name: "",
+  password: "",
   role: "user",
   department_id: "",
   monthly_limit: "500",
@@ -105,6 +106,7 @@ export default function UsersPage() {
           method: "PUT",
           body: JSON.stringify({
             full_name: form.full_name,
+            ...(editingAgent && form.password.trim() ? { password: form.password.trim() } : {}),
             ...(!editingAgent ? { role: form.role } : {}),
             department_id: form.department_id ? Number(form.department_id) : null,
             monthly_limit: Number(form.monthly_limit),
@@ -139,6 +141,7 @@ export default function UsersPage() {
     setForm({
       username: user.username,
       full_name: user.full_name,
+      password: "",
       role: user.role,
       department_id: user.department_id?.toString() ?? "",
       monthly_limit: String(user.monthly_limit ?? 500),
@@ -270,6 +273,17 @@ export default function UsersPage() {
               </option>
             ))}
           </select>
+          {editingAgent ? (
+            <Input
+              placeholder="Nova senha do agent"
+              type="password"
+              value={form.password}
+              onChange={(event) => setForm({ ...form, password: event.target.value })}
+              minLength={8}
+              autoComplete="new-password"
+              title="Preencha apenas para trocar a senha usada no instalador e no agent"
+            />
+          ) : null}
           <select
             className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
             value={form.department_id}

@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_roles
+from app.core.password_policy import is_unsafe_initial_password
+from app.core.security import hash_password
 from app.models.audit_log import AuditLog
 from app.models.print_job import PrintJob
 from app.models.quota import Quota
@@ -117,9 +119,15 @@ def update_user_endpoint(
         "monthly_limit": quota.monthly_limit,
         "monthly_balance": quota.monthly_balance,
     }
+    password_changed = False
 
     if payload.full_name is not None:
         user.full_name = payload.full_name
+    if payload.password is not None:
+        if is_unsafe_initial_password(payload.password):
+            raise HTTPException(status_code=400, detail="Senha nao pode usar valor padrao ou placeholder")
+        user.password_hash = hash_password(payload.password)
+        password_changed = True
     if payload.role is not None:
         user.role = payload.role
     if payload.is_active is not None:
@@ -150,6 +158,8 @@ def update_user_endpoint(
         "monthly_balance": quota.monthly_balance,
     }
     changes = _changed_values(before, after)
+    if password_changed:
+        changes["password"] = {"before": False, "after": True}
     if changes:
         write_audit(
             db,

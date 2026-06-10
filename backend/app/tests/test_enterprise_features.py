@@ -31,7 +31,7 @@ from app.api.routes.quotas import update_quota
 from app.api.routes.departments import create_department, delete_department, list_departments, update_department
 from app.api.routes.printers import list_printers
 from app.api.routes.users import create_user_endpoint, delete_user_endpoint, list_users, update_user_endpoint
-from app.core.security import create_access_token, hash_password
+from app.core.security import create_access_token, hash_password, verify_password
 from app.core.config import settings
 from app.core.deps import get_current_user, require_roles
 from app.schemas.department import DepartmentCreate, DepartmentUpdate
@@ -2084,6 +2084,39 @@ def test_agent_role_user_cannot_be_deleted_by_accident(db_session: Session):
 
     assert exc.value.status_code == 400
     assert db_session.get(User, custom_agent.id) is not None
+
+
+def test_agent_user_password_can_be_rotated_without_role_change(db_session: Session):
+    admin = User(username="rotate-agent-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    agent_user = User(
+        username="rotate-agent",
+        full_name="Agent Rotacionado",
+        role=UserRole.agent,
+        is_active=True,
+        organization_id=1,
+        password_hash=hash_password("AgentOldPassword2026"),
+    )
+    db_session.add_all([admin, agent_user])
+    db_session.commit()
+
+    updated = update_user_endpoint(
+        agent_user.id,
+        UserUpdate(full_name="Agent Rotacionado", password="AgentNewPassword2026"),
+        db=db_session,
+        actor=admin,
+    )
+
+    assert updated.role == UserRole.agent
+    db_session.refresh(agent_user)
+    assert verify_password("AgentNewPassword2026", agent_user.password_hash)
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "user_updated", AuditLog.entity_id == agent_user.id).one()
+    assert audit.log_metadata["changes"]["password"] == {"before": False, "after": True}
+
+    with pytest.raises(HTTPException) as exc:
+        update_user_endpoint(agent_user.id, UserUpdate(password="agent12345"), db=db_session, actor=admin)
+    assert exc.value.status_code == 400
+    db_session.refresh(agent_user)
+    assert verify_password("AgentNewPassword2026", agent_user.password_hash)
 
 
 def test_audit_log_listing_is_scoped_by_organization(db_session: Session):
