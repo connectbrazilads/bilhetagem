@@ -470,6 +470,36 @@ def test_policy_simulation_does_not_create_job_or_debit_quota(db_session: Sessio
     assert db_session.query(PrintJob).count() == 0
 
 
+def test_force_mono_policy_records_job_as_mono_with_mono_cost(db_session: Session):
+    _admin(db_session)
+    _printer(db_session)
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Cobrar colorido como PB",
+            priority=10,
+            rule_type=PolicyRuleType.color,
+            action=PolicyAction.force_mono,
+        )
+    )
+    db_session.commit()
+
+    decision = register_print_job(
+        db_session,
+        PrintJobCreate(username="custo-user", printer_name="KONICA_POLICY", pages=4, is_color=True, external_job_id="eventlog:force-mono"),
+        organization_id=1,
+    )
+
+    assert decision.status == JobStatus.authorized
+    assert decision.reason == "Cobrado como P&B pela politica: Cobrar colorido como PB"
+    job = db_session.query(PrintJob).filter(PrintJob.id == decision.job_id).one()
+    assert job.is_color is False
+    assert job.cost == 0.20
+    assert job.reason == "Cobrado como P&B pela politica: Cobrar colorido como PB"
+    assert job.policy_name == "Cobrar colorido como PB"
+    assert job.policy_action == "force_mono"
+
+
 def test_policy_simulation_respects_organization_scope(db_session: Session):
     user = User(username="empresa_um", full_name="Empresa Um", role=UserRole.user, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="IMPRESA_ORG_1", is_color=True)
