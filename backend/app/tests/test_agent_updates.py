@@ -206,9 +206,9 @@ def test_agent_release_downloads_reject_unsafe_versions(db_session: Session, mon
     db_session.commit()
 
     with pytest.raises(HTTPException) as download_exc:
-        download_agent_release_file(version="../0.5.0", filename="PrintBillingAgent.exe", _=actor)
+        download_agent_release_file(version="../0.5.0", filename="PrintBillingAgent.exe", db=db_session, actor=actor)
     with pytest.raises(HTTPException) as checksums_exc:
-        download_agent_release_checksums(version="../0.5.0", _=actor)
+        download_agent_release_checksums(version="../0.5.0", db=db_session, actor=actor)
 
     assert download_exc.value.status_code == 400
     assert checksums_exc.value.status_code == 400
@@ -270,11 +270,59 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     assert version.update_available is True
     assert version.sha256 == next(file.sha256 for file in releases[0].files if file.kind == "agent")
 
-    checksums = download_agent_release_checksums(version="0.3.0", _=actor)
+    checksums = download_agent_release_checksums(version="0.3.0", db=db_session, actor=actor)
     body = checksums.body.decode("utf-8")
     assert "PrintBillingAgent.exe" in body
     assert "PrintBillingAgentInstaller.exe" in body
     assert checksums.headers["content-disposition"] == "attachment; filename=SHA256SUMS-0.3.0.txt"
+
+
+def test_agent_release_downloads_are_audited(db_session: Session, monkeypatch, tmp_path: Path):
+    release_dir = tmp_path / "0.6.0"
+    release_dir.mkdir()
+    artifact = release_dir / "PrintBillingAgentInstaller.exe"
+    artifact.write_bytes(b"installer-v6")
+    (tmp_path / "manifest.json").write_text(
+        """
+        {
+          "versions": [
+            {
+              "version": "0.6.0",
+              "channel": "stable",
+              "published_at": "2026-06-01T00:00:00Z",
+              "files": [
+                {"kind": "installer", "filename": "PrintBillingAgentInstaller.exe"}
+              ]
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    actor = User(username="audit-release-admin", full_name="Release Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    file_response = download_agent_release_file(
+        version="0.6.0",
+        filename="PrintBillingAgentInstaller.exe",
+        db=db_session,
+        actor=actor,
+    )
+    checksums_response = download_agent_release_checksums(version="0.6.0", db=db_session, actor=actor)
+
+    assert file_response.filename == "PrintBillingAgentInstaller.exe"
+    assert checksums_response.headers["content-disposition"] == "attachment; filename=SHA256SUMS-0.6.0.txt"
+    logs = db_session.query(AuditLog).filter(AuditLog.actor_user_id == actor.id).order_by(AuditLog.id).all()
+    assert [log.action for log in logs] == ["agent_release_downloaded", "agent_release_checksums_downloaded"]
+    assert logs[0].organization_id == actor.organization_id
+    assert logs[0].log_metadata["version"] == "0.6.0"
+    assert logs[0].log_metadata["filename"] == "PrintBillingAgentInstaller.exe"
+    assert logs[0].log_metadata["kind"] == "installer"
+    assert logs[0].log_metadata["sha256"] == hashlib.sha256(b"installer-v6").hexdigest()
+    assert logs[1].organization_id == actor.organization_id
+    assert logs[1].log_metadata == {"version": "0.6.0", "file_count": 1}
 
 
 def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_session: Session, monkeypatch, tmp_path: Path):
@@ -311,9 +359,9 @@ def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_sessio
 
     release = list_agent_releases(_=actor)[0]
     version = agent_version(current_version="0.3.0", _=actor)
-    checksums = download_agent_release_checksums(version="0.3.1", _=actor)
+    checksums = download_agent_release_checksums(version="0.3.1", db=db_session, actor=actor)
     with pytest.raises(HTTPException) as download_exc:
-        download_agent_release_file(version="0.3.1", filename="PrintBillingAgent.exe", _=actor)
+        download_agent_release_file(version="0.3.1", filename="PrintBillingAgent.exe", db=db_session, actor=actor)
 
     assert release.files == []
     assert release.signature_status == "empty"

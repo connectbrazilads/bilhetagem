@@ -869,7 +869,8 @@ def list_agent_deployment_organizations(
 def download_agent_release_file(
     version: str,
     filename: str = Query(min_length=1, max_length=180),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> FileResponse:
     if not _is_safe_release_filename(filename):
         raise HTTPException(status_code=400, detail="Nome de arquivo invalido")
@@ -880,6 +881,21 @@ def download_agent_release_file(
     path = _release_file(version, filename)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Arquivo nao publicado")
+    write_audit(
+        db,
+        action="agent_release_downloaded",
+        entity="agent_releases",
+        entity_id=None,
+        actor_user_id=actor.id,
+        metadata={
+            "version": version,
+            "filename": filename,
+            "kind": file_entry.kind,
+            "sha256": file_entry.sha256,
+        },
+        organization_id=actor.organization_id,
+    )
+    db.commit()
     return FileResponse(
         path=str(path),
         media_type="application/octet-stream",
@@ -890,9 +906,23 @@ def download_agent_release_file(
 @router.get("/releases/{version}/checksums")
 def download_agent_release_checksums(
     version: str,
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> Response:
     release = _release_or_404(version)
+    write_audit(
+        db,
+        action="agent_release_checksums_downloaded",
+        entity="agent_releases",
+        entity_id=None,
+        actor_user_id=actor.id,
+        metadata={
+            "version": release.version,
+            "file_count": len(release.files),
+        },
+        organization_id=actor.organization_id,
+    )
+    db.commit()
     return Response(
         content=_release_checksums_text(release),
         media_type="text/plain; charset=utf-8",
