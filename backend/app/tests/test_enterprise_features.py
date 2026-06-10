@@ -1498,7 +1498,7 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
 def test_login_normalizes_username_and_organization_slug(db_session: Session):
     organization = Organization(name="Cliente Login Normalizado", slug="cliente-login-normalizado", is_active=True)
     user = User(
-        username="admin-login-normalizado",
+        username="Admin-Login-Normalizado",
         full_name="Admin Login Normalizado",
         password_hash=hash_password("LoginNormalizadoPassword2026"),
         role=UserRole.admin,
@@ -1510,7 +1510,7 @@ def test_login_normalizes_username_and_organization_slug(db_session: Session):
 
     token = login(
         LoginRequest(
-            username=" admin-login-normalizado ",
+            username=" ADMIN-LOGIN-NORMALIZADO ",
             password="LoginNormalizadoPassword2026",
             organization_slug=" CLIENTE-LOGIN-NORMALIZADO ",
         ),

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -13,13 +14,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    username = payload.username.strip()
+    username = payload.username.strip().lower()
     organization_slug = payload.organization_slug.strip().lower() if payload.organization_slug else None
     query = (
         db.query(User)
         .join(Organization)
         .filter(
-            User.username == username,
+            func.lower(User.username) == username,
             User.is_active.is_(True),
             Organization.is_active.is_(True),
             Organization.billing_status != "suspended",
