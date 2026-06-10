@@ -57,6 +57,9 @@ def _seed_job_data(db_session: Session) -> tuple[User, Printer]:
             is_color=True,
             cost=0.75,
             status=JobStatus.blocked,
+            reason="Colorido bloqueado",
+            policy_name="Bloquear colorido",
+            policy_action="block",
             submitted_at=datetime(2026, 5, 12, 10, tzinfo=timezone.utc),
         ),
         PrintJob(
@@ -94,6 +97,36 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
     assert closing.snapshot["by_printer"][0]["cost_per_page"] == 0.11
+    assert closing.snapshot["by_policy"] == [
+        {
+            "name": "Bloquear colorido",
+            "action": "block",
+            "jobs": 1,
+            "billable_jobs": 0,
+            "pending_jobs": 0,
+            "blocked_jobs": 1,
+            "pages": 0,
+            "mono_pages": 0,
+            "color_pages": 0,
+            "saved_pages": 3,
+            "cost": 0.0,
+            "cost_per_page": 0.0,
+        },
+        {
+            "name": "Cobrar colorido como PB",
+            "action": "force_mono",
+            "jobs": 1,
+            "billable_jobs": 1,
+            "pending_jobs": 0,
+            "blocked_jobs": 0,
+            "pages": 10,
+            "mono_pages": 10,
+            "color_pages": 0,
+            "saved_pages": 0,
+            "cost": 0.5,
+            "cost_per_page": 0.05,
+        },
+    ]
     assert closing.snapshot["organization"] == {"id": 1, "name": "Cliente Fechamento", "slug": "cliente-fechamento"}
 
     user.full_name = "Ana Renomeada"
@@ -125,13 +158,18 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert response.media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert response.body.startswith(b"PK")
     workbook = load_workbook(BytesIO(response.body), data_only=True)
-    assert workbook.sheetnames == ["Resumo", "Usuarios", "Departamentos", "Impressoras", "Tipo"]
+    assert workbook.sheetnames == ["Resumo", "Usuarios", "Departamentos", "Impressoras", "Tipo", "Politicas"]
     assert workbook["Resumo"]["B2"].value == "Cliente XLSX"
     assert workbook["Resumo"]["A12"].value == "Custo total"
     assert workbook["Resumo"]["B12"].value == 1.5
     assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"
     assert workbook["Impressoras"]["G1"].value == "Custo/Pag."
     assert workbook["Impressoras"]["G2"].value == 0.11
+    assert workbook["Politicas"]["A1"].value == "Politica"
+    assert workbook["Politicas"]["A2"].value == "Bloquear colorido"
+    assert workbook["Politicas"]["B2"].value == "Bloqueio"
+    assert workbook["Politicas"]["F2"].value == 1
+    assert workbook["Politicas"]["J2"].value == 3
     audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_exported", AuditLog.entity_id == closing.id).one()
     assert audit.log_metadata == {"format": "xlsx"}
 

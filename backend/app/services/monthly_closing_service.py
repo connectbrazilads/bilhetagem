@@ -35,6 +35,22 @@ def _cost_per_page(cost: float, pages: int) -> float:
     return _round_money(cost / pages)
 
 
+def _empty_policy_bucket(name: str, action: str | None) -> dict:
+    return {
+        "name": name,
+        "action": action or "",
+        "jobs": 0,
+        "billable_jobs": 0,
+        "pending_jobs": 0,
+        "blocked_jobs": 0,
+        "pages": 0,
+        "mono_pages": 0,
+        "color_pages": 0,
+        "saved_pages": 0,
+        "cost": 0.0,
+    }
+
+
 def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: int) -> dict:
     start, end = period_bounds(year, month)
     organization = db.get(Organization, organization_id)
@@ -60,6 +76,7 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
     by_department: dict[str, dict] = defaultdict(_empty_bucket)
     by_printer: dict[str, dict] = defaultdict(_empty_bucket)
     by_type: dict[str, dict] = defaultdict(_empty_bucket)
+    by_policy: dict[tuple[str, str], dict] = {}
 
     totals = {
         "total_jobs": len(jobs),
@@ -75,11 +92,22 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
     }
 
     for job in jobs:
+        policy_bucket = None
+        if job.policy_name:
+            policy_key = (job.policy_name, job.policy_action or "")
+            policy_bucket = by_policy.setdefault(policy_key, _empty_policy_bucket(job.policy_name, job.policy_action))
+            policy_bucket["jobs"] += 1
+
         if job.status == JobStatus.pending_release:
             totals["pending_jobs"] += 1
+            if policy_bucket:
+                policy_bucket["pending_jobs"] += 1
         if job.status in blocked_statuses:
             totals["blocked_jobs"] += 1
             totals["blocked_pages"] += job.pages
+            if policy_bucket:
+                policy_bucket["blocked_jobs"] += 1
+                policy_bucket["saved_pages"] += job.pages
             continue
         if job.status not in billable_statuses:
             continue
@@ -89,6 +117,11 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
         totals["total_pages"] += job.pages
         totals["color_pages" if job.is_color else "mono_pages"] += job.pages
         totals["total_cost"] += job.cost
+        if policy_bucket:
+            policy_bucket["billable_jobs"] += 1
+            policy_bucket["pages"] += job.pages
+            policy_bucket["color_pages" if job.is_color else "mono_pages"] += job.pages
+            policy_bucket["cost"] += job.cost
 
         user_name = job.user.full_name or job.user.username
         department_name = job.user.department.name if job.user.department else "Sem departamento"
@@ -114,6 +147,28 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
             for name, data in sorted(mapping.items(), key=lambda item: (-item[1]["pages"], item[0].lower()))
         ]
 
+    def policy_rows() -> list[dict]:
+        return [
+            {
+                "name": data["name"],
+                "action": data["action"],
+                "jobs": data["jobs"],
+                "billable_jobs": data["billable_jobs"],
+                "pending_jobs": data["pending_jobs"],
+                "blocked_jobs": data["blocked_jobs"],
+                "pages": data["pages"],
+                "mono_pages": data["mono_pages"],
+                "color_pages": data["color_pages"],
+                "saved_pages": data["saved_pages"],
+                "cost": _round_money(data["cost"]),
+                "cost_per_page": _cost_per_page(data["cost"], data["pages"]),
+            }
+            for data in sorted(
+                by_policy.values(),
+                key=lambda item: (-(item["billable_jobs"] + item["blocked_jobs"] + item["pending_jobs"]), item["name"].lower()),
+            )
+        ]
+
     totals["total_cost"] = _round_money(totals["total_cost"])
     return {
         "organization": {
@@ -127,6 +182,7 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
         "by_department": rows(by_department),
         "by_printer": rows(by_printer),
         "by_type": rows(by_type),
+        "by_policy": policy_rows(),
         "eco": {
             "pages_saved": totals["blocked_pages"],
             "co2_saved_g": _round_money(totals["blocked_pages"] * 4.7),

@@ -73,6 +73,10 @@ def _job_policy_action_label(action: str | None) -> str:
     return labels.get(action or "", "")
 
 
+def _policy_action_label(action: str | None) -> str:
+    return _job_policy_action_label(action) or "Politica"
+
+
 def _job_policy_summary(job: PrintJob) -> str:
     if not job.policy_name:
         return ""
@@ -164,6 +168,41 @@ def _draw_section(pdf: canvas.Canvas, closing: MonthlyClosing, y: float, title: 
     return y - 12
 
 
+def _draw_policy_section(pdf: canvas.Canvas, closing: MonthlyClosing, y: float, rows: list[dict], limit: int = 8) -> float:
+    if not rows:
+        return y
+    if y < 160:
+        y = _new_page(pdf, closing)
+    pdf.setFillColor(DARK)
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(40, y, "Politicas aplicadas")
+    y -= 18
+    pdf.setFillColor(LIGHT)
+    pdf.rect(40, y - 16, PAGE_WIDTH - 80, 18, fill=1, stroke=0)
+    pdf.setFillColor(MUTED)
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawString(48, y - 10, "Politica")
+    pdf.drawString(260, y - 10, "Acao")
+    pdf.drawRightString(350, y - 10, "Jobs")
+    pdf.drawRightString(415, y - 10, "Bloq.")
+    pdf.drawRightString(485, y - 10, "Salvas")
+    pdf.drawRightString(PAGE_WIDTH - 48, y - 10, "Custo")
+    y -= 24
+    pdf.setFont("Helvetica", 8)
+    for row in rows[:limit]:
+        if y < 72:
+            y = _new_page(pdf, closing)
+        pdf.setFillColor(DARK)
+        pdf.drawString(48, y, _truncate(str(row.get("name", "-")), 38))
+        pdf.drawString(260, y, _truncate(_policy_action_label(row.get("action")), 16))
+        pdf.drawRightString(350, y, str(row.get("jobs", 0)))
+        pdf.drawRightString(415, y, str(row.get("blocked_jobs", 0)))
+        pdf.drawRightString(485, y, str(row.get("saved_pages", 0)))
+        pdf.drawRightString(PAGE_WIDTH - 48, y, _money(float(row.get("cost", 0))))
+        y -= 16
+    return y - 12
+
+
 def render_monthly_closing_pdf(closing: MonthlyClosing) -> bytes:
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
@@ -195,6 +234,7 @@ def render_monthly_closing_pdf(closing: MonthlyClosing) -> bytes:
     y = _draw_section(pdf, closing, y, "Ranking por usuario", closing.snapshot.get("by_user", []))
     y = _draw_section(pdf, closing, y, "Consumo por departamento", closing.snapshot.get("by_department", []))
     y = _draw_section(pdf, closing, y, "Colorido x preto e branco", closing.snapshot.get("by_type", []), limit=4)
+    y = _draw_policy_section(pdf, closing, y, closing.snapshot.get("by_policy", []))
 
     pdf.setFillColor(MUTED)
     pdf.setFont("Helvetica", 7)
@@ -322,6 +362,30 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
             for cell in row:
                 cell.number_format = '"R$" #,##0.00'
         _style_sheet(sheet)
+
+    policies = workbook.create_sheet("Politicas")
+    policies.append(["Politica", "Acao", "Trabalhos", "Cobraveis", "Pendentes", "Bloqueados", "Paginas", "P&B", "Coloridas", "Salvas", "Custo", "Custo/Pag."])
+    for row in closing.snapshot.get("by_policy", []):
+        policies.append(
+            [
+                row["name"],
+                _policy_action_label(row.get("action")),
+                row["jobs"],
+                row["billable_jobs"],
+                row["pending_jobs"],
+                row["blocked_jobs"],
+                row["pages"],
+                row["mono_pages"],
+                row["color_pages"],
+                row["saved_pages"],
+                row["cost"],
+                row.get("cost_per_page", 0),
+            ]
+        )
+    for row in policies.iter_rows(min_row=2, min_col=11, max_col=12):
+        for cell in row:
+            cell.number_format = '"R$" #,##0.00'
+    _style_sheet(policies)
 
     buffer = BytesIO()
     workbook.save(buffer)

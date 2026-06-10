@@ -60,6 +60,7 @@ type MonthlyClosing = {
     by_user?: ClosingSnapshotRow[];
     by_department?: ClosingSnapshotRow[];
     by_printer?: ClosingSnapshotRow[];
+    by_policy?: ClosingPolicySnapshotRow[];
   };
   generated_at: string;
 };
@@ -70,6 +71,18 @@ type ClosingSnapshotRow = {
   pages: number;
   cost: number;
   cost_per_page?: number;
+};
+
+type ClosingPolicySnapshotRow = {
+  name: string;
+  action: string;
+  jobs: number;
+  billable_jobs: number;
+  pending_jobs: number;
+  blocked_jobs: number;
+  pages: number;
+  saved_pages: number;
+  cost: number;
 };
 
 type MonthlyClosingEmailResult = {
@@ -387,10 +400,11 @@ export default function ReportsPage() {
                           <span>{closing.pending_jobs.toLocaleString("pt-BR")} pendente(s)</span>
                           <span>{closing.blocked_jobs.toLocaleString("pt-BR")} bloqueado(s)</span>
                         </div>
-                        <div className="grid gap-4 lg:grid-cols-3">
+                        <div className="grid gap-4 lg:grid-cols-4">
                           <SnapshotList title="Top usuários" rows={closing.snapshot.by_user ?? []} />
                           <SnapshotList title="Top departamentos" rows={closing.snapshot.by_department ?? []} />
                           <SnapshotList title="Top impressoras" rows={closing.snapshot.by_printer ?? []} />
+                          <PolicySnapshotList rows={closing.snapshot.by_policy ?? []} />
                         </div>
                       </td>
                     </tr>
@@ -503,6 +517,32 @@ function SnapshotList({ title, rows }: { title: string; rows: ClosingSnapshotRow
               <span className="whitespace-nowrap text-right text-muted-foreground">
                 {row.pages.toLocaleString("pt-BR")} pag. | R$ {row.cost.toFixed(2)}
                 {typeof row.cost_per_page === "number" ? ` | R$ ${row.cost_per_page.toFixed(2)}/pag.` : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PolicySnapshotList({ rows }: { rows: ClosingPolicySnapshotRow[] }) {
+  const topRows = rows.slice(0, 3);
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Politicas aplicadas</div>
+      {topRows.length === 0 ? (
+        <div className="text-sm text-muted-foreground">Sem politicas.</div>
+      ) : (
+        <div className="space-y-2">
+          {topRows.map((row) => (
+            <div key={`${row.action}:${row.name}`} className="grid grid-cols-[1fr_auto] gap-3 text-sm">
+              <span className="truncate font-medium" title={row.name}>
+                {row.name}
+              </span>
+              <span className="whitespace-nowrap text-right text-muted-foreground">
+                {policyActionLabel(row.action)} | {row.jobs.toLocaleString("pt-BR")} job(s)
+                {row.saved_pages ? ` | ${row.saved_pages.toLocaleString("pt-BR")} salvas` : ""}
               </span>
             </div>
           ))}
