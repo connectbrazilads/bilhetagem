@@ -228,6 +228,7 @@ Entregaveis:
 - Exportacao PDF/Excel com identidade visual.
 - Auditoria administrativa filtravel por periodo, acao e entidade, com exportacao CSV e registro de mudancas criticas de configuracao.
 - Agendamento de envio por e-mail.
+- Scheduler backend para enviar automaticamente fechamentos mensais de empresas ativas no dia configurado.
 - Indicadores para outsourcing: volume por equipamento, custo por equipamento e ranking de uso.
 
 Criterios de aceite:

@@ -143,4 +143,4 @@ def send_due_monthly_report_email(db: Session, organization_id: int, now: dateti
     closing = create_monthly_closing(db, organization_id, year, month)
     result = send_monthly_closing_email(db, closing)
     update_system_settings(db, {"monthly_report_email_last_sent_period": period}, organization_id)
-    return {**result, "period": period, "reason": None}
+    return {**result, "period": period, "closing_id": closing.id, "reason": None}

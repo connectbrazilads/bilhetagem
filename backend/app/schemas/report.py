@@ -55,5 +55,6 @@ class MonthlyClosingDueEmailRead(BaseModel):
     sent: bool
     reason: str | None = None
     period: str | None = None
+    closing_id: int | None = None
     recipients: list[str] = Field(default_factory=list)
     attachments: list[str] = Field(default_factory=list)

@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from_email: str = "no-reply@printbilling.local"
     smtp_use_tls: bool = True
+    monthly_report_email_scheduler_enabled: bool = True
+    monthly_report_email_scheduler_interval_seconds: int = 3600
 
     @field_validator("cors_origins", mode="before")
     @classmethod

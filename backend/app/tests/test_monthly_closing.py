@@ -8,11 +8,13 @@ from app.api.routes.reports import export_monthly_closing, export_report, genera
 from app.api.routes.settings import get_monthly_report_email_settings_endpoint, update_monthly_report_email_settings_endpoint
 from app.models.department import Department
 from app.models.audit_log import AuditLog
+from app.models.organization import Organization
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.schemas.settings import MonthlyReportEmailSettings
 from app.schemas.report import MonthlyClosingCreate
 from app.services.email_service import send_due_monthly_report_email, send_monthly_closing_email
+from app.services.email_scheduler import send_due_monthly_reports_once
 from app.models.user import User, UserRole
 from app.services.monthly_closing_service import create_monthly_closing
 
@@ -291,3 +293,36 @@ def test_due_monthly_report_email_sends_previous_month_once(db_session: Session,
     assert second["sent"] is False
     assert second["reason"] == "Fechamento mensal ja enviado"
     assert len(sent_messages) == 1
+
+
+def test_monthly_report_email_scheduler_processes_active_organizations(db_session: Session, monkeypatch):
+    active_org = Organization(name="Cliente Scheduler", slug="cliente-scheduler", is_active=True)
+    inactive_org = Organization(name="Cliente Scheduler Inativo", slug="cliente-scheduler-inativo", is_active=False)
+    db_session.add_all([active_org, inactive_org])
+    db_session.commit()
+
+    called_organization_ids = []
+
+    def fake_send_due(db, organization_id, now=None):
+        called_organization_ids.append(organization_id)
+        if organization_id == 1:
+            return {
+                "sent": True,
+                "period": "2026-05",
+                "closing_id": 99,
+                "recipients": ["financeiro@example.com"],
+                "attachments": ["fechamento-2026-05.pdf"],
+                "reason": None,
+            }
+        return {"sent": False, "reason": "Envio mensal desativado"}
+
+    monkeypatch.setattr("app.services.email_scheduler.send_due_monthly_report_email", fake_send_due)
+
+    results = send_due_monthly_reports_once(db_session, now=datetime(2026, 6, 10, tzinfo=timezone.utc))
+
+    assert called_organization_ids == [1, active_org.id]
+    assert [result["organization_slug"] for result in results] == ["default", "cliente-scheduler"]
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_due_email_sent").one()
+    assert audit.organization_id == 1
+    assert audit.entity_id == 99
+    assert audit.log_metadata["automatic"] is True

@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import agent_updates, audit_logs, auth, departments, jobs, organizations, policies, printers, quotas, reports, users, settings as settings_route
 from app.core.config import settings
 from app.lite_init import initialize_lite_database
+from app.services.email_scheduler import start_monthly_report_email_scheduler
 from app.services.snmp_service import start_snmp_poller
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
@@ -14,6 +15,7 @@ def startup() -> None:
     initialize_lite_database()
     if settings.backend_snmp_poller_enabled:
         start_snmp_poller()
+    start_monthly_report_email_scheduler()
 
 app.add_middleware(
     CORSMiddleware,

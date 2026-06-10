@@ -81,6 +81,7 @@ def send_due_monthly_closing_email_endpoint(
                 db,
                 action="monthly_closing_due_email_sent",
                 entity="monthly_closings",
+                entity_id=result.get("closing_id"),
                 actor_user_id=actor.id,
                 metadata={"period": result.get("period"), "recipients": result.get("recipients", []), "attachments": result.get("attachments", [])},
             )
