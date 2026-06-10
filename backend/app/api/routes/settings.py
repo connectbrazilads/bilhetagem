@@ -135,6 +135,7 @@ def sync_ldap_endpoint(
                 "total_synced": result.get("total_synced", 0)
             }
         )
+        db.commit()
         return result
     except ValueError as exc:
         db.rollback()

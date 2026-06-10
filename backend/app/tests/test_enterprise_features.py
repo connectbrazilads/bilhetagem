@@ -23,6 +23,7 @@ from app.api.routes.audit_logs import export_audit_logs, list_audit_log_facets, 
 from app.api.routes.organizations import create_organization, list_organizations, update_organization
 from app.api.routes.reports import export_report
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint, update_printer_endpoint
+from app.api.routes.settings import sync_ldap_endpoint
 from app.schemas.printer import PrinterAliasBind, PrinterUpdate
 from app.api.routes.jobs import list_jobs
 from app.api.routes.quotas import update_quota
@@ -47,6 +48,7 @@ from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
 from app.schemas.organization import OrganizationCreate, OrganizationUpdate
 from app.schemas.report import DashboardMetrics
+from app.schemas.settings import LDAPSettings
 
 
 def test_seed_rejects_default_or_placeholder_passwords():
@@ -177,6 +179,41 @@ def test_ldap_user_and_department_sync(db_session: Session):
         
     with pytest.raises(ValueError):
         check_ldap_connection("ldap://fail-server", "admin", "error-pass")
+
+
+def test_ldap_sync_endpoint_persists_audit_after_service_commit(db_session: Session, monkeypatch):
+    actor = User(username="ldap-audit-admin", full_name="LDAP Audit Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    original_commit = db_session.commit
+    commit_count = 0
+
+    def tracked_commit():
+        nonlocal commit_count
+        commit_count += 1
+        original_commit()
+
+    monkeypatch.setattr(db_session, "commit", tracked_commit)
+
+    result = sync_ldap_endpoint(
+        payload=LDAPSettings(
+            server="ldap://localhost:389",
+            bind_dn="cn=admin,dc=example,dc=com",
+            bind_password="secret",
+            search_base="dc=example,dc=com",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "ldap_sync_performed").one()
+    assert result["total_synced"] == 4
+    assert commit_count == 2
+    assert audit.organization_id == actor.organization_id
+    assert audit.actor_user_id == actor.id
+    assert audit.log_metadata["server"] == "ldap://localhost:389"
+    assert audit.log_metadata["new_users"] == 4
+    assert audit.log_metadata["total_synced"] == 4
 
 
 def test_pdf_page_counting_logic():
