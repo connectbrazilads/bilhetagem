@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from starlette.requests import Request
 from sqlalchemy.orm import Session
 
+from app.api.routes import agent_updates as agent_updates_route
 from app.api.routes.agent_updates import (
     agent_heartbeat,
     agent_version,
@@ -35,7 +36,14 @@ from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.print_job import JobStatus, PrintJob
 from app.models.user import User, UserRole
-from app.schemas.agent import AgentHeartbeatPayload, AgentQueueActionCreate, AgentQueueActionResult, AgentQueueBulkActionCreate
+from app.schemas.agent import (
+    AgentHeartbeatPayload,
+    AgentQueueActionCreate,
+    AgentQueueActionResult,
+    AgentQueueBulkActionCreate,
+    AgentReleaseFileRead,
+    AgentReleaseRead,
+)
 
 
 def test_agent_version_requires_published_file_for_update(db_session: Session, monkeypatch, tmp_path: Path):
@@ -348,6 +356,50 @@ def test_agent_release_downloads_are_audited(db_session: Session, monkeypatch, t
     assert logs[0].log_metadata["sha256"] == hashlib.sha256(b"installer-v6").hexdigest()
     assert logs[1].organization_id == actor.organization_id
     assert logs[1].log_metadata == {"version": "0.6.0", "file_count": 1}
+
+
+def test_agent_release_download_revalidates_checksum_before_serving(db_session: Session, monkeypatch, tmp_path: Path):
+    release_dir = tmp_path / "0.6.1"
+    release_dir.mkdir()
+    artifact = release_dir / "PrintBillingAgentInstaller.exe"
+    artifact.write_bytes(b"installer-alterado")
+    stale_release = AgentReleaseRead(
+        version="0.6.1",
+        channel="stable",
+        published_at="2026-06-02T00:00:00Z",
+        notes=None,
+        checksums_url="/agent/releases/0.6.1/checksums",
+        signature_status="unsigned",
+        signature_summary="Artefatos sem assinatura digital",
+        files=[
+            AgentReleaseFileRead(
+                kind="installer",
+                filename="PrintBillingAgentInstaller.exe",
+                size_bytes=len(b"installer-original"),
+                sha256=hashlib.sha256(b"installer-original").hexdigest(),
+                signature_status="NotSigned",
+                signer_subject=None,
+                download_url="/agent/releases/0.6.1/download?filename=PrintBillingAgentInstaller.exe",
+            )
+        ],
+    )
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    monkeypatch.setattr(agent_updates_route, "_release_or_404", lambda version: stale_release)
+    actor = User(username="checksum-release-admin", full_name="Release Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        download_agent_release_file(
+            version="0.6.1",
+            filename="PrintBillingAgentInstaller.exe",
+            db=db_session,
+            actor=actor,
+        )
+
+    assert exc.value.status_code == 409
+    assert "Checksum" in exc.value.detail
+    assert db_session.query(AuditLog).filter(AuditLog.action == "agent_release_downloaded").count() == 0
 
 
 def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_session: Session, monkeypatch, tmp_path: Path):

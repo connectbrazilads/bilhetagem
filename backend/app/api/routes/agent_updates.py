@@ -963,6 +963,8 @@ def download_agent_release_file(
     path = _release_file(version, filename)
     if _publishable_file_size(path) is None:
         raise HTTPException(status_code=404, detail="Arquivo nao publicado")
+    if _sha256(path) != file_entry.sha256:
+        raise HTTPException(status_code=409, detail="Checksum do arquivo publicado diverge do manifest")
     write_audit(
         db,
         action="agent_release_downloaded",
