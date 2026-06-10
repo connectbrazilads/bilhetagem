@@ -198,6 +198,19 @@ function hasAlert(agent: AgentRow, code: string) {
   return agent.health_alerts.some((alert) => alert.code === code);
 }
 
+function plainTextKey(value: string | null | undefined) {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function isGenericQueueName(value: string | null | undefined) {
+  return ["documento de impressao", "print document", "user", "unknown"].includes(plainTextKey(value));
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [printers, setPrinters] = useState<PrinterOption[]>([]);
@@ -303,6 +316,18 @@ export default function AgentsPage() {
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : "Falha ao vincular fila");
     }
+  }
+
+  function prepareManagedQueueFromAlias(queue: AgentQueue) {
+    const printer = printers.find((item) => item.id === queue.printer_id);
+    setQueueForm({
+      queue_name: printer?.name || "",
+      driver_name: queue.driver_name || "",
+      ip_address: queue.ip_address || "",
+      port_name: queue.port_name || "",
+      printer_id: queue.printer_id?.toString() || "",
+    });
+    setActionMessage("Dados carregados. Ajuste o nome padrao da fila e clique em Criar ou Restaurar.");
   }
 
   async function createBulkQueueAction() {
@@ -812,6 +837,11 @@ export default function AgentsPage() {
                             >
                               {queue.is_present ? "Presente" : "Ausente"}
                             </span>
+                            {isGenericQueueName(queue.queue_name) ? (
+                              <span className="ml-1 mt-1 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                Nome generico
+                              </span>
+                            ) : null}
                           </td>
                           <td className="p-3">
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${connectionClass(queue.connection_type)}`}>
@@ -872,6 +902,17 @@ export default function AgentsPage() {
                                 >
                                   <RefreshCw className="h-4 w-4 text-primary" />
                                 </Button>
+                                {isGenericQueueName(queue.queue_name) ? (
+                                  <Button
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    title="Carregar dados para criar uma fila com nome padronizado"
+                                    disabled={!queue.printer_id || !queue.driver_name}
+                                    onClick={() => prepareManagedQueueFromAlias(queue)}
+                                  >
+                                    <Plus className="h-4 w-4 text-emerald-600" />
+                                  </Button>
+                                ) : null}
                                 <Button variant="ghost" className="h-8 w-8 p-0" title="Remover fila neste PC" onClick={() => createQueueAction("remove_queue", queue)}>
                                   <Trash2 className="h-4 w-4 text-red-600" />
                                 </Button>
