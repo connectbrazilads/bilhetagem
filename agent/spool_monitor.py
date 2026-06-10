@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import hashlib
 import re
 import socket
 import subprocess
@@ -320,9 +321,17 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
             latest_version = info.get("latest_version", "desconhecida")
             logger.info("Atualizacao do agent disponivel: atual=%s nova=%s", AGENT_VERSION, latest_version)
             update_bytes = self.api_client.download_agent_update()
+            expected_sha256 = self._clean_metadata(info.get("sha256"))
+            if not expected_sha256:
+                raise RuntimeError("Servidor nao informou SHA256 da atualizacao do agent")
+            actual_sha256 = hashlib.sha256(update_bytes).hexdigest()
+            if actual_sha256.lower() != expected_sha256.lower():
+                raise RuntimeError(
+                    f"SHA256 da atualizacao invalido: esperado={expected_sha256} obtido={actual_sha256}"
+                )
             update_path = get_app_dir() / "PrintBillingAgent.update.exe"
             update_path.write_bytes(update_bytes)
-            logger.info("Atualizacao do agent baixada em %s", update_path)
+            logger.info("Atualizacao do agent baixada e verificada em %s", update_path)
             if getattr(sys, "frozen", False):
                 self._schedule_self_update(update_path)
             else:

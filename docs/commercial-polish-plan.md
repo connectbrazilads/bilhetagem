@@ -94,6 +94,7 @@ Entregaveis:
 - Criar endpoint para baixar versao nova do agent.
 - Agent comparar versao local com versao publicada.
 - Agent baixar nova versao, parar servico, substituir executavel e reiniciar.
+- Agent validar SHA256 da atualizacao baixada antes de substituir o executavel.
 - Manter rollback simples se a atualizacao falhar.
 
 Criterios de aceite:
@@ -259,6 +260,7 @@ Entregaveis:
 - Assinar EXE do agent e instalador.
 - Criar pipeline de build versionado.
 - Publicar checksums SHA256.
+- Validar checksum publicado antes de aplicar auto-update no PC cliente.
 - Criar pagina de downloads por versao.
 - Documentar instalacao normal e silenciosa.
 
