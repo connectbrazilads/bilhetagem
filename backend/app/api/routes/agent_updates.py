@@ -91,6 +91,21 @@ def _is_safe_release_filename(filename: str) -> bool:
     return Path(filename).name == filename and "/" not in filename and "\\" not in filename
 
 
+def _release_signature_summary(files: list[AgentReleaseFileRead]) -> tuple[str, str]:
+    if not files:
+        return "empty", "Nenhum arquivo publicado"
+    statuses = [(file.signature_status or "NotSigned") for file in files]
+    valid_count = sum(1 for status in statuses if status == "Valid")
+    unsigned_count = sum(1 for status in statuses if status == "NotSigned")
+    if valid_count == len(statuses):
+        return "signed", "Todos os artefatos estao assinados"
+    if unsigned_count == len(statuses):
+        return "unsigned", "Artefatos sem assinatura digital"
+    if valid_count > 0 and valid_count + unsigned_count == len(statuses):
+        return "mixed", "Assinatura parcial: nem todos os artefatos estao assinados"
+    return "invalid", "Ha artefatos com assinatura invalida ou status inesperado"
+
+
 def _load_release_manifest() -> list[AgentReleaseRead]:
     manifest_path = _manifest_path()
     releases: list[AgentReleaseRead] = []
@@ -119,6 +134,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                         download_url=f"/agent/releases/{version}/download?filename={filename}",
                     )
                 )
+            signature_status, signature_summary = _release_signature_summary(files)
             releases.append(
                 AgentReleaseRead(
                     version=version,
@@ -126,6 +142,8 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                     published_at=raw_release.get("published_at"),
                     notes=raw_release.get("notes"),
                     checksums_url=f"/agent/releases/{version}/checksums",
+                    signature_status=signature_status,
+                    signature_summary=signature_summary,
                     files=files,
                 )
             )
@@ -137,6 +155,8 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
             AgentReleaseRead(
                 version=settings.agent_latest_version,
                 checksums_url=f"/agent/releases/{settings.agent_latest_version}/checksums",
+                signature_status="unsigned",
+                signature_summary="Artefato legado sem assinatura registrada no manifest",
                 files=[
                     AgentReleaseFileRead(
                         kind="agent",

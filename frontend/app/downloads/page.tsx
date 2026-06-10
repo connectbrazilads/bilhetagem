@@ -23,6 +23,8 @@ type AgentRelease = {
   published_at: string | null;
   notes: string | null;
   checksums_url: string | null;
+  signature_status: string;
+  signature_summary: string;
   files: ReleaseFile[];
 };
 
@@ -49,6 +51,21 @@ function signatureLabel(status: string | null) {
   if (status === "Valid") return "Assinado";
   if (!status || status === "NotSigned") return "Sem assinatura";
   return status;
+}
+
+function releaseSignatureClass(status: string) {
+  if (status === "signed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "mixed") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (status === "unsigned") return "border-slate-200 bg-slate-100 text-slate-700";
+  return "border-red-200 bg-red-50 text-red-700";
+}
+
+function releaseSignatureLabel(status: string) {
+  if (status === "signed") return "Release assinada";
+  if (status === "mixed") return "Assinatura parcial";
+  if (status === "unsigned") return "Sem assinatura";
+  if (status === "empty") return "Sem arquivos";
+  return "Assinatura com alerta";
 }
 
 export default function DownloadsPage() {
@@ -239,6 +256,12 @@ export default function DownloadsPage() {
                       <td className="p-4">
                         <div className="font-semibold">{release.version}</div>
                         <div className="text-xs text-muted-foreground">{release.channel}</div>
+                        <span
+                          className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${releaseSignatureClass(release.signature_status)}`}
+                          title={release.signature_summary}
+                        >
+                          {releaseSignatureLabel(release.signature_status)}
+                        </span>
                         <Button
                           variant="outline"
                           className="mt-2 h-7 px-2 text-xs"

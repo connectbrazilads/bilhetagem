@@ -109,6 +109,9 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
 
     assert [release.version for release in releases] == ["0.3.0", "0.2.0"]
     assert releases[0].checksums_url == "/agent/releases/0.3.0/checksums"
+    assert releases[0].signature_status == "mixed"
+    assert releases[0].signature_summary == "Assinatura parcial: nem todos os artefatos estao assinados"
+    assert releases[1].signature_status == "unsigned"
     assert {file.kind for file in releases[0].files} == {"agent", "installer"}
     assert releases[0].files[0].sha256
     assert next(file.signature_status for file in releases[0].files if file.kind == "agent") == "Valid"

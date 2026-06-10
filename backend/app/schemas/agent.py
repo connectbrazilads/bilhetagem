@@ -29,6 +29,8 @@ class AgentReleaseRead(BaseModel):
     published_at: str | None = None
     notes: str | None = None
     checksums_url: str | None = None
+    signature_status: str = "empty"
+    signature_summary: str = "Nenhum arquivo publicado"
     files: list[AgentReleaseFileRead] = Field(default_factory=list)
 
 
