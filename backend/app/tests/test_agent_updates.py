@@ -402,6 +402,44 @@ def test_agent_release_download_revalidates_checksum_before_serving(db_session: 
     assert db_session.query(AuditLog).filter(AuditLog.action == "agent_release_downloaded").count() == 0
 
 
+def test_agent_update_download_revalidates_checksum_before_serving(db_session: Session, monkeypatch, tmp_path: Path):
+    release_dir = tmp_path / "0.6.2"
+    release_dir.mkdir()
+    artifact = release_dir / "PrintBillingAgent.exe"
+    artifact.write_bytes(b"agent-alterado")
+    stale_release = AgentReleaseRead(
+        version="0.6.2",
+        channel="stable",
+        published_at="2026-06-03T00:00:00Z",
+        notes=None,
+        checksums_url="/agent/releases/0.6.2/checksums",
+        signature_status="unsigned",
+        signature_summary="Artefatos sem assinatura digital",
+        files=[
+            AgentReleaseFileRead(
+                kind="agent",
+                filename="PrintBillingAgent.exe",
+                size_bytes=len(b"agent-original"),
+                sha256=hashlib.sha256(b"agent-original").hexdigest(),
+                signature_status="NotSigned",
+                signer_subject=None,
+                download_url="/agent/releases/0.6.2/download?filename=PrintBillingAgent.exe",
+            )
+        ],
+    )
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    monkeypatch.setattr(agent_updates_route, "_latest_agent_release_file", lambda: (stale_release, stale_release.files[0]))
+    actor = User(username="checksum-update-agent", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        download_agent_update(_=actor)
+
+    assert exc.value.status_code == 409
+    assert "Checksum" in exc.value.detail
+
+
 def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_session: Session, monkeypatch, tmp_path: Path):
     release_dir = tmp_path / "0.3.1"
     release_dir.mkdir()

@@ -919,6 +919,8 @@ def download_agent_update(_: User = Depends(require_roles(UserRole.agent, UserRo
     path = _release_file(latest[0].version, latest[1].filename)
     if _publishable_file_size(path) is None:
         raise HTTPException(status_code=404, detail="Atualizacao do agent nao publicada")
+    if _sha256(path) != latest[1].sha256:
+        raise HTTPException(status_code=409, detail="Checksum da atualizacao publicada diverge do manifest")
     return FileResponse(
         path=str(path),
         media_type="application/octet-stream",
