@@ -159,6 +159,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     printers = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.is_active.is_(True)).all()
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
     agents_without_local_admin = sum(1 for agent in agents if agent.local_admin is False)
+    agents_without_event_log = sum(1 for agent in agents if agent.event_log_enabled is False)
     monitored_printers = sum(1 for printer in printers if printer.ip_address)
     low_toner_printers = sum(1 for printer in printers if any(value <= 10 for value in _toner_values(printer)))
     aliases_with_agent = (
@@ -227,6 +228,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         "agents_offline": max(len(agents) - online_agents, 0),
         "agents_with_alerts": agents_with_alerts,
         "agents_without_local_admin": agents_without_local_admin,
+        "agents_without_event_log": agents_without_event_log,
         "printers_total": len(printers),
         "printers_monitored": monitored_printers,
         "printers_unmonitored": max(len(printers) - monitored_printers, 0),

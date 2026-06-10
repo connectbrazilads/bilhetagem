@@ -1104,6 +1104,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         "agents_offline": 1,
         "agents_with_alerts": 5,
         "agents_without_local_admin": 1,
+        "agents_without_event_log": 1,
         "printers_total": 2,
         "printers_monitored": 2,
         "printers_unmonitored": 0,
@@ -1121,6 +1122,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert validated_metrics.contract_overview.printer_usage_percent == 66.7
     assert validated_metrics.operational_health is not None
     assert validated_metrics.operational_health.agents_without_local_admin == 1
+    assert validated_metrics.operational_health.agents_without_event_log == 1
     assert validated_metrics.operational_health.duplicate_queue_aliases == 1
     assert validated_metrics.operational_health.generic_queue_aliases == 1
     assert validated_metrics.operational_health.hardware_identity_conflicts == 1
