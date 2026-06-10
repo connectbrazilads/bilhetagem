@@ -669,6 +669,8 @@ def test_force_mono_policy_records_job_as_mono_with_mono_cost(db_session: Sessio
 
     assert decision.status == JobStatus.authorized
     assert decision.reason == "Cobrado como P&B pela politica: Cobrar colorido como PB"
+    assert decision.policy_name == "Cobrar colorido como PB"
+    assert decision.policy_action == "force_mono"
     job = db_session.query(PrintJob).filter(PrintJob.id == decision.job_id).one()
     assert job.is_color is False
     assert job.cost == 0.20
@@ -683,6 +685,16 @@ def test_force_mono_policy_records_job_as_mono_with_mono_cost(db_session: Sessio
     assert audit.log_metadata["policy_force_mono"] is True
     assert audit.log_metadata["requested_is_color"] is True
     assert audit.log_metadata["effective_is_color"] is False
+
+    duplicate_decision = register_print_job(
+        db_session,
+        PrintJobCreate(username="custo-user", printer_name="KONICA_POLICY", pages=4, is_color=True, external_job_id="eventlog:force-mono"),
+        organization_id=1,
+    )
+
+    assert duplicate_decision.job_id == job.id
+    assert duplicate_decision.policy_name == "Cobrar colorido como PB"
+    assert duplicate_decision.policy_action == "force_mono"
 
 
 def test_policy_simulation_respects_organization_scope(db_session: Session):

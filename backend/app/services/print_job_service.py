@@ -297,6 +297,8 @@ def register_print_job(db: Session, payload: PrintJobCreate, organization_id: in
                 remaining_pages=quota.remaining_pages,
                 remaining_balance=quota.remaining_balance,
                 reason=existing_job.reason,
+                policy_name=existing_job.policy_name,
+                policy_action=existing_job.policy_action,
             )
 
     effective_is_color = payload.is_color and not policy_decision.force_mono
@@ -402,4 +404,6 @@ def register_print_job(db: Session, payload: PrintJobCreate, organization_id: in
         remaining_pages=quota.remaining_pages,
         remaining_balance=quota.remaining_balance,
         reason=reason,
+        policy_name=job.policy_name,
+        policy_action=job.policy_action,
     )

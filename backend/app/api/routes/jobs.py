@@ -173,6 +173,8 @@ def release_job(
             remaining_pages=quota.remaining_pages,
             remaining_balance=quota.remaining_balance,
             reason=job.reason,
+            policy_name=job.policy_name,
+            policy_action=job.policy_action,
         )
         
     quota.used_pages += job.pages
@@ -199,6 +201,9 @@ def release_job(
         authorized=True,
         remaining_pages=quota.remaining_pages,
         remaining_balance=quota.remaining_balance,
+        reason=job.reason,
+        policy_name=job.policy_name,
+        policy_action=job.policy_action,
     )
 
 

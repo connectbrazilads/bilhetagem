@@ -32,6 +32,8 @@ class PrintJobDecision(BaseModel):
     remaining_pages: int
     remaining_balance: float | None = None
     reason: str | None = None
+    policy_name: str | None = None
+    policy_action: str | None = None
 
 
 class PrintJobRead(BaseModel):
