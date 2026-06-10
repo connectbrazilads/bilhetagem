@@ -58,6 +58,7 @@ class PrintJobRead(BaseModel):
     user_full_name: str | None = None
     department_id: int | None = None
     department_name: str | None = None
+    department_cost_center: str | None = None
     printer_name: str
     pages: int
     is_color: bool

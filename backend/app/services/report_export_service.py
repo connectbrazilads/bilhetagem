@@ -87,6 +87,10 @@ def _job_department_name(job: PrintJob) -> str:
     return job.user.department.name if job.user and job.user.department else "Sem departamento"
 
 
+def _job_cost_center_name(job: PrintJob) -> str:
+    return job.user.department.cost_center if job.user and job.user.department and job.user.department.cost_center else "Sem centro de custo"
+
+
 def _job_printer_name(job: PrintJob) -> str:
     return job.printer.name if job.printer else "-"
 
@@ -332,7 +336,7 @@ def render_print_jobs_pdf(jobs: list[PrintJob], title: str = "Relatorio de impre
     pdf.setFillColor(MUTED)
     pdf.setFont("Helvetica-Bold", 7)
     pdf.drawString(48, y - 10, "Data")
-    pdf.drawString(112, y - 10, "Usuario")
+    pdf.drawString(112, y - 10, "Usuario/CC")
     pdf.drawString(215, y - 10, "Impressora")
     pdf.drawString(335, y - 10, "Documento")
     pdf.drawRightString(475, y - 10, "Pag.")
@@ -350,7 +354,8 @@ def render_print_jobs_pdf(jobs: list[PrintJob], title: str = "Relatorio de impre
             y -= 24
             pdf.setFont("Helvetica", 7)
         pdf.setFillColor(DARK)
-        user_name = _truncate(_job_user_name(job), 24)
+        cost_center = _job_cost_center_name(job)
+        user_name = _truncate(f"{_job_user_name(job)} / {cost_center}", 24)
         printer_name = _truncate(_job_printer_name(job), 28)
         document_name = _truncate(job.document_name or "-", 28)
         pdf.drawString(48, y, job.submitted_at.strftime("%d/%m/%y %H:%M"))
@@ -485,13 +490,14 @@ def render_print_jobs_xlsx(jobs: list[PrintJob], filters: dict[str, str] | None 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Impressoes"
-    sheet.append(["Data", "Usuario", "Departamento", "Impressora", "Documento", "Paginas", "Cor", "Status", "Custo", "Politica", "Acao Politica", "Motivo"])
+    sheet.append(["Data", "Usuario", "Departamento", "Centro de Custo", "Impressora", "Documento", "Paginas", "Cor", "Status", "Custo", "Politica", "Acao Politica", "Motivo"])
     for job in jobs:
         sheet.append(
             [
                 job.submitted_at.isoformat(),
                 _xlsx_safe(_job_user_name(job)),
                 _xlsx_safe(_job_department_name(job)),
+                _xlsx_safe(_job_cost_center_name(job)),
                 _xlsx_safe(_job_printer_name(job)),
                 _xlsx_safe(job.document_name or ""),
                 job.pages,
@@ -503,7 +509,7 @@ def render_print_jobs_xlsx(jobs: list[PrintJob], filters: dict[str, str] | None 
                 _xlsx_safe(job.reason or ""),
             ]
         )
-    for row in sheet.iter_rows(min_row=2, min_col=9, max_col=9):
+    for row in sheet.iter_rows(min_row=2, min_col=10, max_col=10):
         row[0].number_format = '"R$" #,##0.00'
     _style_sheet(sheet)
 

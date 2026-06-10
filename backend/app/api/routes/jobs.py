@@ -100,6 +100,7 @@ def list_jobs(
             user_full_name=job.user.full_name,
             department_id=job.user.department_id,
             department_name=job.user.department.name if job.user.department else None,
+            department_cost_center=job.user.department.cost_center if job.user.department else None,
             printer_name=job.printer.name,
             pages=job.pages,
             is_color=job.is_color,

@@ -362,11 +362,12 @@ def test_report_export_applies_department_filter(db_session: Session):
     assert set(exported_users) == {"Ana Financeiro"}
     assert len(exported_users) == 5
     assert sheet["C2"].value == "Financeiro"
-    assert sheet["I2"].value in {0.5, 1.0, 0.75, 4.95}
-    policy_rows = [row for row in sheet.iter_rows(min_row=2, values_only=True) if row[9] == "Cobrar colorido como PB"]
+    assert sheet["D2"].value == "CC-FIN"
+    assert sheet["J2"].value in {0.5, 1.0, 0.75, 4.95}
+    policy_rows = [row for row in sheet.iter_rows(min_row=2, values_only=True) if row[10] == "Cobrar colorido como PB"]
     assert len(policy_rows) == 1
-    assert policy_rows[0][10] == "Cobrar P&B"
-    assert policy_rows[0][11] == "Cobrado como P&B pela politica: Cobrar colorido como PB"
+    assert policy_rows[0][11] == "Cobrar P&B"
+    assert policy_rows[0][12] == "Cobrado como P&B pela politica: Cobrar colorido como PB"
     assert workbook["Resumo"]["A8"].value == "Custo filtrado"
     assert workbook["Resumo"]["B8"].value == 6.45
     assert workbook["Resumo"]["A10"].value == "Filtros aplicados"
@@ -382,7 +383,7 @@ def test_report_export_applies_department_filter(db_session: Session):
 
 
 def test_report_export_xlsx_escapes_formula_like_text(db_session: Session):
-    department = Department(organization_id=1, name="+Financeiro")
+    department = Department(organization_id=1, name="+Financeiro", cost_center="-CC")
     user = User(username="formula-user", full_name="=Ana Financeiro", role=UserRole.user, department=department, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="@KONICA_FORMULA", is_color=True, cost_mono=0.05, cost_color=0.25)
     actor = User(username="report-formula-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
@@ -413,10 +414,11 @@ def test_report_export_xlsx_escapes_formula_like_text(db_session: Session):
     assert sheet["B2"].value == "'=Ana Financeiro"
     assert sheet["B2"].data_type == "s"
     assert sheet["C2"].value == "'+Financeiro"
-    assert sheet["D2"].value == "'@KONICA_FORMULA"
-    assert sheet["E2"].value == "'-Relatorio.xlsx"
-    assert sheet["J2"].value == "'+Politica"
-    assert sheet["L2"].value == "'@Motivo"
+    assert sheet["D2"].value == "'-CC"
+    assert sheet["E2"].value == "'@KONICA_FORMULA"
+    assert sheet["F2"].value == "'-Relatorio.xlsx"
+    assert sheet["K2"].value == "'+Politica"
+    assert sheet["M2"].value == "'@Motivo"
 
 
 def test_report_export_rejects_filters_from_other_organization(db_session: Session):

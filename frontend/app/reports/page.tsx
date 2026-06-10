@@ -13,6 +13,7 @@ type JobRow = {
   user_full_name: string | null;
   department_id?: number | null;
   department_name?: string | null;
+  department_cost_center?: string | null;
   printer_name: string;
   document_name: string | null;
   pages: number;
@@ -520,6 +521,7 @@ export default function ReportsPage() {
                   <th className="p-4">Data</th>
                   <th className="p-4">Usuario</th>
                   <th className="p-4">Departamento</th>
+                  <th className="p-4">Centro de custo</th>
                   <th className="p-4">Impressora</th>
                   <th className="p-4">Origem</th>
                   <th className="p-4">Documento</th>
@@ -536,6 +538,7 @@ export default function ReportsPage() {
                     <td className="whitespace-nowrap p-4 text-muted-foreground">{new Date(job.submitted_at).toLocaleString("pt-BR")}</td>
                     <td className="whitespace-nowrap p-4 font-semibold">{job.user_full_name || job.username}</td>
                     <td className="whitespace-nowrap p-4 text-muted-foreground">{job.department_name || "Sem departamento"}</td>
+                    <td className="whitespace-nowrap p-4 text-muted-foreground">{job.department_cost_center || "-"}</td>
                     <td className="whitespace-nowrap p-4">{job.printer_name}</td>
                     <td className="min-w-[180px] p-4 text-xs text-muted-foreground">
                       <div>{job.computer_name ?? "-"}</div>

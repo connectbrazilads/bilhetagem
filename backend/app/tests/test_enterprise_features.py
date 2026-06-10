@@ -1094,6 +1094,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert [job.username for job in jobs] == ["org1-user"]
     assert jobs[0].department_id == org_one_department.id
     assert jobs[0].department_name == "Financeiro"
+    assert jobs[0].department_cost_center == "CC-FIN"
     assert jobs[0].cost == 0.15
     assert metrics["pages_month"] == 3
     assert metrics["contract_overview"] == {
