@@ -28,7 +28,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     )
     if organization_slug:
         query = query.filter(Organization.slug == organization_slug)
-        user = query.first()
+        candidates = query.limit(2).all()
+        if len(candidates) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Usuario duplicado por maiusculas/minusculas nesta empresa; normalize o cadastro antes de acessar",
+            )
+        user = candidates[0] if candidates else None
     else:
         candidates = query.limit(2).all()
         if len(candidates) > 1:

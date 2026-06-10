@@ -1525,6 +1525,46 @@ def test_login_normalizes_username_and_organization_slug(db_session: Session):
     assert token.organization_slug == "cliente-login-normalizado"
 
 
+def test_login_rejects_case_variant_duplicates_within_same_organization(db_session: Session):
+    organization = Organization(name="Cliente Login Duplicado", slug="cliente-login-duplicado", is_active=True)
+    db_session.add(organization)
+    db_session.flush()
+    db_session.add_all(
+        [
+            User(
+                username="Admin.Legado",
+                full_name="Admin Legado A",
+                password_hash=hash_password("AdminLegadoPassword2026"),
+                role=UserRole.admin,
+                is_active=True,
+                organization_id=organization.id,
+            ),
+            User(
+                username="admin.legado",
+                full_name="Admin Legado B",
+                password_hash=hash_password("AdminLegadoPassword2026"),
+                role=UserRole.admin,
+                is_active=True,
+                organization_id=organization.id,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        login(
+            LoginRequest(
+                username="ADMIN.LEGADO",
+                password="AdminLegadoPassword2026",
+                organization_slug="cliente-login-duplicado",
+            ),
+            db=db_session,
+        )
+
+    assert exc.value.status_code == 409
+    assert "duplicado" in exc.value.detail.lower()
+
+
 def test_organization_metrics_include_billable_monthly_jobs(db_session: Session):
     actor = User(username="org-metrics-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     user = User(username="org-metrics-user", full_name="Usuario", role=UserRole.user, is_active=True, organization_id=1)
