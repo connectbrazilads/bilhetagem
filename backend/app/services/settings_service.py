@@ -78,7 +78,8 @@ def get_system_settings_dict(db: Session, organization_id: int | None = None) ->
 
 def update_system_settings(db: Session, updates: dict[str, Any], organization_id: int | None = None) -> dict[str, Any]:
     organization_id = _resolve_organization_id(db, organization_id)
-    disabling_safe_release = updates.get("safe_release_enabled") is False
+    before = get_system_settings_dict(db, organization_id)
+    disabling_safe_release = updates.get("safe_release_enabled") is False and before["safe_release_enabled"] is True
     for key, val in updates.items():
         # Store booleans as "true"/"false" and other values as string
         str_val = str(val).lower() if isinstance(val, bool) else str(val)

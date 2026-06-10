@@ -325,6 +325,61 @@ def test_disabling_safe_release_authorizes_pending_jobs_and_writes_audit(db_sess
     assert audit.log_metadata == {"jobs": 1, "pages": 4, "cost": 1.0, "reason": "safe_release_disabled"}
 
 
+def test_saving_settings_with_safe_release_already_disabled_does_not_flush_pending_jobs(db_session: Session):
+    user = User(username="policy-pending-user", full_name="Policy Pending", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA POLICY PENDING", is_color=True)
+    db_session.add_all([user, printer])
+    db_session.flush()
+    quota = Quota(
+        organization_id=1,
+        user_id=user.id,
+        year=2026,
+        month=6,
+        monthly_limit=100,
+        used_pages=0,
+        monthly_balance=50.0,
+        used_balance=0.0,
+    )
+    db_session.add(quota)
+    db_session.commit()
+    update_system_settings(db_session, {"safe_release_enabled": False}, organization_id=1)
+
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        pages=6,
+        is_color=True,
+        cost=1.5,
+        status=JobStatus.pending_release,
+        reason="Liberacao exigida por politica",
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    update_system_settings(
+        db_session,
+        {
+            "default_monthly_quota": 600,
+            "auto_create_users": True,
+            "blocking_enabled": True,
+            "show_balance": True,
+            "safe_release_enabled": False,
+            "web_print_enabled": True,
+        },
+        organization_id=1,
+    )
+
+    db_session.refresh(job)
+    db_session.refresh(quota)
+    assert job.status == JobStatus.pending_release
+    assert job.reason == "Liberacao exigida por politica"
+    assert quota.used_pages == 0
+    assert quota.used_balance == 0.0
+    assert db_session.query(AuditLog).filter(AuditLog.action == "pending_jobs_auto_released").count() == 0
+
+
 def test_blocking_disabled_behavior(db_session: Session):
     # Create user, printer, and quota with 0 remaining pages
     user = User(username="poor_user", full_name="Poor User", role=UserRole.user)
