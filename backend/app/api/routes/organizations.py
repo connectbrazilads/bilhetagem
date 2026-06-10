@@ -208,6 +208,8 @@ def update_organization(
         raise HTTPException(status_code=404, detail="Empresa nao encontrada")
     if payload.is_active is False and organization.id == actor.organization_id:
         raise HTTPException(status_code=400, detail="Nao e possivel desativar a empresa em uso pelo usuario logado")
+    if payload.billing_status == "suspended" and organization.id == actor.organization_id:
+        raise HTTPException(status_code=400, detail="Nao e possivel suspender a empresa em uso pelo usuario logado")
 
     before = {
         "name": organization.name,

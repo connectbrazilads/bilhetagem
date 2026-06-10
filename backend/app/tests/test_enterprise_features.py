@@ -1367,6 +1367,35 @@ def test_admin_cannot_deactivate_own_organization(db_session: Session):
     assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 0
 
 
+def test_admin_cannot_suspend_own_organization(db_session: Session):
+    tenant_org = Organization(name="Cliente Self Suspend", slug="cliente-self-suspend", is_active=True, billing_status="active")
+    db_session.add(tenant_org)
+    db_session.flush()
+    tenant_admin = User(
+        username="self-suspend-admin",
+        full_name="Self Suspend Admin",
+        role=UserRole.admin,
+        is_active=True,
+        organization_id=tenant_org.id,
+    )
+    db_session.add(tenant_admin)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        update_organization(
+            tenant_org.id,
+            OrganizationUpdate(billing_status="suspended"),
+            db=db_session,
+            actor=tenant_admin,
+        )
+    assert exc.value.status_code == 400
+
+    db_session.rollback()
+    unchanged = db_session.query(Organization).filter(Organization.id == tenant_org.id).one()
+    assert unchanged.billing_status == "active"
+    assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 0
+
+
 def test_organization_list_includes_scoped_usage_counts(db_session: Session):
     default_org = db_session.query(Organization).filter(Organization.id == 1).one()
     default_org.contracted_printer_limit = 2
