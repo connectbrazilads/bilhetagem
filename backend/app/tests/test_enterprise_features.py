@@ -1904,13 +1904,20 @@ def test_organization_printer_limit_cannot_be_reduced_below_active_printers(db_s
     assert unlimited.contracted_printer_limit == 0
 
 
-def test_admin_cannot_deactivate_own_organization(db_session: Session):
-    tenant_org = Organization(name="Cliente Lockout", slug="cliente-lockout", is_active=True)
+def test_tenant_admin_cannot_update_own_organization_commercial_fields(db_session: Session):
+    tenant_org = Organization(
+        name="Cliente Read Only",
+        slug="cliente-read-only",
+        is_active=True,
+        billing_plan="starter",
+        billing_status="trial",
+        contracted_printer_limit=10,
+    )
     db_session.add(tenant_org)
     db_session.flush()
     tenant_admin = User(
-        username="lockout-admin",
-        full_name="Lockout Admin",
+        username="tenant-read-only-admin",
+        full_name="Tenant Read Only Admin",
         role=UserRole.admin,
         is_active=True,
         organization_id=tenant_org.id,
@@ -1921,43 +1928,78 @@ def test_admin_cannot_deactivate_own_organization(db_session: Session):
     with pytest.raises(HTTPException) as exc:
         update_organization(
             tenant_org.id,
-            OrganizationUpdate(is_active=False),
+            OrganizationUpdate(
+                name="Cliente Alterado Pelo Tenant",
+                billing_plan="enterprise",
+                billing_status="active",
+                contracted_printer_limit=100,
+            ),
             db=db_session,
             actor=tenant_admin,
+        )
+
+    assert exc.value.status_code == 403
+    db_session.rollback()
+    unchanged = db_session.query(Organization).filter(Organization.id == tenant_org.id).one()
+    assert unchanged.name == "Cliente Read Only"
+    assert unchanged.billing_plan == "starter"
+    assert unchanged.billing_status == "trial"
+    assert unchanged.contracted_printer_limit == 10
+    assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 0
+
+
+def test_admin_cannot_deactivate_own_organization(db_session: Session):
+    default_org = db_session.query(Organization).filter(Organization.id == 1).one()
+    default_org.is_active = True
+    platform_admin = User(
+        username="platform-lockout-admin",
+        full_name="Platform Lockout Admin",
+        role=UserRole.admin,
+        is_active=True,
+        organization_id=default_org.id,
+    )
+    db_session.add(platform_admin)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        update_organization(
+            default_org.id,
+            OrganizationUpdate(is_active=False),
+            db=db_session,
+            actor=platform_admin,
         )
     assert exc.value.status_code == 400
 
     db_session.rollback()
-    unchanged = db_session.query(Organization).filter(Organization.id == tenant_org.id).one()
+    unchanged = db_session.query(Organization).filter(Organization.id == default_org.id).one()
     assert unchanged.is_active is True
     assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 0
 
 
 def test_admin_cannot_suspend_own_organization(db_session: Session):
-    tenant_org = Organization(name="Cliente Self Suspend", slug="cliente-self-suspend", is_active=True, billing_status="active")
-    db_session.add(tenant_org)
-    db_session.flush()
-    tenant_admin = User(
-        username="self-suspend-admin",
-        full_name="Self Suspend Admin",
+    default_org = db_session.query(Organization).filter(Organization.id == 1).one()
+    default_org.billing_status = "active"
+    platform_admin = User(
+        username="platform-self-suspend-admin",
+        full_name="Platform Self Suspend Admin",
         role=UserRole.admin,
         is_active=True,
-        organization_id=tenant_org.id,
+        organization_id=default_org.id,
     )
-    db_session.add(tenant_admin)
+    db_session.add(platform_admin)
     db_session.commit()
 
     with pytest.raises(HTTPException) as exc:
         update_organization(
-            tenant_org.id,
+            default_org.id,
             OrganizationUpdate(billing_status="suspended"),
             db=db_session,
-            actor=tenant_admin,
+            actor=platform_admin,
         )
     assert exc.value.status_code == 400
 
     db_session.rollback()
-    unchanged = db_session.query(Organization).filter(Organization.id == tenant_org.id).one()
+    unchanged = db_session.query(Organization).filter(Organization.id == default_org.id).one()
     assert unchanged.billing_status == "active"
     assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 0
 

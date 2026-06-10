@@ -204,8 +204,8 @@ def update_organization(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> OrganizationRead:
-    if not _can_manage_all(actor) and actor.organization_id != organization_id:
-        raise HTTPException(status_code=403, detail="Permissao insuficiente")
+    if not _can_manage_all(actor):
+        raise HTTPException(status_code=403, detail="Somente o admin da empresa padrao pode alterar empresas")
     organization = db.query(Organization).filter(Organization.id == organization_id).first()
     if not organization:
         raise HTTPException(status_code=404, detail="Empresa nao encontrada")
