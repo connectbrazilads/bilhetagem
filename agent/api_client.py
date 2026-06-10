@@ -36,6 +36,7 @@ class CapturedPrintJob:
 class BillingApiClient:
     def __init__(self, agent_config: AgentConfig = config) -> None:
         self.config = agent_config
+        self.config.validate_for_runtime()
         self.session = requests.Session()
         self._token: str | None = None
 

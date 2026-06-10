@@ -6,6 +6,19 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+UNSAFE_AGENT_PASSWORDS = {
+    "",
+    "admin",
+    "agent",
+    "agent12345",
+    "admin12345",
+    "change-me-agent-password",
+    "change-me-admin-password",
+    "password",
+    "senha123",
+    "12345678",
+}
+
 
 def get_app_dir() -> Path:
     if getattr(sys, 'frozen', False):
@@ -90,11 +103,15 @@ def _config_log_level(key: str, default: str = "INFO") -> str:
     return default
 
 
+def _is_unsafe_agent_password(value: str) -> bool:
+    return str(value or "").strip().lower() in UNSAFE_AGENT_PASSWORDS
+
+
 @dataclass(frozen=True)
 class AgentConfig:
     api_base_url: str = field(default_factory=lambda: _config_str("PRINTBILLING_API_URL", "http://localhost:8000", strip_trailing_slash=True))
     api_username: str = field(default_factory=lambda: _config_str("PRINTBILLING_AGENT_USER", "agent"))
-    api_password: str = field(default_factory=lambda: _config_str("PRINTBILLING_AGENT_PASSWORD", "change-me-agent-password"))
+    api_password: str = field(default_factory=lambda: _config_str("PRINTBILLING_AGENT_PASSWORD", ""))
     organization_slug: str | None = field(default_factory=lambda: _config_optional_str("PRINTBILLING_ORGANIZATION_SLUG", "default"))
     poll_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_POLL_INTERVAL", 5, min_value=1))
     snmp_poll_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_SNMP_POLL_INTERVAL", 60, min_value=1))
@@ -110,6 +127,12 @@ class AgentConfig:
     queue_action_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_QUEUE_ACTION_INTERVAL", 30, min_value=5))
     spool_server: str | None = field(default_factory=lambda: _config_optional_str("PRINTBILLING_SPOOL_SERVER"))
     log_level: str = field(default_factory=lambda: _config_log_level("PRINTBILLING_LOG_LEVEL", "INFO"))
+
+    def validate_for_runtime(self) -> None:
+        if not self.api_base_url or not self.api_username or not self.organization_slug:
+            raise RuntimeError("Configuracao do agent requer API URL, usuario tecnico e slug da empresa.")
+        if _is_unsafe_agent_password(self.api_password):
+            raise RuntimeError("Senha do usuario tecnico do agent e insegura. Configure uma senha exclusiva da empresa.")
 
 
 config = AgentConfig()

@@ -55,6 +55,7 @@ Para remover:
 
 Na instalacao silenciosa nova, informe `--api-url`, `--username`, `--password` e `--organization`.
 Na reinstalacao silenciosa, parametros omitidos reutilizam o `config.json` existente. Para remover um usuario padrao antigo do PC, envie explicitamente `--default-username ""`.
+O instalador e o agent recusam senhas padrao ou placeholders como `agent12345`, `agent`, `admin12345` e `change-me-agent-password`; gere uma senha exclusiva para o usuario tecnico de cada empresa.
 Se o agent precisa monitorar filas de um servidor de impressao remoto, adicione `--spool-server "\\SRV-PRINT01"`.
 Use `--use-print-event-log`, `--cancel-blocked` e `--auto-update` com `true` ou `false` para padronizar o modo de captura e comportamento do agent em implantacoes em lote.
 

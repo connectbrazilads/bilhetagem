@@ -97,3 +97,46 @@ def test_agent_config_environment_overrides_file_config(monkeypatch):
     assert config.poll_interval_seconds == 9
     assert config.use_print_event_log is False
     assert config.log_level == "DEBUG"
+
+
+def test_agent_config_runtime_validation_accepts_secure_credentials():
+    config = agent_config.AgentConfig(
+        api_base_url="https://billing.example.com",
+        api_username="agent",
+        api_password="AgentPassword2026",
+        organization_slug="cliente-a",
+    )
+
+    config.validate_for_runtime()
+
+
+def test_agent_config_runtime_validation_rejects_unsafe_password():
+    config = agent_config.AgentConfig(
+        api_base_url="https://billing.example.com",
+        api_username="agent",
+        api_password="agent12345",
+        organization_slug="cliente-a",
+    )
+
+    try:
+        config.validate_for_runtime()
+    except RuntimeError as exc:
+        assert "senha exclusiva" in str(exc).lower()
+    else:
+        raise AssertionError("Agent nao deve iniciar com senha padrao/insegura")
+
+
+def test_agent_config_runtime_validation_rejects_missing_organization_slug():
+    config = agent_config.AgentConfig(
+        api_base_url="https://billing.example.com",
+        api_username="agent",
+        api_password="AgentPassword2026",
+        organization_slug=None,
+    )
+
+    try:
+        config.validate_for_runtime()
+    except RuntimeError as exc:
+        assert "slug da empresa" in str(exc).lower()
+    else:
+        raise AssertionError("Agent nao deve iniciar sem slug da empresa")
