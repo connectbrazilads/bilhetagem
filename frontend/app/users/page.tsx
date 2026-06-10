@@ -29,6 +29,7 @@ type DepartmentRow = {
 const emptyForm = {
   username: "",
   full_name: "",
+  role: "user",
   department_id: "",
   monthly_limit: "500",
   monthly_balance: "50.00",
@@ -38,6 +39,12 @@ const emptyForm = {
 const emptyDepartmentForm = {
   name: "",
 };
+
+const humanRoleOptions = [
+  { value: "user", label: "Usuario" },
+  { value: "manager", label: "Gestor" },
+  { value: "admin", label: "Administrador" },
+];
 
 export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -49,6 +56,8 @@ export default function UsersPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingDepartmentId, setEditingDepartmentId] = useState<number | null>(null);
   const [showBalance, setShowBalance] = useState(true);
+  const editingUser = useMemo(() => users.find((user) => user.id === editingId) ?? null, [users, editingId]);
+  const editingAgent = editingUser?.role === "agent";
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -90,6 +99,7 @@ export default function UsersPage() {
           method: "PUT",
           body: JSON.stringify({
             full_name: form.full_name,
+            ...(!editingAgent ? { role: form.role } : {}),
             department_id: form.department_id ? Number(form.department_id) : null,
             monthly_limit: Number(form.monthly_limit),
             monthly_balance: Number(form.monthly_balance),
@@ -106,7 +116,7 @@ export default function UsersPage() {
             department_id: form.department_id ? Number(form.department_id) : null,
             monthly_limit: Number(form.monthly_limit),
             monthly_balance: Number(form.monthly_balance),
-            role: "user",
+            role: form.role,
           }),
         });
       }
@@ -122,6 +132,7 @@ export default function UsersPage() {
     setForm({
       username: user.username,
       full_name: user.full_name,
+      role: user.role,
       department_id: user.department_id?.toString() ?? "",
       monthly_limit: String(user.monthly_limit ?? 500),
       monthly_balance: String(user.monthly_balance ?? 50.0),
@@ -184,7 +195,7 @@ export default function UsersPage() {
   }
 
   async function deleteUser(user: UserRow) {
-    if (user.username === "admin" || user.username === "agent") {
+    if (user.username === "admin" || user.username === "agent" || user.role === "agent") {
       setError("Usuarios tecnicos nao podem ser excluidos.");
       return;
     }
@@ -218,7 +229,7 @@ export default function UsersPage() {
         <SummaryCard label="Departamentos" value={summary.departments} icon={Building2} />
       </div>
 
-      <Surface as="form" className="mb-4 grid gap-3 p-4 lg:grid-cols-[180px_1fr_190px_130px_auto]" onSubmit={submit}>
+      <Surface as="form" className="mb-4 grid gap-3 p-4 xl:grid-cols-[160px_1fr_150px_190px_120px_auto]" onSubmit={submit}>
         <Input
           placeholder="Login"
           value={form.username}
@@ -232,6 +243,19 @@ export default function UsersPage() {
           onChange={(event) => setForm({ ...form, full_name: event.target.value })}
           required
         />
+        <select
+          className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20 disabled:bg-muted disabled:text-muted-foreground"
+          value={editingAgent ? "agent" : form.role}
+          onChange={(event) => setForm({ ...form, role: event.target.value })}
+          disabled={editingAgent}
+        >
+          {editingAgent ? <option value="agent">Tecnico agent</option> : null}
+          {humanRoleOptions.map((role) => (
+            <option key={role.value} value={role.value}>
+              {role.label}
+            </option>
+          ))}
+        </select>
         <select
           className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
           value={form.department_id}
@@ -391,7 +415,11 @@ export default function UsersPage() {
                           {user.used_balance !== null ? `R$ ${user.used_balance.toFixed(2)}` : "R$ 0.00"}
                         </td>
                       ) : null}
-                      <td className="p-4">{user.role}</td>
+                      <td className="p-4">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${roleBadgeClass(user.role)}`}>
+                          {roleLabel(user.role)}
+                        </span>
+                      </td>
                       <td className="p-4">
                         <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${user.is_active ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
                           {user.is_active ? "Ativo" : "Inativo"}
@@ -433,4 +461,24 @@ function SummaryCard({ label, value, icon: Icon }: { label: string; value: numbe
       <div className="mt-3 text-3xl font-semibold">{value.toLocaleString("pt-BR")}</div>
     </Surface>
   );
+}
+
+function roleLabel(role: string) {
+  const labels: Record<string, string> = {
+    admin: "Administrador",
+    manager: "Gestor",
+    user: "Usuario",
+    agent: "Tecnico agent",
+  };
+  return labels[role] ?? role;
+}
+
+function roleBadgeClass(role: string) {
+  const classes: Record<string, string> = {
+    admin: "border-blue-200 bg-blue-50 text-blue-700",
+    manager: "border-cyan-200 bg-cyan-50 text-cyan-700",
+    user: "border-slate-200 bg-slate-50 text-slate-700",
+    agent: "border-amber-200 bg-amber-50 text-amber-700",
+  };
+  return classes[role] ?? "border-slate-200 bg-slate-50 text-slate-700";
 }

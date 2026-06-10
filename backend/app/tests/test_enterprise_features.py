@@ -703,6 +703,59 @@ def test_user_department_id_assignment_is_scoped_and_clearable(db_session: Sessi
     assert cleared.department_name is None
 
 
+def test_admin_can_manage_human_user_roles(db_session: Session):
+    admin = User(username="role-admin", full_name="Role Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.commit()
+
+    created = create_user_endpoint(
+        UserCreate(username="gestor-financeiro", full_name="Gestor Financeiro", role=UserRole.manager),
+        db=db_session,
+        actor=admin,
+    )
+    assert created.role == UserRole.manager
+
+    updated = update_user_endpoint(created.id, UserUpdate(role=UserRole.admin), db=db_session, actor=admin)
+    assert updated.role == UserRole.admin
+
+
+def test_user_endpoint_rejects_agent_role_creation(db_session: Session):
+    admin = User(username="agent-create-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        create_user_endpoint(
+            UserCreate(username="agent-manual", full_name="Agent Manual", role=UserRole.agent),
+            db=db_session,
+            actor=admin,
+        )
+
+    assert exc.value.status_code == 400
+    assert db_session.query(User).filter(User.username == "agent-manual").first() is None
+
+
+def test_user_endpoint_rejects_agent_role_changes(db_session: Session):
+    admin = User(username="agent-role-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="humano", full_name="Humano", role=UserRole.user, is_active=True, organization_id=1)
+    agent_user = User(username="coletor", full_name="Coletor", role=UserRole.agent, is_active=True, organization_id=1)
+    db_session.add_all([admin, user, agent_user])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as demote_exc:
+        update_user_endpoint(agent_user.id, UserUpdate(role=UserRole.user), db=db_session, actor=admin)
+    assert demote_exc.value.status_code == 400
+
+    with pytest.raises(HTTPException) as promote_exc:
+        update_user_endpoint(user.id, UserUpdate(role=UserRole.agent), db=db_session, actor=admin)
+    assert promote_exc.value.status_code == 400
+
+    db_session.refresh(user)
+    db_session.refresh(agent_user)
+    assert user.role == UserRole.user
+    assert agent_user.role == UserRole.agent
+
+
 def test_agent_role_user_cannot_be_deleted_by_accident(db_session: Session):
     admin = User(username="delete-agent-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     custom_agent = User(username="coletor-filial", full_name="Agent Filial", role=UserRole.agent, is_active=True, organization_id=1)

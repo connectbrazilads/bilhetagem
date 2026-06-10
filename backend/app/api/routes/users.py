@@ -17,6 +17,15 @@ from app.services.audit_service import write_audit
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+def _ensure_human_role_change(current_role: UserRole | None, requested_role: UserRole | None) -> None:
+    if requested_role is None:
+        return
+    if requested_role == UserRole.agent:
+        raise HTTPException(status_code=400, detail="Perfil tecnico do agent deve ser criado pelo provisionamento da empresa")
+    if current_role == UserRole.agent:
+        raise HTTPException(status_code=400, detail="Perfil tecnico do agent nao pode ser alterado pela tela de usuarios")
+
+
 def _read_user(user: User, db: Session) -> UserRead:
     from app.services.quota_service import get_or_create_current_quota
     quota = get_or_create_current_quota(db, user)
@@ -50,6 +59,7 @@ def create_user_endpoint(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> UserRead:
+    _ensure_human_role_change(None, payload.role)
     try:
         user = create_user(db, payload, actor.organization_id)
         now = datetime.now(timezone.utc)
@@ -87,6 +97,8 @@ def update_user_endpoint(
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     
+    _ensure_human_role_change(user.role, payload.role)
+
     if payload.full_name is not None:
         user.full_name = payload.full_name
     if payload.role is not None:
