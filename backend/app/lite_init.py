@@ -1,5 +1,5 @@
 from app.core.database import SessionLocal, engine
-from app.models import agent_queue_action, audit_log, department, organization, print_agent, print_job, print_policy, printer, printer_alias, quota, user, system_setting  # noqa: F401
+from app.models import agent_queue_action, audit_log, department, monthly_closing, organization, print_agent, print_job, print_policy, printer, printer_alias, quota, user, system_setting  # noqa: F401
 from app.models.base import Base
 from app.models.user import UserRole
 from app.seed import ensure_user
@@ -146,4 +146,30 @@ def _ensure_lite_schema() -> None:
             )
             conn.exec_driver_sql(
                 "CREATE INDEX ix_print_policies_org_active_priority ON print_policies (organization_id, is_active, priority)"
+            )
+        closings_count = conn.exec_driver_sql(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='monthly_closings'"
+        ).scalar()
+        if not closings_count:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE monthly_closings (
+                    id INTEGER PRIMARY KEY,
+                    organization_id INTEGER NOT NULL,
+                    year INTEGER NOT NULL,
+                    month INTEGER NOT NULL,
+                    total_jobs INTEGER NOT NULL DEFAULT 0,
+                    billable_jobs INTEGER NOT NULL DEFAULT 0,
+                    pending_jobs INTEGER NOT NULL DEFAULT 0,
+                    blocked_jobs INTEGER NOT NULL DEFAULT 0,
+                    total_pages INTEGER NOT NULL DEFAULT 0,
+                    mono_pages INTEGER NOT NULL DEFAULT 0,
+                    color_pages INTEGER NOT NULL DEFAULT 0,
+                    blocked_pages INTEGER NOT NULL DEFAULT 0,
+                    total_cost FLOAT NOT NULL DEFAULT 0,
+                    snapshot JSON NOT NULL,
+                    generated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    UNIQUE (organization_id, year, month)
+                )
+                """
             )

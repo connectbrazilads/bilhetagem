@@ -20,6 +20,29 @@ type JobRow = {
   submitted_at: string;
   computer_name?: string | null;
   queue_name?: string | null;
+  policy_name?: string | null;
+  policy_action?: string | null;
+};
+
+type MonthlyClosing = {
+  id: number;
+  year: number;
+  month: number;
+  total_jobs: number;
+  billable_jobs: number;
+  pending_jobs: number;
+  blocked_jobs: number;
+  total_pages: number;
+  mono_pages: number;
+  color_pages: number;
+  blocked_pages: number;
+  total_cost: number;
+  snapshot: {
+    by_user?: { name: string; pages: number; cost: number }[];
+    by_department?: { name: string; pages: number; cost: number }[];
+    by_printer?: { name: string; pages: number; cost: number }[];
+  };
+  generated_at: string;
 };
 
 export default function ReportsPage() {
@@ -28,6 +51,11 @@ export default function ReportsPage() {
   const [userQuery, setUserQuery] = useState("");
   const [printerQuery, setPrinterQuery] = useState("");
   const [dateQuery, setDateQuery] = useState("");
+  const now = new Date();
+  const [closingYear, setClosingYear] = useState(String(now.getFullYear()));
+  const [closingMonth, setClosingMonth] = useState(String(now.getMonth() + 1));
+  const [closings, setClosings] = useState<MonthlyClosing[]>([]);
+  const [closingError, setClosingError] = useState<string | null>(null);
 
   async function loadJobs() {
     const token = localStorage.getItem("token");
@@ -43,8 +71,15 @@ export default function ReportsPage() {
     }
   }
 
+  async function loadClosings() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    await apiFetch<MonthlyClosing[]>("/reports/monthly-closings", token).then(setClosings).catch(() => setClosings([]));
+  }
+
   useEffect(() => {
     loadJobs();
+    loadClosings();
   }, []);
 
   async function download(format: "pdf" | "xlsx") {
@@ -58,6 +93,36 @@ export default function ReportsPage() {
     const link = document.createElement("a");
     link.href = url;
     link.download = format === "pdf" ? "relatorio-impressoes.pdf" : "relatorio-impressoes.xlsx";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function generateClosing() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setClosingError(null);
+    try {
+      await apiFetch<MonthlyClosing>("/reports/monthly-closings", token, {
+        method: "POST",
+        body: JSON.stringify({ year: Number(closingYear), month: Number(closingMonth) }),
+      });
+      await loadClosings();
+    } catch (err) {
+      setClosingError(err instanceof Error ? err.message : "Falha ao gerar fechamento");
+    }
+  }
+
+  async function downloadClosing(closing: MonthlyClosing, format: "pdf" | "xlsx") {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const response = await fetch(`${API_URL}/reports/monthly-closings/${closing.id}/export?format=${format}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `fechamento-${closing.year}-${String(closing.month).padStart(2, "0")}.${format === "pdf" ? "pdf" : "xlsx"}`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -121,6 +186,66 @@ export default function ReportsPage() {
         <Input type="date" value={dateQuery} onChange={(event) => setDateQuery(event.target.value)} />
       </Surface>
 
+      <Surface className="mb-4 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 p-4">
+          <div>
+            <div className="text-sm font-semibold">Fechamentos mensais</div>
+            <div className="text-xs text-muted-foreground">Snapshots comerciais congelados para cobranca e auditoria.</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input className="w-24" type="number" value={closingYear} onChange={(event) => setClosingYear(event.target.value)} />
+            <select className="h-9 rounded-md border bg-white px-3 text-sm" value={closingMonth} onChange={(event) => setClosingMonth(event.target.value)}>
+              {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                <option key={month} value={month}>
+                  {String(month).padStart(2, "0")}
+                </option>
+              ))}
+            </select>
+            <Button onClick={generateClosing}>Gerar fechamento</Button>
+          </div>
+        </div>
+        {closingError ? <div className="border-b border-red-200 bg-red-50 p-3 text-sm text-red-800">{closingError}</div> : null}
+        {closings.length === 0 ? (
+          <div className="p-6 text-center text-sm text-muted-foreground">Nenhum fechamento gerado.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/80 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="p-4">Periodo</th>
+                  <th className="p-4 text-right">Paginas</th>
+                  <th className="p-4 text-right">P&B</th>
+                  <th className="p-4 text-right">Cor</th>
+                  <th className="p-4 text-right">Custo</th>
+                  <th className="p-4 text-right">Salvas</th>
+                  <th className="p-4">Gerado em</th>
+                  <th className="p-4 text-right">Exportar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {closings.map((closing) => (
+                  <tr key={closing.id} className="border-t bg-white hover:bg-muted/30">
+                    <td className="p-4 font-semibold">{String(closing.month).padStart(2, "0")}/{closing.year}</td>
+                    <td className="p-4 text-right font-semibold">{closing.total_pages.toLocaleString("pt-BR")}</td>
+                    <td className="p-4 text-right">{closing.mono_pages.toLocaleString("pt-BR")}</td>
+                    <td className="p-4 text-right">{closing.color_pages.toLocaleString("pt-BR")}</td>
+                    <td className="p-4 text-right font-semibold">R$ {closing.total_cost.toFixed(2)}</td>
+                    <td className="p-4 text-right">{closing.blocked_pages.toLocaleString("pt-BR")}</td>
+                    <td className="p-4 text-muted-foreground">{new Date(closing.generated_at).toLocaleString("pt-BR")}</td>
+                    <td className="p-4">
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => downloadClosing(closing, "pdf")}>PDF</Button>
+                        <Button onClick={() => downloadClosing(closing, "xlsx")}>Excel</Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Surface>
+
       <Surface className="overflow-hidden">
         <div className="border-b bg-muted/30 p-4 text-sm font-semibold">
           Historico recente <span className="text-muted-foreground">({filteredJobs.length})</span>
@@ -165,7 +290,7 @@ export default function ReportsPage() {
                     </td>
                     <td className="p-4">
                       <span
-                        title={job.reason ?? undefined}
+                        title={job.reason || job.policy_name || undefined}
                         className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${
                           job.status === "authorized" || job.status === "released"
                             ? "border-green-200 bg-green-50 text-green-700"
