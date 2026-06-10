@@ -1,9 +1,11 @@
 import argparse
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from agent_installer import build_config
+import agent_installer
+from agent_installer import AGENT_EXE_NAME, CONFIG_NAME, build_config, install
 
 
 def args(**overrides):
@@ -390,3 +392,41 @@ def test_silent_reinstall_rejects_existing_unsafe_agent_password():
         assert "senha exclusiva" in str(exc).lower()
     else:
         raise AssertionError("Reinstalacao silenciosa nao deve preservar senha placeholder")
+
+
+def test_install_validates_config_before_removing_existing_service(monkeypatch, tmp_path):
+    source_dir = tmp_path / "source"
+    install_dir = tmp_path / "install"
+    source_dir.mkdir()
+    install_dir.mkdir()
+    (source_dir / AGENT_EXE_NAME).write_text("new agent", encoding="utf-8")
+    (source_dir / "config.json.example").write_text("{}", encoding="utf-8")
+    target_exe = install_dir / AGENT_EXE_NAME
+    target_exe.write_text("old agent", encoding="utf-8")
+    (install_dir / CONFIG_NAME).write_text(
+        json.dumps(
+            {
+                "PRINTBILLING_API_URL": "https://billing.example.com",
+                "PRINTBILLING_AGENT_USER": "agent",
+                "PRINTBILLING_AGENT_PASSWORD": "secret",
+                "PRINTBILLING_ORGANIZATION_SLUG": "cliente-a",
+            }
+        ),
+        encoding="utf-8",
+    )
+    stop_calls = []
+
+    monkeypatch.setattr(agent_installer, "INSTALL_DIR", install_dir)
+    monkeypatch.setattr(agent_installer, "app_source_dir", lambda: source_dir)
+    monkeypatch.setattr(agent_installer, "is_admin", lambda: True)
+    monkeypatch.setattr(agent_installer, "stop_and_remove_existing_service", lambda path: stop_calls.append(path))
+
+    try:
+        install(args(organization="cliente invalido"))
+    except RuntimeError as exc:
+        assert "Slug da empresa invalido" in str(exc)
+    else:
+        raise AssertionError("Instalacao com slug invalido deveria falhar antes de remover o servico")
+
+    assert stop_calls == []
+    assert target_exe.read_text(encoding="utf-8") == "old agent"

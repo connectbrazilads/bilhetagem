@@ -295,6 +295,10 @@ def install(args: argparse.Namespace) -> None:
 
     target_exe = INSTALL_DIR / AGENT_EXE_NAME
     target_config = INSTALL_DIR / CONFIG_NAME
+    template = load_json(bundled_template)
+    existing = load_json(target_config)
+    config = build_config(existing, template, args)
+
     INSTALL_DIR.mkdir(parents=True, exist_ok=True)
 
     print("Parando/removendo servico anterior...")
@@ -303,9 +307,6 @@ def install(args: argparse.Namespace) -> None:
     print("Copiando arquivos do agent...")
     shutil.copy2(bundled_agent, target_exe)
 
-    template = load_json(bundled_template)
-    existing = load_json(target_config)
-    config = build_config(existing, template, args)
     target_config.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
     print("Habilitando log operacional de impressao do Windows...")
