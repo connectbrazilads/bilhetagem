@@ -1171,6 +1171,61 @@ def test_inactive_organization_cannot_issue_login_token(db_session: Session):
     assert no_slug_exc.value.status_code == 401
 
 
+def test_suspended_organization_cannot_login_or_use_existing_token(db_session: Session):
+    suspended_org = Organization(name="Cliente Suspenso", slug="cliente-suspenso", is_active=True, billing_status="suspended")
+    db_session.add(suspended_org)
+    db_session.flush()
+    suspended_user = User(
+        organization_id=suspended_org.id,
+        username="suspenso",
+        full_name="Suspenso",
+        password_hash=hash_password("SuspendedOrgPassword2026"),
+        role=UserRole.admin,
+        is_active=True,
+    )
+    db_session.add(suspended_user)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as login_exc:
+        login(
+            LoginRequest(username="suspenso", password="SuspendedOrgPassword2026", organization_slug="cliente-suspenso"),
+            db=db_session,
+        )
+    assert login_exc.value.status_code == 401
+
+    token = create_access_token(
+        suspended_user.username,
+        {"role": suspended_user.role.value, "organization_id": suspended_user.organization_id},
+    )
+    with pytest.raises(HTTPException) as token_exc:
+        get_current_user(token, db_session)
+    assert token_exc.value.status_code == 401
+
+
+def test_past_due_organization_can_still_login_until_suspended(db_session: Session):
+    past_due_org = Organization(name="Cliente Em Atraso", slug="cliente-em-atraso", is_active=True, billing_status="past_due")
+    db_session.add(past_due_org)
+    db_session.flush()
+    past_due_user = User(
+        organization_id=past_due_org.id,
+        username="atrasado",
+        full_name="Atrasado",
+        password_hash=hash_password("PastDueOrgPassword2026"),
+        role=UserRole.admin,
+        is_active=True,
+    )
+    db_session.add(past_due_user)
+    db_session.commit()
+
+    token = login(
+        LoginRequest(username="atrasado", password="PastDueOrgPassword2026", organization_slug="cliente-em-atraso"),
+        db=db_session,
+    )
+
+    assert token.organization_id == past_due_org.id
+    assert get_current_user(token.access_token, db_session).id == past_due_user.id
+
+
 def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: Session):
     platform_admin = User(username="platform-admin", full_name="Platform Admin", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add(platform_admin)

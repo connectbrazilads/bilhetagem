@@ -13,6 +13,10 @@ from app.models.user import User, UserRole
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
+def organization_allows_access(organization: Organization | None) -> bool:
+    return bool(organization and organization.is_active and organization.billing_status != "suspended")
+
+
 def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Annotated[Session, Depends(get_db)]) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -38,7 +42,7 @@ def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Annotate
         )
         .first()
     )
-    if user is None or not user.organization or not user.organization.is_active:
+    if user is None or not organization_allows_access(user.organization):
         raise credentials_exception
     return user
 

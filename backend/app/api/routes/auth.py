@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, organization_allows_access
 from app.core.security import create_access_token, verify_password
 from app.models.organization import Organization
 from app.models.user import User, UserRole
@@ -22,6 +22,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
             User.username == username,
             User.is_active.is_(True),
             Organization.is_active.is_(True),
+            Organization.billing_status != "suspended",
         )
     )
     if organization_slug:
@@ -32,7 +33,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         if len(candidates) > 1:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Informe a empresa para acessar")
         user = candidates[0] if candidates else None
-    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+    if not user or not organization_allows_access(user.organization) or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario ou senha invalidos")
     if user.role == UserRole.agent and not organization_slug:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Informe a empresa para autenticar o agent")
