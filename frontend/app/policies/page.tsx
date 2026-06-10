@@ -39,6 +39,11 @@ type UserRow = {
   department_name: string | null;
 };
 
+type DepartmentRow = {
+  id: number;
+  name: string;
+};
+
 type PrinterRow = {
   id: number;
   name: string;
@@ -107,6 +112,7 @@ const actionLabels: Record<PolicyAction, string> = {
 export default function PoliciesPage() {
   const [policies, setPolicies] = useState<PolicyRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [simulationForm, setSimulationForm] = useState(emptySimulationForm);
@@ -121,6 +127,7 @@ export default function PoliciesPage() {
     await Promise.all([
       apiFetch<PolicyRow[]>("/policies", token).then(setPolicies).catch(() => setPolicies([])),
       apiFetch<UserRow[]>("/users", token).then(setUsers).catch(() => setUsers([])),
+      apiFetch<DepartmentRow[]>("/departments", token).then(setDepartments).catch(() => setDepartments([])),
       apiFetch<PrinterRow[]>("/printers", token).then(setPrinters).catch(() => setPrinters([])),
     ]);
   }
@@ -144,18 +151,6 @@ export default function PoliciesPage() {
       blockers: policies.filter((policy) => policy.action === "block").length,
     };
   }, [policies]);
-
-  const departments = useMemo(() => {
-    const byId = new Map<number, string>();
-    for (const user of users) {
-      if (user.department_id && user.department_name) {
-        byId.set(user.department_id, user.department_name);
-      }
-    }
-    return Array.from(byId.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [users]);
 
   const aliases = useMemo(() => {
     return printers.flatMap((printer) =>

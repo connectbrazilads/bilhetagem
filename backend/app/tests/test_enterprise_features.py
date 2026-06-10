@@ -15,6 +15,7 @@ from app.api.routes.auth import login
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
 from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
+from app.api.routes.departments import list_departments
 from app.api.routes.printers import list_printers
 from app.api.routes.users import list_users
 from app.core.security import hash_password
@@ -296,6 +297,7 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     db_session.commit()
 
     users = list_users(db=db_session, _=org_one_admin)
+    departments = list_departments(db=db_session, actor=org_one_admin)
     printers = list_printers(db=db_session, actor=org_one_admin)
     jobs = list_jobs(
         user_id=None,
@@ -309,6 +311,7 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     metrics = dashboard_metrics(db_session, organization_id=1)
 
     assert {user.username for user in users} == {"org1-admin", "org1-user"}
+    assert [department.name for department in departments] == ["Financeiro"]
     org_user_read = next(user for user in users if user.username == "org1-user")
     assert org_user_read.department_id == org_one_department.id
     assert org_user_read.department_name == "Financeiro"
