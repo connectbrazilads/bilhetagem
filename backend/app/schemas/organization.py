@@ -50,6 +50,9 @@ class OrganizationRead(BaseModel):
     created_at: datetime
     users_count: int = 0
     printers_count: int = 0
+    active_printers_count: int = 0
+    contracted_printer_usage_percent: float = 0.0
+    contracted_printer_limit_status: Literal["unlimited", "ok", "warning", "exceeded"] = "unlimited"
     agents_count: int = 0
     online_agents_count: int = 0
     offline_agents_count: int = 0

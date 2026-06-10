@@ -55,11 +55,32 @@ def _scoped_jobs_query(db: Session, organization_id: int):
     )
 
 
+def _printer_limit_status(active_printers: int, limit: int) -> tuple[float, str]:
+    if limit <= 0:
+        return 0.0, "unlimited"
+    usage_percent = round((active_printers / limit) * 100, 1)
+    if active_printers > limit:
+        return usage_percent, "exceeded"
+    if usage_percent >= 80:
+        return usage_percent, "warning"
+    return usage_percent, "ok"
+
+
 def _organization_read(db: Session, organization: Organization) -> OrganizationRead:
     now = datetime.now(timezone.utc)
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization.id).all()
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
+    printers_count = db.query(Printer).filter(Printer.organization_id == organization.id).count()
+    active_printers_count = (
+        db.query(Printer)
+        .filter(Printer.organization_id == organization.id, Printer.is_active.is_(True))
+        .count()
+    )
+    printer_usage_percent, printer_limit_status = _printer_limit_status(
+        active_printers_count,
+        organization.contracted_printer_limit,
+    )
     monthly_billable_query = _scoped_jobs_query(db, organization.id).filter(
         PrintJob.submitted_at >= month_start,
         PrintJob.status.in_([JobStatus.authorized, JobStatus.released]),
@@ -83,7 +104,10 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         contracted_printer_limit=organization.contracted_printer_limit,
         created_at=organization.created_at,
         users_count=db.query(User).filter(User.organization_id == organization.id).count(),
-        printers_count=db.query(Printer).filter(Printer.organization_id == organization.id).count(),
+        printers_count=printers_count,
+        active_printers_count=active_printers_count,
+        contracted_printer_usage_percent=printer_usage_percent,
+        contracted_printer_limit_status=printer_limit_status,
         agents_count=len(agents),
         online_agents_count=online_agents,
         offline_agents_count=len(agents) - online_agents,

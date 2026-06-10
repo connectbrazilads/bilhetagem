@@ -22,6 +22,9 @@ type OrganizationRow = {
   created_at: string;
   users_count: number;
   printers_count: number;
+  active_printers_count: number;
+  contracted_printer_usage_percent: number;
+  contracted_printer_limit_status: "unlimited" | "ok" | "warning" | "exceeded";
   agents_count: number;
   online_agents_count: number;
   offline_agents_count: number;
@@ -292,8 +295,8 @@ export default function OrganizationsPage() {
                         <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${billingStatusClass(organization.billing_status)}`}>
                           {billingStatusLabel(organization.billing_status)}
                         </span>
-                        <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                          {organization.contracted_printer_limit || "Sem"} limite
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${printerLimitClass(organization.contracted_printer_limit_status)}`}>
+                          {printerLimitLabel(organization)}
                         </span>
                       </div>
                     </td>
@@ -301,6 +304,7 @@ export default function OrganizationsPage() {
                       <div className="flex flex-wrap gap-1.5">
                         <MetricPill label="Usuarios" value={organization.users_count} />
                         <MetricPill label="Impressoras" value={organization.printers_count} />
+                        <MetricPill label="Ativas" value={organization.active_printers_count} tone={organization.contracted_printer_limit_status === "exceeded" ? "danger" : organization.contracted_printer_limit_status === "warning" ? "warning" : "muted"} />
                         <MetricPill label="Agents" value={organization.agents_count} />
                         <MetricPill label="Online" value={organization.online_agents_count} tone="success" />
                         <MetricPill label="Offline" value={organization.offline_agents_count} tone={organization.offline_agents_count > 0 ? "danger" : "muted"} />
@@ -373,6 +377,18 @@ function billingStatusClass(status: OrganizationRow["billing_status"]) {
   return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
+function printerLimitLabel(organization: OrganizationRow) {
+  if (organization.contracted_printer_limit <= 0) return "Sem limite";
+  return `${organization.active_printers_count}/${organization.contracted_printer_limit} ativas (${organization.contracted_printer_usage_percent}%)`;
+}
+
+function printerLimitClass(status: OrganizationRow["contracted_printer_limit_status"]) {
+  if (status === "ok") return "border-green-200 bg-green-50 text-green-700";
+  if (status === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (status === "exceeded") return "border-red-200 bg-red-50 text-red-700";
+  return "bg-muted/40 text-muted-foreground";
+}
+
 function generatePassword(length = 18) {
   const groups = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnopqrstuvwxyz", "23456789", "!@#$%*?"];
   const all = groups.join("");
@@ -407,10 +423,12 @@ function shuffle(values: string[]) {
   return result;
 }
 
-function MetricPill({ label, value, tone = "muted" }: { label: string; value: number; tone?: "muted" | "success" | "danger" }) {
+function MetricPill({ label, value, tone = "muted" }: { label: string; value: number; tone?: "muted" | "success" | "warning" | "danger" }) {
   const toneClass =
     tone === "success"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warning"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
       : tone === "danger"
         ? "border-red-200 bg-red-50 text-red-700"
         : "bg-muted/40 text-muted-foreground";

@@ -1313,13 +1313,16 @@ def test_admin_cannot_deactivate_own_organization(db_session: Session):
 
 
 def test_organization_list_includes_scoped_usage_counts(db_session: Session):
-    other_org = Organization(name="Cliente Usage", slug="cliente-usage", is_active=True)
+    default_org = db_session.query(Organization).filter(Organization.id == 1).one()
+    default_org.contracted_printer_limit = 2
+    other_org = Organization(name="Cliente Usage", slug="cliente-usage", is_active=True, contracted_printer_limit=1)
     admin = User(username="usage-admin", full_name="Usage Admin", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add_all([other_org, admin])
     db_session.flush()
 
     default_user = User(username="usage-user-a", full_name="Usage A", role=UserRole.user, is_active=True, organization_id=1)
     default_printer = Printer(name="Usage Printer A", is_color=False, organization_id=1)
+    default_inactive_printer = Printer(name="Usage Printer Inativa A", is_color=False, is_active=False, organization_id=1)
     default_agent = PrintAgent(
         agent_uid="usage-agent-a",
         computer_name="PC-A",
@@ -1334,7 +1337,7 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
         organization_id=other_org.id,
         last_seen_at=datetime.now(timezone.utc) - timedelta(minutes=10),
     )
-    db_session.add_all([default_user, default_printer, default_agent, other_user, other_printer, other_agent])
+    db_session.add_all([default_user, default_printer, default_inactive_printer, default_agent, other_user, other_printer, other_agent])
     db_session.flush()
     db_session.add_all(
         [
@@ -1391,7 +1394,10 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
     other_row = next(row for row in rows if row.id == other_org.id)
 
     assert default_row.users_count >= 2
-    assert default_row.printers_count >= 1
+    assert default_row.printers_count >= 2
+    assert default_row.active_printers_count >= 1
+    assert default_row.contracted_printer_usage_percent >= 50.0
+    assert default_row.contracted_printer_limit_status in {"ok", "warning"}
     assert default_row.agents_count >= 1
     assert default_row.online_agents_count >= 1
     assert default_row.jobs_count == 2
@@ -1399,12 +1405,36 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
     assert default_row.cost_month == 0.05
     assert other_row.users_count == 1
     assert other_row.printers_count == 1
+    assert other_row.active_printers_count == 1
+    assert other_row.contracted_printer_usage_percent == 100.0
+    assert other_row.contracted_printer_limit_status == "warning"
     assert other_row.agents_count == 1
     assert other_row.online_agents_count == 0
     assert other_row.offline_agents_count == 1
     assert other_row.jobs_count == 1
     assert other_row.pages_month == 2
     assert other_row.cost_month == 0.10
+
+
+def test_organization_list_marks_printer_contract_overage(db_session: Session):
+    organization = Organization(name="Cliente Overage", slug="cliente-overage", is_active=True, contracted_printer_limit=1)
+    admin = User(username="overage-admin", full_name="Overage Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add_all([organization, admin])
+    db_session.flush()
+    db_session.add_all(
+        [
+            Printer(name="Overage Printer A", is_color=False, organization_id=organization.id),
+            Printer(name="Overage Printer B", is_color=False, organization_id=organization.id),
+        ]
+    )
+    db_session.commit()
+
+    rows = list_organizations(db=db_session, actor=admin)
+    row = next(item for item in rows if item.id == organization.id)
+
+    assert row.active_printers_count == 2
+    assert row.contracted_printer_usage_percent == 200.0
+    assert row.contracted_printer_limit_status == "exceeded"
 
 
 def test_department_admin_crud_is_scoped_and_protects_in_use_departments(db_session: Session):
