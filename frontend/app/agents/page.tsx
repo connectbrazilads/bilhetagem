@@ -81,6 +81,7 @@ type AgentQueueAction = {
   status: "pending" | "running" | "succeeded" | "failed";
   result_message: string | null;
   requested_at: string;
+  dispatched_at: string | null;
   completed_at: string | null;
 };
 
@@ -131,6 +132,28 @@ function queueActionLabel(actionType: QueueActionType) {
   if (actionType === "create_queue") return "Criar";
   if (actionType === "restore_queue") return "Restaurar";
   return "Remover";
+}
+
+function queueActionStatusLabel(action: AgentQueueAction) {
+  if (isStaleQueueAction(action)) return "Travada";
+  if (action.status === "pending") return "Pendente";
+  if (action.status === "running") return "Executando";
+  if (action.status === "succeeded") return "Concluida";
+  return "Falhou";
+}
+
+function queueActionStatusClass(action: AgentQueueAction) {
+  if (isStaleQueueAction(action)) return "border-amber-200 bg-amber-50 text-amber-700";
+  if (action.status === "succeeded") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (action.status === "failed") return "border-red-200 bg-red-50 text-red-700";
+  return "border-blue-200 bg-blue-50 text-blue-700";
+}
+
+function isStaleQueueAction(action: AgentQueueAction) {
+  if (action.status !== "pending" && action.status !== "running") return false;
+  const reference = action.status === "running" ? action.dispatched_at : action.requested_at;
+  if (!reference) return false;
+  return Date.now() - new Date(reference).getTime() > 15 * 60 * 1000;
 }
 
 function canRestoreQueue(queue: AgentQueue) {
@@ -790,7 +813,12 @@ export default function AgentsPage() {
                           <td className="p-3">{formatDate(action.requested_at)}</td>
                           <td className="p-3">{queueActionLabel(action.action_type)}</td>
                           <td className="p-3 font-semibold">{action.queue_name}</td>
-                          <td className="p-3">{action.status}</td>
+                          <td className="p-3">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${queueActionStatusClass(action)}`}>
+                              {queueActionStatusLabel(action)}
+                            </span>
+                            {action.dispatched_at ? <div className="mt-1 text-[10px] text-muted-foreground">Despacho: {formatDate(action.dispatched_at)}</div> : null}
+                          </td>
                           <td className="p-3 text-xs text-muted-foreground">{action.result_message || "-"}</td>
                         </tr>
                       ))}
