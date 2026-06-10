@@ -88,6 +88,7 @@ export default function DownloadsPage() {
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [copiedCommand, setCopiedCommand] = useState<"exe" | "msi" | null>(null);
   const [copiedSha, setCopiedSha] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -124,30 +125,40 @@ export default function DownloadsPage() {
   async function downloadFile(file: ReleaseFile) {
     const token = localStorage.getItem("token");
     if (!token) return;
-    const response = await fetch(`${API_URL}${file.download_url}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = file.filename;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      setDownloadError(null);
+      await downloadBlob(file.download_url, file.filename, token);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "Nao foi possivel baixar o arquivo.");
+    }
   }
 
   async function downloadChecksums(release: AgentRelease) {
     if (!release.checksums_url) return;
     const token = localStorage.getItem("token");
     if (!token) return;
-    const response = await fetch(`${API_URL}${release.checksums_url}`, {
+    try {
+      setDownloadError(null);
+      await downloadBlob(release.checksums_url, `SHA256SUMS-${release.version}.txt`, token);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "Nao foi possivel baixar os checksums.");
+    }
+  }
+
+  async function downloadBlob(path: string, filename: string, token: string) {
+    const response = await fetch(`${API_URL}${path}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      const message = detail.trim() || `HTTP ${response.status}`;
+      throw new Error(`Falha ao baixar ${filename}: ${message}`);
+    }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `SHA256SUMS-${release.version}.txt`;
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -284,6 +295,10 @@ export default function DownloadsPage() {
             />
           </div>
         </Surface>
+      ) : null}
+
+      {downloadError ? (
+        <Surface className="mb-6 border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{downloadError}</Surface>
       ) : null}
 
       <Surface className="overflow-hidden">
