@@ -816,6 +816,33 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
     assert exc.value.status_code == 400
 
 
+def test_login_normalizes_username_and_organization_slug(db_session: Session):
+    organization = Organization(name="Cliente Login Normalizado", slug="cliente-login-normalizado", is_active=True)
+    user = User(
+        username="admin-login-normalizado",
+        full_name="Admin Login Normalizado",
+        password_hash=hash_password("LoginNormalizadoPassword2026"),
+        role=UserRole.admin,
+        is_active=True,
+        organization=organization,
+    )
+    db_session.add_all([organization, user])
+    db_session.commit()
+
+    token = login(
+        LoginRequest(
+            username=" admin-login-normalizado ",
+            password="LoginNormalizadoPassword2026",
+            organization_slug=" CLIENTE-LOGIN-NORMALIZADO ",
+        ),
+        db=db_session,
+    )
+
+    assert token.role == "admin"
+    assert token.organization_id == organization.id
+    assert token.organization_slug == "cliente-login-normalizado"
+
+
 def test_organization_metrics_include_billable_monthly_jobs(db_session: Session):
     actor = User(username="org-metrics-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     user = User(username="org-metrics-user", full_name="Usuario", role=UserRole.user, is_active=True, organization_id=1)
