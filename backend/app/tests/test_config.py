@@ -100,6 +100,18 @@ def test_development_allows_default_secret_key():
     assert settings.secret_key == DEFAULT_SECRET_KEY
 
 
+def test_accepts_supported_jwt_algorithm():
+    settings = Settings(algorithm="HS512", _env_file=None)
+
+    assert settings.algorithm == "HS512"
+
+
+@pytest.mark.parametrize("algorithm", ["none", "RS256"])
+def test_rejects_unsupported_jwt_algorithm(algorithm: str):
+    with pytest.raises(ValidationError):
+        Settings(algorithm=algorithm, _env_file=None)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

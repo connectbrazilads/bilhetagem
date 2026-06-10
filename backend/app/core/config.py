@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Any, Union
+from typing import Any, Literal, Union
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = DEFAULT_DATABASE_URL
     secret_key: str = Field(default=DEFAULT_SECRET_KEY, min_length=16)
-    algorithm: str = "HS256"
+    algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
     access_token_expire_minutes: int = Field(default=60, ge=5, le=1440)
     cors_origins: Union[str, list[str]] = ["http://localhost:3000"]
     default_monthly_quota: int = Field(default=500, ge=0, le=1_000_000)
