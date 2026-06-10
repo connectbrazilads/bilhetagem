@@ -59,8 +59,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secrets(self):
-        if self.environment.strip().lower() in {"prod", "production"} and self.secret_key == DEFAULT_SECRET_KEY:
+        if self.environment.strip().lower() not in {"prod", "production"}:
+            return self
+        if self.secret_key == DEFAULT_SECRET_KEY:
             raise ValueError("SECRET_KEY proprio e obrigatorio em producao")
+        if isinstance(self.cors_origins, list) and any(origin.strip() == "*" for origin in self.cors_origins):
+            raise ValueError("CORS_ORIGINS nao pode usar wildcard em producao")
         return self
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
