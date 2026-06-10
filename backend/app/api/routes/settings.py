@@ -17,6 +17,15 @@ from app.services.audit_service import write_audit
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
+def _changed_values(before: dict, after: dict) -> dict:
+    changes = {}
+    for key, after_value in after.items():
+        before_value = before.get(key)
+        if before_value != after_value:
+            changes[key] = {"before": before_value, "after": after_value}
+    return changes
+
+
 @router.get("", response_model=GeneralSettings)
 def get_general_settings(
     db: Session = Depends(get_db),
@@ -31,7 +40,18 @@ def update_general_settings(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> GeneralSettings:
+    before = get_system_settings_dict(db, actor.organization_id)
     updated = update_system_settings(db, payload.model_dump(), actor.organization_id)
+    changes = _changed_values(before, updated)
+    if changes:
+        write_audit(
+            db,
+            action="settings_updated",
+            entity="settings",
+            actor_user_id=actor.id,
+            metadata={"changes": changes},
+        )
+        db.commit()
     return GeneralSettings(**updated)
 
 
@@ -49,7 +69,18 @@ def update_monthly_report_email_settings_endpoint(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> MonthlyReportEmailSettings:
+    before = get_monthly_report_email_settings(db, actor.organization_id)
     updated = update_monthly_report_email_settings(db, payload.model_dump(), actor.organization_id)
+    changes = _changed_values(before, updated)
+    if changes:
+        write_audit(
+            db,
+            action="monthly_report_email_settings_updated",
+            entity="settings",
+            actor_user_id=actor.id,
+            metadata={"changes": changes},
+        )
+        db.commit()
     return MonthlyReportEmailSettings(**updated)
 
 

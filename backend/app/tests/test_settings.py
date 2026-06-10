@@ -11,8 +11,13 @@ from app.models.quota import Quota
 from app.services.settings_service import update_system_settings
 from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
-from app.api.routes.settings import get_general_settings, update_general_settings
-from app.schemas.settings import GeneralSettings
+from app.api.routes.settings import (
+    get_general_settings,
+    update_general_settings,
+    update_monthly_report_email_settings_endpoint,
+)
+from app.models.audit_log import AuditLog
+from app.schemas.settings import GeneralSettings, MonthlyReportEmailSettings
 
 
 def test_general_settings_api(db_session: Session):
@@ -47,6 +52,59 @@ def test_general_settings_api(db_session: Session):
     assert res_verified.blocking_enabled is False
     assert res_verified.show_balance is False
     assert res_verified.web_print_enabled is False
+
+
+def test_settings_updates_are_audited(db_session: Session):
+    actor = User(username="admin-settings-audit", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    update_general_settings(
+        payload=GeneralSettings(
+            default_monthly_quota=250,
+            auto_create_users=True,
+            blocking_enabled=False,
+            show_balance=True,
+            safe_release_enabled=False,
+            web_print_enabled=False,
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    log = db_session.query(AuditLog).filter(AuditLog.action == "settings_updated").one()
+    assert log.organization_id == actor.organization_id
+    assert log.actor_user_id == actor.id
+    assert log.log_metadata["changes"]["default_monthly_quota"] == {"before": 500, "after": 250}
+    assert log.log_metadata["changes"]["blocking_enabled"] == {"before": True, "after": False}
+    assert log.log_metadata["changes"]["safe_release_enabled"] == {"before": True, "after": False}
+    assert log.log_metadata["changes"]["web_print_enabled"] == {"before": True, "after": False}
+
+
+def test_monthly_report_email_settings_updates_are_audited(db_session: Session):
+    actor = User(username="admin-email-audit", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    update_monthly_report_email_settings_endpoint(
+        payload=MonthlyReportEmailSettings(
+            enabled=True,
+            recipients="financeiro@empresa.com",
+            day_of_month=5,
+            include_pdf=True,
+            include_xlsx=False,
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    log = db_session.query(AuditLog).filter(AuditLog.action == "monthly_report_email_settings_updated").one()
+    assert log.organization_id == actor.organization_id
+    assert log.actor_user_id == actor.id
+    assert log.log_metadata["changes"]["enabled"] == {"before": False, "after": True}
+    assert log.log_metadata["changes"]["recipients"]["after"] == "financeiro@empresa.com"
+    assert log.log_metadata["changes"]["day_of_month"] == {"before": 1, "after": 5}
+    assert log.log_metadata["changes"]["include_xlsx"] == {"before": True, "after": False}
 
 
 def test_web_print_module_can_be_disabled(db_session: Session):

@@ -214,7 +214,7 @@ Entregaveis:
 - Total de paginas P&B, coloridas, custo, bloqueios, liberacoes e economia estimada.
 - Fechamento mensal com snapshot para nao mudar quando dados historicos forem editados.
 - Exportacao PDF/Excel com identidade visual.
-- Auditoria administrativa filtravel por periodo, acao e entidade, com exportacao CSV.
+- Auditoria administrativa filtravel por periodo, acao e entidade, com exportacao CSV e registro de mudancas criticas de configuracao.
 - Agendamento de envio por e-mail.
 - Indicadores para outsourcing: volume por equipamento, custo por equipamento e ranking de uso.
 
