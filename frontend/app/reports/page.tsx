@@ -264,16 +264,24 @@ export default function ReportsPage() {
   }
 
   const summary = useMemo(() => {
+    const billableStatuses = new Set(["authorized", "released"]);
+    const savedStatuses = new Set(["blocked", "cancelled"]);
     return jobs.reduce(
       (acc, job) => {
         acc.jobs += 1;
-        acc.pages += job.pages;
-        acc.cost += job.cost;
+        if (billableStatuses.has(job.status)) {
+          acc.billableJobs += 1;
+          acc.pages += job.pages;
+          acc.cost += job.cost;
+        }
+        if (savedStatuses.has(job.status)) {
+          acc.savedPages += job.pages;
+        }
         acc.users.add(job.user_full_name || job.username);
         acc.printers.add(job.printer_name);
         return acc;
       },
-      { jobs: 0, pages: 0, cost: 0, users: new Set<string>(), printers: new Set<string>() }
+      { jobs: 0, billableJobs: 0, pages: 0, savedPages: 0, cost: 0, users: new Set<string>(), printers: new Set<string>() }
     );
   }, [jobs]);
 
@@ -296,12 +304,14 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-5">
+      <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-7">
         <Summary label="Trabalhos" value={summary.jobs} icon={FileText} />
-        <Summary label="Paginas" value={summary.pages} icon={Printer} />
+        <Summary label="Cobraveis" value={summary.billableJobs} icon={FileText} />
+        <Summary label="Paginas cobraveis" value={summary.pages} icon={Printer} />
+        <Summary label="Paginas salvas" value={summary.savedPages} icon={FileText} />
         <Summary label="Usuarios" value={summary.users.size} icon={Users} />
         <Summary label="Impressoras" value={summary.printers.size} icon={Printer} />
-        <Summary label="Custo" value={`R$ ${summary.cost.toFixed(2)}`} icon={FileText} />
+        <Summary label="Custo cobravel" value={`R$ ${summary.cost.toFixed(2)}`} icon={FileText} />
       </div>
 
       <Surface className="mb-4 grid gap-3 p-4 md:grid-cols-[1fr_1fr_1fr_180px_auto]">
