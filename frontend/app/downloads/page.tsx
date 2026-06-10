@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ComponentType } from "react";
-import { CalendarClock, Check, Copy, Download, FileArchive, KeyRound, PackageCheck, RefreshCw, ShieldCheck, TerminalSquare } from "lucide-react";
+import { CalendarClock, Check, Copy, Download, FileArchive, PackageCheck, RefreshCw, ShieldCheck, TerminalSquare } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -137,13 +137,6 @@ function isUnsafeAgentPassword(value: string) {
 
 function isValidOrganizationSlug(value: string) {
   return /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(value.trim().toLowerCase());
-}
-
-function generateStrongPassword(length = 24) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*-_=+";
-  const randomValues = new Uint32Array(length);
-  crypto.getRandomValues(randomValues);
-  return Array.from(randomValues, (value) => alphabet[value % alphabet.length]).join("");
 }
 
 export default function DownloadsPage() {
@@ -421,20 +414,11 @@ export default function DownloadsPage() {
               />
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              <span className="flex items-center justify-between gap-2">
-                Senha agent
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setDeployPassword(generateStrongPassword())}
-                  title="Gerar senha forte para o agent"
-                >
-                  <KeyRound className="h-3.5 w-3.5" />
-                  Gerar
-                </Button>
-              </span>
+              Senha atual do agent
               <Input type="password" value={deployPassword} onChange={(event) => setDeployPassword(event.target.value)} />
+              <span className="text-[11px] font-medium text-muted-foreground">
+                Use a senha cadastrada para o usuario tecnico desta empresa; ela nao e exibida nem gerada pelo painel.
+              </span>
             </label>
           </div>
           <div className="mb-4 grid gap-3 md:grid-cols-3">
