@@ -93,6 +93,24 @@ function releaseSignatureLabel(status: string) {
   return "Assinatura com alerta";
 }
 
+function artifactKindLabel(kind: string, filename: string) {
+  const normalizedKind = kind.toLowerCase();
+  const normalizedFilename = filename.toLowerCase();
+  if (normalizedKind === "installer" || normalizedFilename.endsWith("installer.exe")) return "Instalador EXE";
+  if (normalizedKind === "msi" || normalizedFilename.endsWith(".msi")) return "Instalador MSI";
+  if (normalizedKind === "agent") return "Agent";
+  if (normalizedKind === "checksums") return "Checksums";
+  return kind;
+}
+
+function artifactKindClass(kind: string, filename: string) {
+  const label = artifactKindLabel(kind, filename);
+  if (label === "Instalador EXE" || label === "Instalador MSI") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (label === "Agent") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (label === "Checksums") return "border-slate-200 bg-slate-100 text-slate-700";
+  return "border-amber-200 bg-amber-50 text-amber-700";
+}
+
 function billingStatusSuffix(status: OrganizationOption["billing_status"]) {
   if (status === "past_due") return " - em atraso";
   if (status === "trial") return " - teste";
@@ -543,9 +561,12 @@ export default function DownloadsPage() {
                         {release.notes ? <div className="mt-1 text-xs text-muted-foreground">{release.notes}</div> : null}
                       </td>
                       <td className="p-4">
-                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${artifactKindClass(file.kind, file.filename)}`}
+                          title={file.kind}
+                        >
                           <ShieldCheck className="h-3 w-3" />
-                          {file.kind}
+                          {artifactKindLabel(file.kind, file.filename)}
                         </span>
                       </td>
                       <td className="p-4">
