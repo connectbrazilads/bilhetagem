@@ -10,6 +10,7 @@ from app.core.password_policy import is_unsafe_initial_password
 from app.core.security import hash_password
 from app.models.audit_log import AuditLog
 from app.models.print_job import PrintJob
+from app.models.print_policy import PrintPolicy
 from app.models.quota import Quota
 from app.models.user import User, UserRole
 from app.repositories.users import create_user, get_or_create_department, resolve_department
@@ -202,6 +203,13 @@ def delete_user_endpoint(
         raise HTTPException(
             status_code=409,
             detail="Usuario possui historico de impressoes. Desative o usuario para preservar relatorios e auditoria.",
+        )
+
+    policy_count = db.query(PrintPolicy).filter(PrintPolicy.organization_id == actor.organization_id, PrintPolicy.user_id == user.id).count()
+    if policy_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Usuario possui politicas vinculadas. Remova ou edite as politicas antes de excluir.",
         )
 
     db.query(AuditLog).filter(AuditLog.organization_id == actor.organization_id, AuditLog.actor_user_id == user.id).update(

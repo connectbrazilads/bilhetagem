@@ -2285,6 +2285,31 @@ def test_agent_role_user_cannot_be_deleted_by_accident(db_session: Session):
     assert db_session.get(User, custom_agent.id) is not None
 
 
+def test_user_with_linked_policy_cannot_be_deleted(db_session: Session):
+    admin = User(username="delete-policy-user-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="delete-policy-user", full_name="Usuario com Politica", role=UserRole.user, is_active=True, organization_id=1)
+    db_session.add_all([admin, user])
+    db_session.flush()
+    policy = PrintPolicy(
+        organization_id=1,
+        name="Excecao usuario especifico",
+        priority=10,
+        rule_type=PolicyRuleType.always,
+        action=PolicyAction.allow,
+        user_id=user.id,
+    )
+    db_session.add(policy)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        delete_user_endpoint(user.id, db=db_session, actor=admin)
+
+    assert exc.value.status_code == 409
+    assert "politicas vinculadas" in exc.value.detail
+    assert db_session.get(User, user.id) is not None
+    assert db_session.get(PrintPolicy, policy.id) is not None
+
+
 def test_agent_user_password_can_be_rotated_without_role_change(db_session: Session):
     admin = User(username="rotate-agent-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     agent_user = User(
