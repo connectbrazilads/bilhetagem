@@ -48,7 +48,15 @@ function Invoke-CheckedCommand([string]$FilePath, [string[]]$Arguments) {
 function Invoke-CodeSign([string]$Path) {
     $signtool = $env:PRINTBILLING_SIGNTOOL
     if (-not $signtool) { $signtool = Find-CommandPath @("signtool.exe") }
-    if (-not $signtool -or -not (Test-Path $Path)) { return }
+    if (-not (Test-Path $Path)) { return }
+
+    $hasCertificateConfig = $env:PRINTBILLING_CERT_PFX -or $env:PRINTBILLING_CERT_THUMBPRINT
+    if (-not $signtool) {
+        if ($hasCertificateConfig) {
+            throw "Configuracao de assinatura encontrada, mas signtool.exe nao foi localizado."
+        }
+        return
+    }
 
     $timestamp = $env:PRINTBILLING_TIMESTAMP_URL
     if (-not $timestamp) { $timestamp = "http://timestamp.digicert.com" }
@@ -57,12 +65,12 @@ function Invoke-CodeSign([string]$Path) {
         $args = @("sign", "/fd", "SHA256", "/tr", $timestamp, "/td", "SHA256", "/f", $env:PRINTBILLING_CERT_PFX)
         if ($env:PRINTBILLING_CERT_PASSWORD) { $args += @("/p", $env:PRINTBILLING_CERT_PASSWORD) }
         $args += $Path
-        & $signtool @args
+        Invoke-CheckedCommand $signtool $args
         return
     }
 
     if ($env:PRINTBILLING_CERT_THUMBPRINT) {
-        & $signtool sign /fd SHA256 /tr $timestamp /td SHA256 /sha1 $env:PRINTBILLING_CERT_THUMBPRINT $Path
+        Invoke-CheckedCommand $signtool @("sign", "/fd", "SHA256", "/tr", $timestamp, "/td", "SHA256", "/sha1", $env:PRINTBILLING_CERT_THUMBPRINT, $Path)
     }
 }
 

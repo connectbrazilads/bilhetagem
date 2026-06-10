@@ -30,6 +30,9 @@ wix eula accept wix7
 ## Assinatura
 
 O script assina automaticamente quando encontra `signtool.exe` e uma das configuracoes abaixo.
+Se `PRINTBILLING_CERT_PFX` ou `PRINTBILLING_CERT_THUMBPRINT` estiver configurado, o build falha quando
+`signtool.exe` nao for encontrado ou quando a assinatura retornar erro. Isso evita publicar uma release
+que deveria estar assinada, mas saiu sem assinatura por falha silenciosa no host de build.
 
 Por thumbprint no repositorio de certificados do Windows:
 
