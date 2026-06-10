@@ -68,6 +68,11 @@ function releaseSignatureLabel(status: string) {
   return "Assinatura com alerta";
 }
 
+function maskSecret(command: string, secret: string) {
+  if (!command || !secret) return command;
+  return command.replaceAll(secret, "********");
+}
+
 export default function DownloadsPage() {
   const [releases, setReleases] = useState<AgentRelease[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
@@ -173,7 +178,7 @@ export default function DownloadsPage() {
           </div>
           <div>
             <h2 className="text-sm font-bold">Instalacao silenciosa</h2>
-            <p className="text-xs text-muted-foreground">Comandos prontos para implantar o agent em PCs da empresa selecionada.</p>
+            <p className="text-xs text-muted-foreground">Comandos prontos para implantar o agent. A senha fica mascarada na tela, mas e copiada corretamente.</p>
           </div>
         </div>
         <div className="mb-4 grid gap-3 md:grid-cols-4">
@@ -216,6 +221,7 @@ export default function DownloadsPage() {
           <CommandBox
             title="EXE"
             command={exeCommand}
+            displayCommand={maskSecret(exeCommand, deployPassword)}
             disabled={!installerFile || !commandReady}
             emptyMessage={!installerFile ? undefined : commandMissingMessage}
             copied={copiedCommand === "exe"}
@@ -224,6 +230,7 @@ export default function DownloadsPage() {
           <CommandBox
             title="MSI"
             command={msiCommand}
+            displayCommand={maskSecret(msiCommand, deployPassword)}
             disabled={!msiFile || !commandReady}
             emptyMessage={!msiFile ? undefined : commandMissingMessage}
             copied={copiedCommand === "msi"}
@@ -318,6 +325,7 @@ export default function DownloadsPage() {
 function CommandBox({
   title,
   command,
+  displayCommand,
   disabled,
   copied,
   onCopy,
@@ -325,6 +333,7 @@ function CommandBox({
 }: {
   title: string;
   command: string;
+  displayCommand: string;
   disabled: boolean;
   copied: boolean;
   onCopy: () => void;
@@ -340,7 +349,7 @@ function CommandBox({
         </Button>
       </div>
       <pre className="min-h-[72px] overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 font-mono text-xs text-slate-100">
-        {disabled ? emptyMessage ?? `Nenhum arquivo ${title} publicado no manifest.` : command}
+        {disabled ? emptyMessage ?? `Nenhum arquivo ${title} publicado no manifest.` : displayCommand}
       </pre>
     </div>
   );
