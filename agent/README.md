@@ -65,9 +65,10 @@ O backend expoe:
 
 Quando o agent aplica uma atualizacao, ele registra as etapas em `agent_update.log` na pasta de instalacao. Se a troca falhar, o script restaura o executavel anterior a partir do backup `.bak` e tenta iniciar o servico novamente. Apos uma atualizacao bem-sucedida, o `.bak` fica preservado para rollback manual simples.
 
-Para publicar uma nova versao na VPS, copie `PrintBillingAgent.exe` para a pasta configurada em
-`AGENT_DOWNLOAD_DIR` e ajuste `AGENT_LATEST_VERSION` no ambiente do backend. Por padrao, o backend
-procura `agent_downloads/PrintBillingAgent.exe`.
+Para publicar uma nova versao na VPS no fluxo recomendado, copie a pasta da versao e o `manifest.json`
+para o diretorio configurado em `AGENT_DOWNLOAD_DIR`. Quando o manifest existe, ele e a fonte da versao
+publicada e do SHA256 usado pelo auto-update. `AGENT_LATEST_VERSION` fica apenas como fallback para o modo
+legado com um unico `PrintBillingAgent.exe` sem manifest.
 
 ## Release versionado, MSI e assinatura
 
@@ -86,7 +87,7 @@ Saida padrao:
 - `releases\manifest.json`
 
 Para publicar na VPS, copie a pasta da versao e o `manifest.json` para o diretorio configurado em
-`AGENT_DOWNLOAD_DIR`, e ajuste `AGENT_LATEST_VERSION` para a versao publicada.
+`AGENT_DOWNLOAD_DIR`.
 O manifest inclui `signature_status` e `signer_subject`, exibidos na tela **Downloads**. O script preserva
 versoes anteriores ja existentes no `manifest.json` e atualiza apenas a entrada da versao gerada.
 

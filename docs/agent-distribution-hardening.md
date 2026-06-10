@@ -57,7 +57,6 @@ Copie para o diretorio configurado em `AGENT_DOWNLOAD_DIR`:
 Configure no backend:
 
 ```text
-AGENT_LATEST_VERSION=<versao>
 AGENT_DOWNLOAD_DIR=<diretorio-publicado>
 ```
 
@@ -65,6 +64,10 @@ O painel exibe os arquivos em **Downloads** e o agent usa:
 
 - `GET /agent/version`
 - `GET /agent/download`
+
+Quando `manifest.json` existe, o backend usa a release mais nova do manifest como fonte da versao publicada
+e do SHA256 do auto-update. `AGENT_LATEST_VERSION` fica apenas como fallback para o modo legado com um
+unico `PrintBillingAgent.exe` sem manifest.
 
 O `build_release.ps1` preserva as versoes ja existentes no `manifest.json` e substitui apenas a entrada da versao que esta sendo gerada. Assim a tela de Downloads continua exibindo releases antigos enquanto a versao nova e publicada.
 
