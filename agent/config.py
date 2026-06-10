@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -27,96 +27,81 @@ def load_file_config() -> dict:
 file_config = load_file_config()
 
 
+def _raw_config_value(key: str, default):
+    env_value = os.getenv(key)
+    if env_value is not None:
+        return env_value
+    return file_config.get(key, default)
+
+
+def _config_str(key: str, default: str = "", *, strip_trailing_slash: bool = False) -> str:
+    value = str(_raw_config_value(key, default)).strip()
+    if strip_trailing_slash:
+        value = value.rstrip("/")
+    return value
+
+
+def _config_optional_str(key: str, default: str | None = None) -> str | None:
+    value = _raw_config_value(key, default)
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    return cleaned or None
+
+
+def _config_bool(key: str, default: bool) -> bool:
+    value = _raw_config_value(key, default)
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in ("true", "1", "yes", "sim"):
+        return True
+    if normalized in ("false", "0", "no", "nao", "não"):
+        return False
+    return default
+
+
+def _config_int(key: str, default: int, *, min_value: int | None = None) -> int:
+    value = _raw_config_value(key, default)
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    if min_value is not None and parsed < min_value:
+        return default
+    return parsed
+
+
+def _config_float(key: str, default: float, *, min_value: float | None = None) -> float:
+    value = _raw_config_value(key, default)
+    try:
+        parsed = float(str(value).strip().replace(",", "."))
+    except (TypeError, ValueError):
+        return default
+    if min_value is not None and parsed < min_value:
+        return default
+    return parsed
+
+
 @dataclass(frozen=True)
 class AgentConfig:
-    api_base_url: str = os.getenv(
-        "PRINTBILLING_API_URL",
-        file_config.get("PRINTBILLING_API_URL", "http://localhost:8000")
-    )
-    api_username: str = os.getenv(
-        "PRINTBILLING_AGENT_USER",
-        file_config.get("PRINTBILLING_AGENT_USER", "agent")
-    )
-    api_password: str = os.getenv(
-        "PRINTBILLING_AGENT_PASSWORD",
-        file_config.get("PRINTBILLING_AGENT_PASSWORD", "change-me-agent-password")
-    )
-    organization_slug: str | None = os.getenv(
-        "PRINTBILLING_ORGANIZATION_SLUG",
-        file_config.get("PRINTBILLING_ORGANIZATION_SLUG", "default")
-    ) or None
-    poll_interval_seconds: int = int(
-        os.getenv(
-            "PRINTBILLING_POLL_INTERVAL",
-            file_config.get("PRINTBILLING_POLL_INTERVAL", "5")
-        )
-    )
-    snmp_poll_interval_seconds: int = int(
-        os.getenv(
-            "PRINTBILLING_SNMP_POLL_INTERVAL",
-            file_config.get("PRINTBILLING_SNMP_POLL_INTERVAL", "60")
-        )
-    )
-    snmp_community: str = os.getenv(
-        "PRINTBILLING_SNMP_COMMUNITY",
-        file_config.get("PRINTBILLING_SNMP_COMMUNITY", "public")
-    )
-    snmp_timeout_seconds: float = float(
-        os.getenv(
-            "PRINTBILLING_SNMP_TIMEOUT_SECONDS",
-            file_config.get("PRINTBILLING_SNMP_TIMEOUT_SECONDS", "2")
-        )
-    )
-    snmp_retries: int = int(
-        os.getenv(
-            "PRINTBILLING_SNMP_RETRIES",
-            file_config.get("PRINTBILLING_SNMP_RETRIES", "1")
-        )
-    )
-    default_username: str | None = os.getenv(
-        "PRINTBILLING_DEFAULT_USERNAME",
-        file_config.get("PRINTBILLING_DEFAULT_USERNAME")
-    ) or None
-    use_print_event_log: bool = str(
-        os.getenv(
-            "PRINTBILLING_USE_PRINT_EVENT_LOG",
-            file_config.get("PRINTBILLING_USE_PRINT_EVENT_LOG", True)
-        )
-    ).lower() == "true"
-    cancel_blocked_jobs: bool = str(
-        os.getenv(
-            "PRINTBILLING_CANCEL_BLOCKED",
-            file_config.get("PRINTBILLING_CANCEL_BLOCKED", True)
-        )
-    ).lower() == "true"
-    auto_update_enabled: bool = str(
-        os.getenv(
-            "PRINTBILLING_AUTO_UPDATE",
-            file_config.get("PRINTBILLING_AUTO_UPDATE", True)
-        )
-    ).lower() == "true"
-    update_check_interval_seconds: int = int(
-        os.getenv(
-            "PRINTBILLING_UPDATE_CHECK_INTERVAL",
-            file_config.get("PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600)
-        )
-    )
-    heartbeat_interval_seconds: int = int(
-        os.getenv(
-            "PRINTBILLING_HEARTBEAT_INTERVAL",
-            file_config.get("PRINTBILLING_HEARTBEAT_INTERVAL", 60)
-        )
-    )
-    queue_action_interval_seconds: int = int(
-        os.getenv(
-            "PRINTBILLING_QUEUE_ACTION_INTERVAL",
-            file_config.get("PRINTBILLING_QUEUE_ACTION_INTERVAL", 30)
-        )
-    )
-    spool_server: str | None = os.getenv(
-        "PRINTBILLING_SPOOL_SERVER",
-        file_config.get("PRINTBILLING_SPOOL_SERVER")
-    ) or None
+    api_base_url: str = field(default_factory=lambda: _config_str("PRINTBILLING_API_URL", "http://localhost:8000", strip_trailing_slash=True))
+    api_username: str = field(default_factory=lambda: _config_str("PRINTBILLING_AGENT_USER", "agent"))
+    api_password: str = field(default_factory=lambda: _config_str("PRINTBILLING_AGENT_PASSWORD", "change-me-agent-password"))
+    organization_slug: str | None = field(default_factory=lambda: _config_optional_str("PRINTBILLING_ORGANIZATION_SLUG", "default"))
+    poll_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_POLL_INTERVAL", 5, min_value=1))
+    snmp_poll_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_SNMP_POLL_INTERVAL", 60, min_value=1))
+    snmp_community: str = field(default_factory=lambda: _config_str("PRINTBILLING_SNMP_COMMUNITY", "public"))
+    snmp_timeout_seconds: float = field(default_factory=lambda: _config_float("PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2.0, min_value=0.1))
+    snmp_retries: int = field(default_factory=lambda: _config_int("PRINTBILLING_SNMP_RETRIES", 1, min_value=0))
+    default_username: str | None = field(default_factory=lambda: _config_optional_str("PRINTBILLING_DEFAULT_USERNAME"))
+    use_print_event_log: bool = field(default_factory=lambda: _config_bool("PRINTBILLING_USE_PRINT_EVENT_LOG", True))
+    cancel_blocked_jobs: bool = field(default_factory=lambda: _config_bool("PRINTBILLING_CANCEL_BLOCKED", True))
+    auto_update_enabled: bool = field(default_factory=lambda: _config_bool("PRINTBILLING_AUTO_UPDATE", True))
+    update_check_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600, min_value=60))
+    heartbeat_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_HEARTBEAT_INTERVAL", 60, min_value=10))
+    queue_action_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_QUEUE_ACTION_INTERVAL", 30, min_value=5))
+    spool_server: str | None = field(default_factory=lambda: _config_optional_str("PRINTBILLING_SPOOL_SERVER"))
 
 
 config = AgentConfig()
