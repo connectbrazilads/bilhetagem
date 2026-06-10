@@ -2,10 +2,12 @@ from sqlalchemy.orm import Session
 
 from app.models.printer import Printer
 from app.schemas.printer import PrinterCreate
+from app.services.printer_limit_service import ensure_printer_limit_available
 from app.services.settings_service import get_system_settings_dict
 
 
 def create_printer(db: Session, payload: PrinterCreate, organization_id: int) -> Printer:
+    ensure_printer_limit_available(db, organization_id)
     settings = get_system_settings_dict(db, organization_id)
     printer = Printer(
         organization_id=organization_id,

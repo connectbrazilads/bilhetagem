@@ -21,6 +21,7 @@ from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate, PrintJobDecision, PrintJobRead
 from app.services.audit_service import write_audit
 from app.services.print_job_service import register_print_job
+from app.services.printer_limit_service import PrinterLimitExceeded
 from app.services.settings_service import get_system_settings_dict
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -124,6 +125,9 @@ def create_job(
 ) -> PrintJobDecision:
     try:
         return register_print_job(db, payload, current_user.organization_id)
+    except PrinterLimitExceeded as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -398,6 +402,9 @@ def web_print_endpoint(
     
     try:
         decision = register_print_job(db, payload, current_user.organization_id)
+    except PrinterLimitExceeded as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc

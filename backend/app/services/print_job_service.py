@@ -12,6 +12,7 @@ from app.schemas.job import PrintJobCreate, PrintJobDecision
 from app.services.audit_service import write_audit
 from app.services.organization_service import get_or_create_default_organization
 from app.services.policy_service import PolicyDecision, evaluate_print_policies
+from app.services.printer_limit_service import ensure_printer_limit_available
 from app.services.quota_service import can_consume, get_or_create_current_quota
 
 
@@ -47,6 +48,7 @@ def _resolve_printer(db: Session, printer_name: str, is_color: bool, organizatio
         return printer
     if not settings.auto_create_printers:
         raise ValueError(f"Impressora '{printer_name}' nao cadastrada")
+    ensure_printer_limit_available(db, organization_id)
     sys_settings = sys_settings or {}
     printer = Printer(
         organization_id=organization_id,

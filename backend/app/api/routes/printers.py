@@ -12,6 +12,7 @@ from app.models.user import User, UserRole
 from app.repositories.printers import create_printer
 from app.schemas.printer import PrinterAliasBind, PrinterAliasRead, PrinterCreate, PrinterRead, PrinterStatusUpdate, PrinterUpdate
 from app.services.audit_service import write_audit
+from app.services.printer_limit_service import PrinterLimitExceeded, ensure_printer_limit_available
 
 router = APIRouter(prefix="/printers", tags=["printers"])
 
@@ -93,6 +94,9 @@ def create_printer_endpoint(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Impressora ja cadastrada") from exc
+    except PrinterLimitExceeded as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.put("/{printer_id}", response_model=PrinterRead)
@@ -105,6 +109,13 @@ def update_printer_endpoint(
     printer = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == printer_id).first()
     if not printer:
         raise HTTPException(status_code=404, detail="Impressora nao encontrada")
+
+    if payload.is_active is True and not printer.is_active:
+        try:
+            ensure_printer_limit_available(db, actor.organization_id)
+        except PrinterLimitExceeded as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     before = {
         "name": printer.name,

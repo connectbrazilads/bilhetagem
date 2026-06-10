@@ -3,7 +3,8 @@ import pytest
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
-from app.api.routes.jobs import get_agent_web_prints, web_print_endpoint
+from app.api.routes.jobs import create_job, get_agent_web_prints, web_print_endpoint
+from app.models.organization import Organization
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.models.print_job import PrintJob, JobStatus
@@ -22,9 +23,9 @@ from app.api.routes.settings import (
     update_ldap_settings_endpoint,
     update_monthly_report_email_settings_endpoint,
 )
-from app.api.routes.printers import create_printer_endpoint
+from app.api.routes.printers import create_printer_endpoint, update_printer_endpoint
 from app.models.audit_log import AuditLog
-from app.schemas.printer import PrinterCreate
+from app.schemas.printer import PrinterCreate, PrinterUpdate
 from app.schemas.settings import GeneralSettings, LDAPSettings, MonthlyReportEmailSettings
 
 
@@ -303,6 +304,84 @@ def test_manual_printer_creation_keeps_explicit_costs(db_session: Session):
 
     assert printer.cost_mono == 0.06
     assert printer.cost_color == 0.31
+
+
+def test_manual_printer_creation_respects_contracted_limit(db_session: Session):
+    organization = db_session.query(Organization).filter(Organization.id == 1).one()
+    organization.contracted_printer_limit = 1
+    actor = User(username="admin-printer-limit", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    active_printer = Printer(organization_id=1, name="IMPRESSORA_EXISTENTE_LIMITE", is_color=False, is_active=True)
+    db_session.add_all([actor, active_printer])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        create_printer_endpoint(
+            PrinterCreate(name="IMPRESSORA_ACIMA_LIMITE", is_color=False),
+            db_session,
+            actor,
+        )
+
+    assert exc.value.status_code == 409
+    assert "Limite contratado de impressoras atingido" in exc.value.detail
+
+    active_printer.is_active = False
+    db_session.commit()
+    printer = create_printer_endpoint(
+        PrinterCreate(name="IMPRESSORA_DENTRO_LIMITE", is_color=False),
+        db_session,
+        actor,
+    )
+
+    assert printer.name == "IMPRESSORA_DENTRO_LIMITE"
+
+
+def test_auto_printer_creation_respects_contracted_limit(db_session: Session):
+    organization = db_session.query(Organization).filter(Organization.id == 1).one()
+    organization.contracted_printer_limit = 1
+    agent = User(username="agent-printer-limit", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    active_printer = Printer(organization_id=1, name="IMPRESSORA_AUTO_EXISTENTE_LIMITE", is_color=False, is_active=True)
+    db_session.add_all([agent, active_printer])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        create_job(
+            PrintJobCreate(
+                username="usuario-limite-printer",
+                printer_name="IMPRESSORA_AUTO_ACIMA_LIMITE",
+                pages=1,
+                is_color=False,
+                submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+            ),
+            db=db_session,
+            current_user=agent,
+        )
+
+    assert exc.value.status_code == 409
+    assert "Limite contratado de impressoras atingido" in exc.value.detail
+    assert db_session.query(Printer).filter(Printer.name == "IMPRESSORA_AUTO_ACIMA_LIMITE").first() is None
+
+
+def test_reactivating_printer_respects_contracted_limit(db_session: Session):
+    organization = db_session.query(Organization).filter(Organization.id == 1).one()
+    organization.contracted_printer_limit = 1
+    actor = User(username="admin-reactivate-limit", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    active_printer = Printer(organization_id=1, name="IMPRESSORA_ATIVA_LIMITE", is_color=False, is_active=True)
+    inactive_printer = Printer(organization_id=1, name="IMPRESSORA_INATIVA_LIMITE", is_color=False, is_active=False)
+    db_session.add_all([actor, active_printer, inactive_printer])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        update_printer_endpoint(
+            inactive_printer.id,
+            PrinterUpdate(is_active=True),
+            db_session,
+            actor,
+        )
+
+    assert exc.value.status_code == 409
+    assert "Limite contratado de impressoras atingido" in exc.value.detail
+    db_session.refresh(inactive_printer)
+    assert inactive_printer.is_active is False
 
 
 def test_monthly_report_email_settings_updates_are_audited(db_session: Session):
