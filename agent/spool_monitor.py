@@ -18,6 +18,7 @@ from api_client import BillingApiClient, CapturedPrintJob
 from config import AgentConfig, config, get_app_dir
 from print_event_log import PrintEventLogReader
 from snmp_probe import fetch_snmp_status
+from update_script import build_self_update_script
 from version import AGENT_VERSION
 
 try:
@@ -349,45 +350,7 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
         backup_path = current_exe.with_name(f"{current_exe.name}.bak")
         update_log_path = get_app_dir() / "agent_update.log"
         script_path = get_app_dir() / "apply_agent_update.cmd"
-        script = "\r\n".join(
-            [
-                "@echo off",
-                "setlocal",
-                f'set "LOG={update_log_path}"',
-                'echo [%date% %time%] Iniciando auto-update do PrintBillingAgent >> "%LOG%"',
-                "timeout /t 3 /nobreak > nul",
-                'set "STAGE=parar servico"',
-                'echo [%date% %time%] Parando servico >> "%LOG%"',
-                "sc stop PrintBillingAgent > nul 2>&1",
-                "timeout /t 5 /nobreak > nul",
-                'set "STAGE=criar backup"',
-                'echo [%date% %time%] Criando backup do executavel atual >> "%LOG%"',
-                f'copy /Y "{current_exe}" "{backup_path}" > nul',
-                "if errorlevel 1 goto rollback",
-                'set "STAGE=substituir executavel"',
-                'echo [%date% %time%] Aplicando nova versao >> "%LOG%"',
-                f'copy /Y "{update_path}" "{current_exe}" > nul',
-                "if errorlevel 1 goto rollback",
-                'set "STAGE=iniciar servico atualizado"',
-                'echo [%date% %time%] Iniciando servico atualizado >> "%LOG%"',
-                "sc start PrintBillingAgent > nul 2>&1",
-                "if errorlevel 1 goto rollback",
-                'echo [%date% %time%] Auto-update concluido com sucesso >> "%LOG%"',
-                "goto cleanup",
-                ":rollback",
-                'echo [%date% %time%] Falha na etapa "%STAGE%"; restaurando backup >> "%LOG%"',
-                f'copy /Y "{backup_path}" "{current_exe}" > nul 2>&1',
-                'if errorlevel 1 echo [%date% %time%] Falha ao restaurar backup >> "%LOG%"',
-                'echo [%date% %time%] Reiniciando servico apos rollback >> "%LOG%"',
-                "sc start PrintBillingAgent > nul 2>&1",
-                'if errorlevel 1 echo [%date% %time%] Falha ao iniciar servico apos rollback >> "%LOG%"',
-                ":cleanup",
-                'echo [%date% %time%] Limpando arquivos temporarios >> "%LOG%"',
-                f'del "{update_path}" > nul 2>&1',
-                f'del "{backup_path}" > nul 2>&1',
-                f'del "{script_path}" > nul 2>&1',
-            ]
-        )
+        script = build_self_update_script(current_exe, update_path, backup_path, update_log_path, script_path)
         script_path.write_text(script, encoding="utf-8")
         subprocess.Popen(["cmd.exe", "/c", str(script_path)], close_fds=True)
         self._update_started = True
