@@ -29,7 +29,7 @@ cd C:\Bilhetagem
 Usuario inicial:
 
 - `admin`
-- `admin12345`
+- A senha e gerada no `deploy\lite-install.ps1` e salva em `C:\Bilhetagem\data\initial-credentials.txt`.
 
 ## Banco
 

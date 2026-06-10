@@ -22,10 +22,10 @@ Servicos:
 
 Credenciais iniciais do ambiente local:
 
-- Admin: `admin` / `admin12345`
-- Agente: `agent` / `agent12345`
+- Defina `INITIAL_ADMIN_PASSWORD` e `INITIAL_AGENT_PASSWORD` antes de subir o Docker.
+- No modo Lite, o script `deploy/lite-install.ps1` gera senhas aleatorias e salva em `data/initial-credentials.txt`.
 
-Altere essas senhas antes de qualquer uso fora de desenvolvimento.
+Nao use senhas padrao em VPS ou clientes reais.
 
 ## Executar testes do backend
 

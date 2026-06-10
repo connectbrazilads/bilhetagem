@@ -56,7 +56,7 @@ export default function DownloadsPage() {
   const [loading, setLoading] = useState(false);
   const [deployOrg, setDeployOrg] = useState("default");
   const [deployUser, setDeployUser] = useState("agent");
-  const [deployPassword, setDeployPassword] = useState("agent12345");
+  const [deployPassword, setDeployPassword] = useState("");
   const [defaultUsername, setDefaultUsername] = useState("");
   const [copiedCommand, setCopiedCommand] = useState<"exe" | "msi" | null>(null);
 
@@ -110,10 +110,12 @@ export default function DownloadsPage() {
   const latest = releases[0];
   const installerFile = latest?.files.find((file) => file.kind === "installer" || file.filename.toLowerCase().endsWith("installer.exe"));
   const msiFile = latest?.files.find((file) => file.kind === "msi" || file.filename.toLowerCase().endsWith(".msi"));
-  const exeCommand = installerFile
+  const commandReady = Boolean(deployOrg.trim() && deployUser.trim() && deployPassword.trim());
+  const commandMissingMessage = "Informe empresa, usuario e senha do agent para gerar o comando.";
+  const exeCommand = installerFile && commandReady
     ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}"`
     : "";
-  const msiCommand = msiFile
+  const msiCommand = msiFile && commandReady
     ? `msiexec /i "${msiFile.filename}" APIURL="${API_URL}" AGENTUSER="${deployUser}" AGENTPASSWORD="${deployPassword}" ORGANIZATION="${deployOrg}" DEFAULTUSERNAME="${defaultUsername}" /qn`
     : "";
 
@@ -180,14 +182,16 @@ export default function DownloadsPage() {
           <CommandBox
             title="EXE"
             command={exeCommand}
-            disabled={!installerFile}
+            disabled={!installerFile || !commandReady}
+            emptyMessage={!installerFile ? undefined : commandMissingMessage}
             copied={copiedCommand === "exe"}
             onCopy={() => copyCommand("exe", exeCommand)}
           />
           <CommandBox
             title="MSI"
             command={msiCommand}
-            disabled={!msiFile}
+            disabled={!msiFile || !commandReady}
+            emptyMessage={!msiFile ? undefined : commandMissingMessage}
             copied={copiedCommand === "msi"}
             onCopy={() => copyCommand("msi", msiCommand)}
           />
@@ -262,7 +266,21 @@ export default function DownloadsPage() {
   );
 }
 
-function CommandBox({ title, command, disabled, copied, onCopy }: { title: string; command: string; disabled: boolean; copied: boolean; onCopy: () => void }) {
+function CommandBox({
+  title,
+  command,
+  disabled,
+  copied,
+  onCopy,
+  emptyMessage,
+}: {
+  title: string;
+  command: string;
+  disabled: boolean;
+  copied: boolean;
+  onCopy: () => void;
+  emptyMessage?: string;
+}) {
   return (
     <div className="rounded-md border bg-muted/20 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -273,7 +291,7 @@ function CommandBox({ title, command, disabled, copied, onCopy }: { title: strin
         </Button>
       </div>
       <pre className="min-h-[72px] overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 font-mono text-xs text-slate-100">
-        {disabled ? `Nenhum arquivo ${title} publicado no manifest.` : command}
+        {disabled ? emptyMessage ?? `Nenhum arquivo ${title} publicado no manifest.` : command}
       </pre>
     </div>
   );

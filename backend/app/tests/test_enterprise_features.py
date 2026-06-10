@@ -29,10 +29,44 @@ from app.services.report_service import dashboard_metrics
 from app.services.audit_service import write_audit
 from app.services.snmp_service import SnmpPrinterStatus, poll_printers_once
 from app.services.ldap_service import sync_ldap_users, test_ldap_connection as check_ldap_connection
+from app.seed import ensure_user, validate_seed_password
 from app.api.routes.jobs import get_pdf_page_count
 from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
 from app.schemas.organization import OrganizationCreate, OrganizationUpdate
+
+
+def test_seed_rejects_default_or_placeholder_passwords():
+    for password in ("", "admin12345", "agent12345", "change-me-admin-password", "change-me-agent-password"):
+        with pytest.raises(RuntimeError):
+            validate_seed_password(password, "INITIAL_ADMIN_PASSWORD")
+
+    validate_seed_password("StrongSeedPassword2026", "INITIAL_ADMIN_PASSWORD")
+
+
+def test_seed_does_not_require_initial_password_for_existing_user(db_session: Session):
+    db_session.add(
+        User(
+            organization_id=1,
+            username="admin",
+            full_name="Administrador",
+            password_hash=hash_password("ExistingAdminPassword2026"),
+            role=UserRole.admin,
+            is_active=True,
+        )
+    )
+    db_session.commit()
+
+    ensure_user(
+        db_session,
+        username="admin",
+        password="admin12345",
+        role=UserRole.admin,
+        full_name="Administrador",
+    )
+
+    assert db_session.query(User).filter(User.username == "admin").count() == 1
+
 
 def test_snmp_poll_uses_real_status_payload(db_session: Session, monkeypatch):
     # Mock SessionLocal in snmp_service to return db_session
@@ -341,7 +375,7 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
                 organization_id=1,
                 username="admin",
                 full_name="Admin Default",
-                password_hash=hash_password("admin12345"),
+                password_hash=hash_password("AdminDefaultPassword2026"),
                 role=UserRole.admin,
                 is_active=True,
             ),
@@ -349,7 +383,7 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
                 organization_id=other_org.id,
                 username="admin",
                 full_name="Admin Cliente C",
-                password_hash=hash_password("admin12345"),
+                password_hash=hash_password("AdminClienteCPassword2026"),
                 role=UserRole.admin,
                 is_active=True,
             ),
@@ -360,7 +394,7 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
     db_session.commit()
 
     token = login(
-        LoginRequest(username="admin", password="admin12345", organization_slug="cliente-c"),
+        LoginRequest(username="admin", password="AdminClienteCPassword2026", organization_slug="cliente-c"),
         db=db_session,
     )
 
@@ -370,7 +404,7 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
 
     with pytest.raises(HTTPException) as exc:
         login(
-            LoginRequest(username="admin", password="admin12345", organization_slug=None),
+            LoginRequest(username="admin", password="AdminClienteCPassword2026", organization_slug=None),
             db=db_session,
         )
     assert exc.value.status_code == 400
@@ -384,7 +418,7 @@ def test_inactive_organization_cannot_issue_login_token(db_session: Session):
         organization_id=inactive_org.id,
         username="bloqueado",
         full_name="Bloqueado",
-        password_hash=hash_password("admin12345"),
+        password_hash=hash_password("BlockedOrgPassword2026"),
         role=UserRole.admin,
         is_active=True,
     )
@@ -393,14 +427,14 @@ def test_inactive_organization_cannot_issue_login_token(db_session: Session):
 
     with pytest.raises(HTTPException) as slug_exc:
         login(
-            LoginRequest(username="bloqueado", password="admin12345", organization_slug="cliente-inativo"),
+            LoginRequest(username="bloqueado", password="BlockedOrgPassword2026", organization_slug="cliente-inativo"),
             db=db_session,
         )
     assert slug_exc.value.status_code == 401
 
     with pytest.raises(HTTPException) as no_slug_exc:
         login(
-            LoginRequest(username="bloqueado", password="admin12345", organization_slug=None),
+            LoginRequest(username="bloqueado", password="BlockedOrgPassword2026", organization_slug=None),
             db=db_session,
         )
     assert no_slug_exc.value.status_code == 401
@@ -416,9 +450,9 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
             name="Cliente Novo",
             slug="cliente-novo",
             admin_username="admin",
-            admin_password="cliente12345",
+            admin_password="ClienteNovoAdminPassword2026",
             agent_username="agent",
-            agent_password="agent12345",
+            agent_password="ClienteNovoAgentPassword2026",
         ),
         db=db_session,
         actor=platform_admin,
@@ -430,7 +464,7 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
     assert created.users_count == 2
 
     token = login(
-        LoginRequest(username="admin", password="cliente12345", organization_slug="cliente-novo"),
+        LoginRequest(username="admin", password="ClienteNovoAdminPassword2026", organization_slug="cliente-novo"),
         db=db_session,
     )
     assert token.organization_id == created.id
@@ -438,8 +472,8 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
     audit = db_session.query(AuditLog).filter(AuditLog.action == "organization_created").one()
     assert audit.log_metadata["admin_username"] == "admin"
     assert audit.log_metadata["agent_username"] == "agent"
-    assert "cliente12345" not in str(audit.log_metadata)
-    assert "agent12345" not in str(audit.log_metadata)
+    assert "ClienteNovoAdminPassword2026" not in str(audit.log_metadata)
+    assert "ClienteNovoAgentPassword2026" not in str(audit.log_metadata)
 
 
 def test_updating_organization_writes_changed_fields_to_audit(db_session: Session):

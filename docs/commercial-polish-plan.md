@@ -49,6 +49,7 @@ Entregaveis:
 - Criar empresa padrao para migrar os dados atuais.
 - Provisionar admin inicial e usuario tecnico do agent ao criar uma nova empresa.
 - Exigir senhas proprias para admin inicial e agent, sem credenciais padrao em novos clientes.
+- Bloquear seed/bootstrap com senhas padrao ou placeholders ao criar usuarios iniciais.
 - Alterar JWT para carregar `organization_id`.
 - Filtrar todas as consultas por empresa.
 - Separar configuracoes por empresa: bloqueio, Follow-Me, Web Print, LDAP, custos padrao e criacao automatica.
@@ -86,7 +87,9 @@ Entregaveis:
 
 - Gerar instalador unico com configuracao inicial.
 - Suportar instalacao silenciosa com parametros: API URL, chave da empresa, nome do cliente e modo de log.
+- Gerar senhas aleatorias no instalador Lite e salvar credenciais iniciais localmente.
 - Gerar comandos silenciosos no painel usando a lista real de empresas para evitar slug incorreto.
+- Exigir senha do usuario tecnico do agent ao gerar comandos silenciosos, sem valor padrao inseguro.
 - Criar endpoint `/agent/version`.
 - Criar endpoint para baixar versao nova do agent.
 - Agent comparar versao local com versao publicada.

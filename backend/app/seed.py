@@ -7,11 +7,26 @@ from app.models.user import User, UserRole
 from app.services.organization_service import get_or_create_default_organization
 
 
+UNSAFE_SEED_PASSWORDS = {
+    "",
+    "admin12345",
+    "agent12345",
+    "change-me-admin-password",
+    "change-me-agent-password",
+}
+
+
+def validate_seed_password(password: str, setting_name: str) -> None:
+    if password.strip() in UNSAFE_SEED_PASSWORDS:
+        raise RuntimeError(f"{setting_name} deve ser definido com uma senha propria antes de criar usuarios iniciais.")
+
+
 def ensure_user(db: Session, *, username: str, password: str, role: UserRole, full_name: str) -> None:
     organization = get_or_create_default_organization(db)
     user = db.query(User).filter(User.organization_id == organization.id, User.username == username).first()
     if user:
         return
+    validate_seed_password(password, f"Senha inicial de {username}")
     db.add(
         User(
             organization_id=organization.id,

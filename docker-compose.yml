@@ -24,9 +24,9 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-this-secret-in-production-please}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
       INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:-admin}
-      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-admin12345}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:?Set INITIAL_ADMIN_PASSWORD before docker compose up}
       INITIAL_AGENT_USERNAME: ${INITIAL_AGENT_USERNAME:-agent}
-      INITIAL_AGENT_PASSWORD: ${INITIAL_AGENT_PASSWORD:-agent12345}
+      INITIAL_AGENT_PASSWORD: ${INITIAL_AGENT_PASSWORD:?Set INITIAL_AGENT_PASSWORD before docker compose up}
     depends_on:
       postgres:
         condition: service_healthy
