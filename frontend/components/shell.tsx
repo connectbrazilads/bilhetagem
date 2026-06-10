@@ -27,9 +27,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const activeItem = navItems.find((item) => item.href === pathname);
   const [organizationSlug, setOrganizationSlug] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
 
   useEffect(() => {
     setOrganizationSlug(localStorage.getItem("organization_slug") || "");
+    setOrganizationName(localStorage.getItem("organization_name") || "");
   }, []);
 
   function logout() {
@@ -75,9 +77,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-2">
             {organizationSlug ? (
-              <div className="hidden items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs font-semibold text-muted-foreground sm:flex">
+              <div className="hidden max-w-[260px] items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs font-semibold text-muted-foreground sm:flex">
                 <Building2 className="h-3.5 w-3.5" />
-                {organizationSlug}
+                <span className="truncate">{organizationName || organizationSlug}</span>
+                {organizationName ? <span className="text-[10px] font-medium text-muted-foreground/80">/{organizationSlug}</span> : null}
               </div>
             ) : null}
             <Button variant="outline" onClick={logout} title="Sair">

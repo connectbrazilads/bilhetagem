@@ -34,4 +34,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     if user.role == UserRole.agent and not payload.organization_slug:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Informe a empresa para autenticar o agent")
     token = create_access_token(user.username, {"role": user.role.value, "organization_id": user.organization_id})
-    return TokenResponse(access_token=token, organization_id=user.organization_id)
+    return TokenResponse(
+        access_token=token,
+        organization_id=user.organization_id,
+        organization_slug=user.organization.slug if user.organization else None,
+        organization_name=user.organization.name if user.organization else None,
+    )

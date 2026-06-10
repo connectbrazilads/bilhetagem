@@ -40,7 +40,8 @@ export default function LoginPage() {
       }
       const data = await response.json();
       localStorage.setItem("token", data.access_token);
-      localStorage.setItem("organization_slug", normalizedOrganization);
+      localStorage.setItem("organization_slug", data.organization_slug || normalizedOrganization);
+      if (data.organization_name) localStorage.setItem("organization_name", data.organization_name);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");
