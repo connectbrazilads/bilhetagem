@@ -416,6 +416,17 @@ export default function DownloadsPage() {
               Auto-update
             </label>
           </div>
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <div className="flex items-start gap-2">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <div className="font-bold">Execute o comando em PowerShell como Administrador.</div>
+                <div className="mt-0.5 text-amber-800">
+                  Sem elevacao, o agent pode instalar parcialmente e aparecer em Agents como &quot;Sem admin local&quot;, limitando criacao/restauracao de filas e acoes remotas.
+                </div>
+              </div>
+            </div>
+          </div>
           <div className="grid gap-3 lg:grid-cols-2">
             <CommandBox
               title="EXE"
