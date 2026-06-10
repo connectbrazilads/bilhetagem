@@ -26,6 +26,19 @@ Resumo de mercado:
 - A NDD posiciona o Print Control para provedores de outsourcing e clientes finais, com foco em governanca, rastreabilidade, politicas, cotas, ESG, relatorios, alertas, API e operacao remota. A pagina tambem indica o modulo como "em breve", entao ha oportunidade para uma oferta mais simples e disponivel rapidamente no mercado brasileiro.
 - O PaperCut NG e uma referencia madura de gerenciamento autonomo de impressao, com rastreamento detalhado, relatorios, reducao de desperdicio, politicas ecologicas, compatibilidade ampla e licenciamento baseado em usuarios.
 
+Matriz competitiva:
+
+| Tema | NDD Print Control | PaperCut NG | Direcao para o nosso produto |
+| --- | --- | --- | --- |
+| Posicionamento | Suite para outsourcing/MPS e clientes finais, dentro do ecossistema NDD Orbix. | Produto maduro para controle autonomo de impressao, com forte base instalada. | SaaS brasileiro simples para revendas, provedores pequenos/medios e empresas que querem bilhetagem sem servidor complexo. |
+| Instalacao | Tende a operacao corporativa e ecossistema proprietario. | Instalacao guiada, servidor local e componentes maduros para ambiente de impressao. | Instalador unico EXE/MSI, comandos silenciosos por empresa, auto-update e diagnostico remoto como diferencial de baixo suporte. |
+| Rastreamento | Rastreabilidade de impressoes, copias e digitalizacoes. | Tracking detalhado de jobs, usuarios, custos e relatorios. | Captura confiavel de jobs Windows primeiro; copia/digitalizacao embarcada fica fora desta fase. |
+| Politicas e cotas | Governanca, cotas, politicas e automacao. | Quotas, charging, regras e reducao de desperdicio. | Politicas por empresa, usuario, departamento, impressora/fila e horario, com explicacao da decisao no job. |
+| Relatorios | Relatorios, alertas e analytics para gestao de contrato. | Relatorios detalhados e historico operacional. | Fechamento mensal congelado, custo faturavel, rankings e exportacoes prontas para enviar ao cliente final. |
+| Impressoras locais/USB | Nao e o foco da comunicacao publica da pagina. | Forte compatibilidade de ambiente, mas com arquitetura mais ampla. | Suportar bilhetagem de filas USB via agent, deixando claro que SNMP/toner exige IP ou telemetria de rede. |
+| Duplicidade de filas | Espera ambiente gerenciado/padronizado. | Normalmente trabalha bem com servidor/filas controladas. | Resolver aliases/fingerprint como recurso central para PCs diferentes usando nomes locais diferentes para a mesma impressora. |
+| Venda | Proposta enterprise/MPS com grande profundidade operacional. | Produto reconhecido, com historico e releases frequentes. | Ganhar por simplicidade, preco, portugues, implantacao rapida e foco no provedor brasileiro. |
+
 Implicacoes para o nosso produto:
 
 - Nao competir inicialmente como suite enterprise completa; competir como SaaS simples, rapido de instalar e adequado a revendas/provedores pequenos e medios.
