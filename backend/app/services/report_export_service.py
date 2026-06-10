@@ -243,7 +243,13 @@ def render_monthly_closing_pdf(closing: MonthlyClosing) -> bytes:
     return buffer.getvalue()
 
 
-def render_print_jobs_pdf(jobs: list[PrintJob], title: str = "Relatorio de impressoes") -> bytes:
+def _filter_lines(filters: dict[str, str] | None) -> list[str]:
+    if not filters:
+        return ["Nenhum filtro aplicado"]
+    return [f"{label}: {value}" for label, value in filters.items() if value]
+
+
+def render_print_jobs_pdf(jobs: list[PrintJob], title: str = "Relatorio de impressoes", filters: dict[str, str] | None = None) -> bytes:
     summary = summarize_print_jobs(jobs)
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
@@ -256,6 +262,8 @@ def render_print_jobs_pdf(jobs: list[PrintJob], title: str = "Relatorio de impre
     pdf.drawString(40, PAGE_HEIGHT - 38, title)
     pdf.setFont("Helvetica", 10)
     pdf.drawString(40, PAGE_HEIGHT - 57, "Historico filtrado de trabalhos de impressao")
+    pdf.setFont("Helvetica", 8)
+    pdf.drawRightString(PAGE_WIDTH - 40, PAGE_HEIGHT - 57, _truncate(" | ".join(_filter_lines(filters)), 86))
     y = PAGE_HEIGHT - 112
 
     col_w = (PAGE_WIDTH - 100) / 4
@@ -392,7 +400,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     return buffer.getvalue()
 
 
-def render_print_jobs_xlsx(jobs: list[PrintJob]) -> bytes:
+def render_print_jobs_xlsx(jobs: list[PrintJob], filters: dict[str, str] | None = None) -> bytes:
     summary = summarize_print_jobs(jobs)
     workbook = Workbook()
     sheet = workbook.active
@@ -429,6 +437,12 @@ def render_print_jobs_xlsx(jobs: list[PrintJob]) -> bytes:
     summary_sheet.append(["Paginas salvas", summary["saved_pages"]])
     summary_sheet.append(["Custo filtrado", summary["total_cost"]])
     summary_sheet["B8"].number_format = '"R$" #,##0.00'
+    summary_sheet.append([])
+    summary_sheet.append(["Filtros aplicados", "Valor"])
+    for label, value in (filters or {}).items():
+        summary_sheet.append([label, value])
+    if not filters:
+        summary_sheet.append(["Filtro", "Nenhum"])
     _style_sheet(summary_sheet)
 
     buffer = BytesIO()

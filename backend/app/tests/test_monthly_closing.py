@@ -225,6 +225,9 @@ def test_report_export_applies_department_filter(db_session: Session):
     assert sheet["L5"].value == "Cobrado como P&B pela politica: Cobrar colorido como PB"
     assert workbook["Resumo"]["A8"].value == "Custo filtrado"
     assert workbook["Resumo"]["B8"].value == 6.45
+    assert workbook["Resumo"]["A10"].value == "Filtros aplicados"
+    assert workbook["Resumo"]["A11"].value == "Departamento"
+    assert workbook["Resumo"]["B11"].value == "Financeiro"
 
     audit = db_session.query(AuditLog).filter(AuditLog.action == "report_exported").one()
     assert audit.actor_user_id == actor.id

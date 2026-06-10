@@ -396,12 +396,12 @@ export default function ReportsPage() {
                     <tr key={`${closing.id}-snapshot`} className="border-t bg-muted/20">
                       <td colSpan={8} className="p-4">
                         <div className="mb-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
-                          <span>{closing.billable_jobs.toLocaleString("pt-BR")} trabalho(s) cobráveis</span>
+                          <span>{closing.billable_jobs.toLocaleString("pt-BR")} trabalho(s) cobraveis</span>
                           <span>{closing.pending_jobs.toLocaleString("pt-BR")} pendente(s)</span>
                           <span>{closing.blocked_jobs.toLocaleString("pt-BR")} bloqueado(s)</span>
                         </div>
                         <div className="grid gap-4 lg:grid-cols-4">
-                          <SnapshotList title="Top usuários" rows={closing.snapshot.by_user ?? []} />
+                          <SnapshotList title="Top usuarios" rows={closing.snapshot.by_user ?? []} />
                           <SnapshotList title="Top departamentos" rows={closing.snapshot.by_department ?? []} />
                           <SnapshotList title="Top impressoras" rows={closing.snapshot.by_printer ?? []} />
                           <PolicySnapshotList rows={closing.snapshot.by_policy ?? []} />

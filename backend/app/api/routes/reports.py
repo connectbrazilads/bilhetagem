@@ -145,6 +145,33 @@ def _closing_or_404(db: Session, organization_id: int, closing_id: int) -> Month
     return closing
 
 
+def _report_filter_summary(
+    db: Session,
+    organization_id: int,
+    *,
+    user_id: int | None,
+    department_id: int | None,
+    printer_id: int | None,
+    date_from: datetime | None,
+    date_to: datetime | None,
+) -> dict[str, str]:
+    filters: dict[str, str] = {}
+    if user_id:
+        user = db.query(User).filter(User.organization_id == organization_id, User.id == user_id).first()
+        filters["Usuario"] = (user.full_name or user.username) if user else f"ID {user_id}"
+    if department_id:
+        department = db.query(Department).filter(Department.organization_id == organization_id, Department.id == department_id).first()
+        filters["Departamento"] = department.name if department else f"ID {department_id}"
+    if printer_id:
+        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.id == printer_id).first()
+        filters["Impressora"] = printer.name if printer else f"ID {printer_id}"
+    if date_from or date_to:
+        start = date_from.strftime("%d/%m/%Y %H:%M") if date_from else "inicio"
+        end = date_to.strftime("%d/%m/%Y %H:%M") if date_to else "agora"
+        filters["Periodo"] = f"{start} ate {end}"
+    return filters
+
+
 @router.get("/monthly-closings/{closing_id}/export")
 def export_monthly_closing(
     closing_id: int,
@@ -214,6 +241,15 @@ def export_report(
     if date_to:
         query = query.filter(PrintJob.submitted_at <= date_to)
     jobs = query.limit(5000).all()
+    filter_summary = _report_filter_summary(
+        db,
+        actor.organization_id,
+        user_id=user_id,
+        department_id=department_id,
+        printer_id=printer_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
     write_audit(
         db,
         action="report_exported",
@@ -235,13 +271,13 @@ def export_report(
 
     if format == "pdf":
         return Response(
-            content=render_print_jobs_pdf(jobs),
+            content=render_print_jobs_pdf(jobs, filters=filter_summary),
             media_type="application/pdf",
             headers={"Content-Disposition": "attachment; filename=relatorio-impressoes.pdf"},
         )
 
     return Response(
-        content=render_print_jobs_xlsx(jobs),
+        content=render_print_jobs_xlsx(jobs, filters=filter_summary),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=relatorio-impressoes.xlsx"},
     )
