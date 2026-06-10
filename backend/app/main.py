@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import agent_updates, auth, departments, jobs, organizations, policies, printers, quotas, reports, users, settings as settings_route
+from app.api.routes import agent_updates, audit_logs, auth, departments, jobs, organizations, policies, printers, quotas, reports, users, settings as settings_route
 from app.core.config import settings
 from app.lite_init import initialize_lite_database
 from app.services.snmp_service import start_snmp_poller
@@ -25,6 +25,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(agent_updates.router)
+app.include_router(audit_logs.router)
 app.include_router(organizations.router)
 app.include_router(departments.router)
 app.include_router(users.router)

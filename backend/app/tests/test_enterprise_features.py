@@ -12,6 +12,7 @@ from app.models.user import User, UserRole
 from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
 from app.api.routes.auth import login
+from app.api.routes.audit_logs import list_audit_logs
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
 from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
@@ -23,6 +24,7 @@ from app.schemas.department import DepartmentCreate, DepartmentUpdate
 from app.schemas.auth import LoginRequest
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.report_service import dashboard_metrics
+from app.services.audit_service import write_audit
 from app.services.snmp_service import SnmpPrinterStatus, poll_printers_once
 from app.services.ldap_service import sync_ldap_users, test_ldap_connection as check_ldap_connection
 from app.api.routes.jobs import get_pdf_page_count
@@ -429,3 +431,37 @@ def test_user_department_id_assignment_is_scoped_and_clearable(db_session: Sessi
     cleared = update_user_endpoint(created.id, UserUpdate(department_id=None), db=db_session, actor=admin)
     assert cleared.department_id is None
     assert cleared.department_name is None
+
+
+def test_audit_log_listing_is_scoped_by_organization(db_session: Session):
+    other_org = Organization(name="Cliente Audit", slug="cliente-audit", is_active=True)
+    admin = User(username="audit-admin", full_name="Audit Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    other_admin = User(username="audit-other", full_name="Audit Other", role=UserRole.admin, is_active=True, organization=other_org)
+    db_session.add_all([other_org, admin, other_admin])
+    db_session.flush()
+
+    write_audit(
+        db_session,
+        action="printer_updated",
+        entity="printers",
+        entity_id=10,
+        actor_user_id=admin.id,
+        metadata={"name": "KONICA"},
+    )
+    write_audit(
+        db_session,
+        action="printer_updated",
+        entity="printers",
+        entity_id=20,
+        actor_user_id=other_admin.id,
+        metadata={"name": "OUTRA"},
+    )
+    db_session.commit()
+
+    logs = list_audit_logs(action=None, entity=None, limit=100, db=db_session, actor=admin)
+    assert [log.entity_id for log in logs] == [10]
+    assert logs[0].actor_username == "audit-admin"
+    assert logs[0].metadata == {"name": "KONICA"}
+
+    filtered = list_audit_logs(action="printer_updated", entity="printers", limit=100, db=db_session, actor=admin)
+    assert [log.entity_id for log in filtered] == [10]
