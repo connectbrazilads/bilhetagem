@@ -283,6 +283,48 @@ def test_web_print_module_can_be_disabled(db_session: Session):
     assert get_agent_web_prints(db=db_session, current_user=actor) == []
 
 
+def test_disabling_safe_release_authorizes_pending_jobs_and_writes_audit(db_session: Session):
+    user = User(username="followme-user", full_name="FollowMe User", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA FOLLOWME", is_color=True)
+    db_session.add_all([user, printer])
+    db_session.flush()
+    quota = Quota(
+        organization_id=1,
+        user_id=user.id,
+        year=2026,
+        month=6,
+        monthly_limit=100,
+        used_pages=0,
+        monthly_balance=50.0,
+        used_balance=0.0,
+    )
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        pages=4,
+        is_color=True,
+        cost=1.0,
+        status=JobStatus.pending_release,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add_all([quota, job])
+    db_session.commit()
+
+    update_system_settings(db_session, {"safe_release_enabled": False}, organization_id=1)
+
+    db_session.refresh(job)
+    db_session.refresh(quota)
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "pending_jobs_auto_released").one()
+    assert job.status == JobStatus.authorized
+    assert job.reason == "Liberado automaticamente ao desativar Follow-Me"
+    assert quota.used_pages == 4
+    assert quota.used_balance == 1.0
+    assert audit.organization_id == 1
+    assert audit.actor_user_id is None
+    assert audit.log_metadata == {"jobs": 1, "pages": 4, "cost": 1.0, "reason": "safe_release_disabled"}
+
+
 def test_blocking_disabled_behavior(db_session: Session):
     # Create user, printer, and quota with 0 remaining pages
     user = User(username="poor_user", full_name="Poor User", role=UserRole.user)

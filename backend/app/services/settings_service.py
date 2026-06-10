@@ -5,6 +5,7 @@ from app.models.system_setting import SystemSetting
 from app.core.config import settings
 from app.services.organization_service import get_or_create_default_organization
 from app.services.quota_service import get_or_create_current_quota
+from app.services.audit_service import write_audit
 
 
 MONTHLY_REPORT_EMAIL_DEFAULTS = {
@@ -128,9 +129,28 @@ def release_pending_jobs(db: Session, organization_id: int) -> None:
         .filter(PrintJob.organization_id == organization_id, PrintJob.status == JobStatus.pending_release)
         .all()
     )
+    released_jobs = 0
+    released_pages = 0
+    released_cost = 0.0
     for job in pending_jobs:
         quota = get_or_create_current_quota(db, job.user, job.submitted_at)
         quota.used_pages += job.pages
         quota.used_balance += job.cost
         job.status = JobStatus.authorized
         job.reason = "Liberado automaticamente ao desativar Follow-Me"
+        released_jobs += 1
+        released_pages += job.pages
+        released_cost += job.cost
+    if released_jobs:
+        write_audit(
+            db,
+            action="pending_jobs_auto_released",
+            entity="print_jobs",
+            organization_id=organization_id,
+            metadata={
+                "jobs": released_jobs,
+                "pages": released_pages,
+                "cost": round(released_cost, 2),
+                "reason": "safe_release_disabled",
+            },
+        )
