@@ -353,8 +353,15 @@ def test_monthly_closing_export_xlsx(db_session: Session):
         "month": 5,
         "total_jobs": 4,
         "billable_jobs": 2,
+        "pending_jobs": 1,
+        "blocked_jobs": 1,
         "total_pages": 14,
+        "mono_pages": 10,
+        "color_pages": 4,
+        "blocked_pages": 3,
         "total_cost": 1.5,
+        "pending_cost": 1.25,
+        "blocked_cost": 0.75,
     }
 
 

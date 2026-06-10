@@ -253,8 +253,15 @@ def export_monthly_closing(
             "month": closing.month,
             "total_jobs": closing.total_jobs,
             "billable_jobs": closing.billable_jobs,
+            "pending_jobs": closing.pending_jobs,
+            "blocked_jobs": closing.blocked_jobs,
             "total_pages": closing.total_pages,
+            "mono_pages": closing.mono_pages,
+            "color_pages": closing.color_pages,
+            "blocked_pages": closing.blocked_pages,
             "total_cost": closing.total_cost,
+            "pending_cost": closing.snapshot.get("totals", {}).get("pending_cost", 0),
+            "blocked_cost": closing.snapshot.get("totals", {}).get("blocked_cost", 0),
         },
     )
     db.commit()
