@@ -1,15 +1,17 @@
 from functools import lru_cache
 from typing import Any, Union
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_SECRET_KEY = "change-me-in-production"
 
 
 class Settings(BaseSettings):
     app_name: str = "Sistema de Bilhetagem"
     environment: str = "development"
     database_url: str = "postgresql+psycopg://printbilling:printbilling@localhost:5432/printbilling"
-    secret_key: str = Field(default="change-me-in-production", min_length=16)
+    secret_key: str = Field(default=DEFAULT_SECRET_KEY, min_length=16)
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     cors_origins: Union[str, list[str]] = ["http://localhost:3000"]
@@ -54,6 +56,12 @@ class Settings(BaseSettings):
                     pass
             return [i.strip() for i in v_stripped.split(",") if i.strip()]
         return v
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self):
+        if self.environment.strip().lower() in {"prod", "production"} and self.secret_key == DEFAULT_SECRET_KEY:
+            raise ValueError("SECRET_KEY proprio e obrigatorio em producao")
+        return self
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
