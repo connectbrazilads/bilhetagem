@@ -1,5 +1,6 @@
 from datetime import datetime, time, timezone
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.api.routes.policies import create_policy, delete_policy, reorder_policies, update_policy
@@ -15,6 +16,23 @@ from app.schemas.job import PrintJobCreate
 from app.schemas.policy import PrintPolicyCreate, PrintPolicyReorder, PrintPolicyUpdate
 from app.services.policy_service import simulate_print_policy
 from app.services.print_job_service import register_print_job
+
+
+def test_policy_schema_rejects_invalid_weekday_tokens():
+    with pytest.raises(ValueError, match="days_of_week"):
+        PrintPolicyCreate(
+            name="Horario invalido",
+            rule_type=PolicyRuleType.time_window,
+            action=PolicyAction.block,
+            days_of_week="seg,feriado,7",
+            start_time=time(22, 0),
+            end_time=time(6, 0),
+        )
+
+
+def test_policy_update_schema_rejects_invalid_weekday_tokens():
+    with pytest.raises(ValueError, match="days_of_week"):
+        PrintPolicyUpdate(days_of_week="dom,feriado")
 
 
 def _admin(db_session: Session) -> User:
