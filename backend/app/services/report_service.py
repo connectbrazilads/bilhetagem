@@ -1,12 +1,16 @@
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
+from app.models.print_agent import PrintAgent
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
+from app.models.printer_alias import PrinterAlias
 from app.models.user import User
+
+AGENT_ONLINE_WINDOW = timedelta(minutes=3)
 
 
 def _round_money(value: float) -> float:
@@ -30,6 +34,61 @@ def _scoped_job_query(db: Session, organization_id: int):
             Printer.organization_id == organization_id,
         )
     )
+
+
+def _agent_is_online(agent: PrintAgent, now: datetime) -> bool:
+    if not agent.last_seen_at:
+        return False
+    last_seen = agent.last_seen_at
+    if last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    return now - last_seen <= AGENT_ONLINE_WINDOW
+
+
+def _toner_values(printer: Printer) -> list[int]:
+    if isinstance(printer.toner_levels, dict):
+        return [
+            int(value)
+            for value in printer.toner_levels.values()
+            if isinstance(value, (int, float)) and 0 <= int(value) <= 100
+        ]
+    if printer.toner_level is not None:
+        return [printer.toner_level]
+    return []
+
+
+def _operational_health(db: Session, organization_id: int, now: datetime) -> dict:
+    agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization_id).all()
+    printers = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.is_active.is_(True)).all()
+    online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
+    agents_with_alerts = sum(1 for agent in agents if agent.last_error or agent.event_log_enabled is False)
+    monitored_printers = sum(1 for printer in printers if printer.ip_address)
+    low_toner_printers = sum(1 for printer in printers if any(value <= 10 for value in _toner_values(printer)))
+    unbound_queues = (
+        db.query(func.count(PrinterAlias.id))
+        .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.printer_id.is_(None))
+        .scalar()
+        or 0
+    )
+    usb_queues = (
+        db.query(func.count(PrinterAlias.id))
+        .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.connection_type == "usb")
+        .scalar()
+        or 0
+    )
+
+    return {
+        "agents_total": len(agents),
+        "agents_online": online_agents,
+        "agents_offline": max(len(agents) - online_agents, 0),
+        "agents_with_alerts": agents_with_alerts,
+        "printers_total": len(printers),
+        "printers_monitored": monitored_printers,
+        "printers_unmonitored": max(len(printers) - monitored_printers, 0),
+        "low_toner_printers": low_toner_printers,
+        "unbound_queues": int(unbound_queues),
+        "usb_queues": int(usb_queues),
+    }
 
 
 def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
@@ -172,6 +231,7 @@ def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
         "prints_month": prints_month,
         "pages_today": pages_today,
         "pages_month": pages_month,
+        "operational_health": _operational_health(db, organization_id, now),
         "top_users": top_users,
         "top_printers": top_printers,
         "department_usage": department_usage,

@@ -385,13 +385,66 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     org_one_admin = User(username="org1-admin", full_name="Org 1 Admin", role=UserRole.admin, is_active=True, organization_id=1)
     org_one_user = User(username="org1-user", full_name="Org 1 User", role=UserRole.user, is_active=True, organization_id=1, department=org_one_department)
     org_two_user = User(username="org2-user", full_name="Org 2 User", role=UserRole.user, is_active=True, organization_id=other_org.id)
-    org_one_printer = Printer(name="Org 1 Printer", is_color=False, organization_id=1)
-    org_two_printer = Printer(name="Org 2 Printer", is_color=False, organization_id=other_org.id)
+    org_one_printer = Printer(
+        name="Org 1 Printer",
+        is_color=False,
+        organization_id=1,
+        ip_address="192.168.10.20",
+        toner_levels={"black": 8},
+    )
+    org_two_printer = Printer(name="Org 2 Printer", is_color=False, organization_id=other_org.id, ip_address="192.168.20.20")
     db_session.add_all([org_one_department, org_one_admin, org_one_user, org_two_user, org_one_printer, org_two_printer])
+    db_session.flush()
+    now = datetime.now(timezone.utc)
+    org_one_online_agent = PrintAgent(
+        organization_id=1,
+        agent_uid="org1-online-agent",
+        computer_name="PC-ONLINE",
+        event_log_enabled=True,
+        last_seen_at=now,
+    )
+    org_one_alert_agent = PrintAgent(
+        organization_id=1,
+        agent_uid="org1-alert-agent",
+        computer_name="PC-ALERT",
+        event_log_enabled=False,
+        last_error="Event Log indisponivel",
+        last_seen_at=now - timedelta(minutes=10),
+    )
+    org_two_agent = PrintAgent(
+        organization_id=other_org.id,
+        agent_uid="org2-online-agent",
+        computer_name="PC-ORG2",
+        event_log_enabled=True,
+        last_seen_at=now,
+    )
+    db_session.add_all([org_one_online_agent, org_one_alert_agent, org_two_agent])
     db_session.flush()
 
     db_session.add_all(
         [
+            PrinterAlias(
+                organization_id=1,
+                agent_id=org_one_online_agent.id,
+                queue_name="Org 1 USB sem vinculo",
+                connection_type="usb",
+                last_seen_at=now,
+            ),
+            PrinterAlias(
+                organization_id=1,
+                printer_id=org_one_printer.id,
+                agent_id=org_one_online_agent.id,
+                queue_name="Org 1 Printer",
+                connection_type="network",
+                last_seen_at=now,
+            ),
+            PrinterAlias(
+                organization_id=other_org.id,
+                agent_id=org_two_agent.id,
+                queue_name="Org 2 sem vinculo",
+                connection_type="usb",
+                last_seen_at=now,
+            ),
             PrintJob(
                 organization_id=1,
                 user_id=org_one_user.id,
@@ -461,6 +514,18 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     assert metrics["top_printers"] == [
         {"printer": "Org 1 Printer", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
     ]
+    assert metrics["operational_health"] == {
+        "agents_total": 2,
+        "agents_online": 1,
+        "agents_offline": 1,
+        "agents_with_alerts": 1,
+        "printers_total": 1,
+        "printers_monitored": 1,
+        "printers_unmonitored": 0,
+        "low_toner_printers": 1,
+        "unbound_queues": 1,
+        "usb_queues": 1,
+    }
     assert metrics["department_usage"] == [
         {"department": "Financeiro", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
     ]

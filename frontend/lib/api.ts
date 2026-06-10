@@ -5,6 +5,18 @@ export type DashboardMetrics = {
   prints_month: number;
   pages_today: number;
   pages_month: number;
+  operational_health?: {
+    agents_total: number;
+    agents_online: number;
+    agents_offline: number;
+    agents_with_alerts: number;
+    printers_total: number;
+    printers_monitored: number;
+    printers_unmonitored: number;
+    low_toner_printers: number;
+    unbound_queues: number;
+    usb_queues: number;
+  } | null;
   top_users: { username: string; pages: number; cost?: number; cost_per_page?: number }[];
   top_printers: { printer: string; pages: number; cost?: number; cost_per_page?: number }[];
   department_usage: { department: string; pages: number; cost?: number; cost_per_page?: number }[];

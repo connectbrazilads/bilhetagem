@@ -8,6 +8,7 @@ class DashboardMetrics(BaseModel):
     prints_month: int
     pages_today: int
     pages_month: int
+    operational_health: dict | None = None
     top_users: list[dict]
     top_printers: list[dict]
     department_usage: list[dict]

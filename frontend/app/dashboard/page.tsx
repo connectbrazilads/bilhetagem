@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart3, Check, FileText, Info, Leaf, Printer, ShieldAlert, TrendingUp, Users, WalletCards, X } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, Check, FileText, Info, Leaf, Printer, Server, ShieldAlert, TrendingUp, Users, WalletCards, X } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Surface } from "@/components/ui";
@@ -41,6 +41,47 @@ function Stat({ label, value, icon: Icon }: { label: string; value: number; icon
         </div>
       </div>
       <div className="mt-3 text-3xl font-semibold">{value.toLocaleString("pt-BR")}</div>
+    </Surface>
+  );
+}
+
+function HealthStat({
+  label,
+  value,
+  detail,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  tone: "ok" | "warn" | "danger" | "neutral";
+  icon: typeof FileText;
+}) {
+  const tones = {
+    ok: "border-emerald-100 bg-emerald-50/70 text-emerald-900",
+    warn: "border-amber-100 bg-amber-50/80 text-amber-900",
+    danger: "border-red-100 bg-red-50/80 text-red-900",
+    neutral: "border-slate-200 bg-slate-50 text-slate-900",
+  };
+  const iconTones = {
+    ok: "bg-emerald-100 text-emerald-700",
+    warn: "bg-amber-100 text-amber-700",
+    danger: "bg-red-100 text-red-700",
+    neutral: "bg-slate-200 text-slate-700",
+  };
+  return (
+    <Surface className={`p-4 ${tones[tone]}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase opacity-75">{label}</div>
+          <div className="mt-1 text-2xl font-bold">{value.toLocaleString("pt-BR")}</div>
+          <div className="mt-0.5 text-xs opacity-75">{detail}</div>
+        </div>
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${iconTones[tone]}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
     </Surface>
   );
 }
@@ -141,6 +182,7 @@ export default function DashboardPage() {
   );
 
   const totalMonth = data?.pages_month ?? 0;
+  const health = data?.operational_health;
 
   return (
     <ProtectedPage>
@@ -212,6 +254,39 @@ export default function DashboardPage() {
         <Stat label="Impressoes no mes" value={data?.prints_month ?? 0} icon={Users} />
         <Stat label="Paginas no mes" value={data?.pages_month ?? 0} icon={WalletCards} />
       </div>
+
+      {health ? (
+        <div className="mt-4 grid gap-4 md:grid-cols-4">
+          <HealthStat
+            label="Agents online"
+            value={health.agents_online}
+            detail={`${health.agents_total.toLocaleString("pt-BR")} agent(s) cadastrados`}
+            tone={health.agents_offline > 0 ? "warn" : "ok"}
+            icon={Server}
+          />
+          <HealthStat
+            label="Agents com alerta"
+            value={health.agents_with_alerts}
+            detail={`${health.agents_offline.toLocaleString("pt-BR")} offline agora`}
+            tone={health.agents_with_alerts > 0 ? "danger" : "ok"}
+            icon={AlertTriangle}
+          />
+          <HealthStat
+            label="Filas sem vinculo"
+            value={health.unbound_queues}
+            detail={`${health.usb_queues.toLocaleString("pt-BR")} fila(s) USB detectadas`}
+            tone={health.unbound_queues > 0 ? "warn" : "ok"}
+            icon={Activity}
+          />
+          <HealthStat
+            label="Monitoramento"
+            value={health.printers_monitored}
+            detail={`${health.printers_unmonitored.toLocaleString("pt-BR")} sem IP/SNMP, ${health.low_toner_printers.toLocaleString("pt-BR")} toner baixo`}
+            tone={health.printers_unmonitored > 0 || health.low_toner_printers > 0 ? "warn" : "neutral"}
+            icon={Printer}
+          />
+        </div>
+      ) : null}
 
       {data?.eco_metrics ? (
         <div className="mt-4 grid gap-4 md:grid-cols-4">
