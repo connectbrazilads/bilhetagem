@@ -13,7 +13,7 @@ from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.user import User
-from app.services.agent_release_service import is_newer_version, published_agent_version
+from app.services.agent_release_service import is_newer_version, published_agent_update_version
 from app.services.organization_contract_service import printer_contract_overview
 from app.services.printer_identity_service import physical_identity_conflicts
 
@@ -116,14 +116,14 @@ def _agent_has_operational_alert(
     aliases: list[PrinterAlias],
     queue_actions: list[AgentQueueAction],
     has_recent_error_log: bool,
-    latest_agent_version: str,
+    latest_agent_version: str | None,
     now: datetime,
 ) -> bool:
     if not _agent_is_online(agent, now):
         return True
     if agent.last_error or agent.event_log_enabled is False or agent.local_admin is False:
         return True
-    if is_newer_version(latest_agent_version, agent.version):
+    if latest_agent_version and is_newer_version(latest_agent_version, agent.version):
         return True
     if has_recent_error_log:
         return True
@@ -209,8 +209,8 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         )
     }
     agents_with_recent_errors = len(recent_error_agent_ids)
-    latest_agent_version = published_agent_version()
-    outdated_agents = sum(1 for agent in agents if is_newer_version(latest_agent_version, agent.version))
+    latest_agent_version = published_agent_update_version()
+    outdated_agents = sum(1 for agent in agents if latest_agent_version and is_newer_version(latest_agent_version, agent.version))
     agents_with_alerts = sum(
         1
         for agent in agents

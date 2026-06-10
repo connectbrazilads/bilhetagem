@@ -25,7 +25,7 @@ from app.api.routes.agent_updates import (
     poll_queue_actions,
 )
 from app.core.config import settings
-from app.services.agent_release_service import published_agent_version
+from app.services.agent_release_service import published_agent_update_version, published_agent_version
 from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
 from app.models.agent_log import AgentLog
 from app.models.audit_log import AuditLog
@@ -107,6 +107,7 @@ def test_agent_releases_fall_back_to_legacy_file_when_manifest_is_invalid(db_ses
     assert [release.version for release in releases] == ["0.2.0"]
     assert releases[0].signature_status == "unsigned"
     assert releases[0].files[0].sha256 == hashlib.sha256(b"legacy-agent").hexdigest()
+    assert published_agent_update_version() == "0.2.0"
     assert version.update_available is True
     assert version.sha256 == hashlib.sha256(b"legacy-agent").hexdigest()
 
@@ -391,6 +392,7 @@ def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_sessio
     assert release.signature_status == "empty"
     assert release.signature_summary == "Nenhum arquivo publicado"
     assert published_agent_version() == "0.2.0"
+    assert published_agent_update_version() is None
     assert version.latest_version == "0.2.0"
     assert version.update_available is False
     assert version.sha256 is None
@@ -443,6 +445,7 @@ def test_agent_releases_skip_empty_manifest_artifacts(db_session: Session, monke
     assert release.signature_status == "empty"
     assert release.signature_summary == "Nenhum arquivo publicado"
     assert published_agent_version() == "0.7.0"
+    assert published_agent_update_version() is None
     assert version.latest_version == "0.7.0"
     assert version.update_available is False
     assert version.sha256 is None
@@ -932,8 +935,9 @@ def test_agent_health_alerts_report_generic_queue_names(db_session: Session):
     assert "USER" in alerts["generic_queue_names"].message
 
 
-def test_agent_health_alerts_report_operational_issues(db_session: Session, monkeypatch):
+def test_agent_health_alerts_report_operational_issues(db_session: Session, monkeypatch, tmp_path: Path):
     monkeypatch.setattr(settings, "agent_latest_version", "0.3.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
     actor = User(username="agent-alerts", full_name="Agent Alerts", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add(actor)
     db_session.commit()
@@ -963,13 +967,17 @@ def test_agent_health_alerts_report_operational_issues(db_session: Session, monk
     )
 
     alert_codes = {alert.code for alert in response.health_alerts}
-    assert {"last_error", "event_log_disabled", "local_admin_missing", "unbound_queues", "generic_queue_names", "outdated_version"}.issubset(alert_codes)
+    assert {"last_error", "event_log_disabled", "local_admin_missing", "unbound_queues", "generic_queue_names"}.issubset(alert_codes)
+    assert "outdated_version" not in alert_codes
     assert "offline" not in alert_codes
     assert response.local_admin is False
 
 
-def test_outdated_agent_with_disabled_auto_update_is_actionable(db_session: Session, monkeypatch):
+def test_outdated_agent_with_disabled_auto_update_is_actionable(db_session: Session, monkeypatch, tmp_path: Path):
     monkeypatch.setattr(settings, "agent_latest_version", "0.3.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "agent_download_filename", "PrintBillingAgent.exe")
+    (tmp_path / "PrintBillingAgent.exe").write_bytes(b"agent-v3")
     actor = User(username="agent-update-disabled", full_name="Agent Update Disabled", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add(actor)
     db_session.commit()

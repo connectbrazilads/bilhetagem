@@ -39,7 +39,7 @@ from app.schemas.agent import (
     PrintAgentRead,
 )
 from app.services.audit_service import write_audit
-from app.services.agent_release_service import is_newer_version, published_agent_version, version_tuple
+from app.services.agent_release_service import is_newer_version, published_agent_update_version, version_tuple
 from app.services.organization_service import DEFAULT_ORGANIZATION_SLUG
 from app.services.printer_identity_service import conflicting_alias_ids
 
@@ -584,8 +584,8 @@ def _agent_health_alerts(
         sample = ", ".join(action.queue_name for action in stale_actions[:3])
         suffix = f": {sample}" if sample else ""
         alerts.append(AgentHealthAlertRead(code="stale_queue_actions", severity="warning", message=f"{count} acao(oes) remota(s) sem conclusao ha mais de 15 min{suffix}"))
-    latest_version = published_agent_version()
-    if is_newer_version(latest_version, agent.version):
+    latest_version = published_agent_update_version()
+    if latest_version and is_newer_version(latest_version, agent.version):
         alerts.append(AgentHealthAlertRead(code="outdated_version", severity="info", message=f"Agent abaixo da versao publicada {latest_version}"))
         if agent.auto_update_enabled is False:
             alerts.append(

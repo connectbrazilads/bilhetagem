@@ -128,7 +128,7 @@ def _release_sort_key(release: dict) -> tuple[str, tuple[int, ...]]:
     return (str(release.get("published_at") or ""), version_tuple(str(release.get("version") or "")))
 
 
-def published_agent_version() -> str:
+def published_agent_update_version() -> str | None:
     manifest_path = Path(settings.agent_download_dir) / settings.agent_release_manifest_filename
     if manifest_path.exists():
         try:
@@ -167,4 +167,14 @@ def published_agent_version() -> str:
                         return version
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             pass
-    return settings.agent_latest_version
+        else:
+            return None
+
+    path = Path(settings.agent_download_dir) / settings.agent_download_filename
+    if _publishable_file_size(path) is not None:
+        return settings.agent_latest_version
+    return None
+
+
+def published_agent_version() -> str:
+    return published_agent_update_version() or settings.agent_latest_version

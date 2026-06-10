@@ -1044,6 +1044,8 @@ def test_agent_printer_status_update_requires_bound_alias(db_session: Session):
 def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch, tmp_path: Path):
     monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
     monkeypatch.setattr(settings, "agent_latest_version", "0.9.0")
+    monkeypatch.setattr(settings, "agent_download_filename", "PrintBillingAgent.exe")
+    (tmp_path / "PrintBillingAgent.exe").write_bytes(b"agent-v9")
 
     default_org = db_session.query(Organization).filter(Organization.id == 1).one()
     default_org.billing_plan = "professional"
