@@ -14,6 +14,7 @@ class TokenResponse(BaseModel):
     organization_id: int | None = None
     organization_slug: str | None = None
     organization_name: str | None = None
+    organization_billing_status: str | None = None
 
 
 class AuthContextResponse(BaseModel):
@@ -23,3 +24,4 @@ class AuthContextResponse(BaseModel):
     organization_id: int
     organization_slug: str
     organization_name: str
+    organization_billing_status: str

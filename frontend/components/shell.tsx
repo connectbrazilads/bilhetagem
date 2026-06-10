@@ -30,6 +30,7 @@ type AuthContext = {
   organization_id: number;
   organization_slug: string;
   organization_name: string;
+  organization_billing_status: "trial" | "active" | "past_due" | "suspended";
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -38,12 +39,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const activeItem = navItems.find((item) => item.href === pathname);
   const [organizationSlug, setOrganizationSlug] = useState("");
   const [organizationName, setOrganizationName] = useState("");
+  const [organizationBillingStatus, setOrganizationBillingStatus] = useState("");
   const [role, setRole] = useState("");
   const visibleNavItems = navItems.filter((item) => !role || item.roles.includes(role));
 
   useEffect(() => {
     setOrganizationSlug(localStorage.getItem("organization_slug") || "");
     setOrganizationName(localStorage.getItem("organization_name") || "");
+    setOrganizationBillingStatus(localStorage.getItem("organization_billing_status") || "");
     const token = localStorage.getItem("token");
     if (!token) return;
     setRole(getCurrentRole(token) || "");
@@ -53,9 +56,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         if (!active) return;
         setOrganizationSlug(context.organization_slug);
         setOrganizationName(context.organization_name);
+        setOrganizationBillingStatus(context.organization_billing_status);
         setRole(context.role);
         localStorage.setItem("organization_slug", context.organization_slug);
         localStorage.setItem("organization_name", context.organization_name);
+        localStorage.setItem("organization_billing_status", context.organization_billing_status);
       })
       .catch(() => undefined);
     return () => {
@@ -65,6 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   function logout() {
     localStorage.removeItem("token");
+    localStorage.removeItem("organization_billing_status");
     router.push("/");
   }
 
@@ -110,6 +116,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Building2 className="h-3.5 w-3.5" />
                 <span className="truncate">{organizationName || organizationSlug}</span>
                 {organizationName ? <span className="text-[10px] font-medium text-muted-foreground/80">/{organizationSlug}</span> : null}
+                {billingStatusLabel(organizationBillingStatus) ? (
+                  <span className={cn("rounded-full border px-1.5 py-0.5 text-[10px] font-bold", billingStatusClass(organizationBillingStatus))}>
+                    {billingStatusLabel(organizationBillingStatus)}
+                  </span>
+                ) : null}
               </div>
             ) : null}
             <Button variant="outline" onClick={logout} title="Sair">
@@ -122,4 +133,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </main>
     </div>
   );
+}
+
+function billingStatusLabel(status: string) {
+  if (status === "trial") return "Teste";
+  if (status === "past_due") return "Em atraso";
+  return "";
+}
+
+function billingStatusClass(status: string) {
+  if (status === "past_due") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-blue-200 bg-blue-50 text-blue-700";
 }

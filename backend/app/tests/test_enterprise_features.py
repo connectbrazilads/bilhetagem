@@ -1033,6 +1033,7 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
     assert token.organization_id == other_org.id
     assert token.organization_slug == "cliente-c"
     assert token.organization_name == "Cliente C"
+    assert token.organization_billing_status == "trial"
 
     with pytest.raises(HTTPException) as exc:
         login(
@@ -1098,7 +1099,7 @@ def test_organization_metrics_include_billable_monthly_jobs(db_session: Session)
 
 
 def test_auth_context_returns_current_organization(db_session: Session):
-    organization = Organization(name="Cliente Contexto", slug="cliente-contexto", is_active=True)
+    organization = Organization(name="Cliente Contexto", slug="cliente-contexto", is_active=True, billing_status="past_due")
     user = User(username="context-admin", full_name="Context Admin", role=UserRole.admin, is_active=True, organization=organization)
     db_session.add_all([organization, user])
     db_session.commit()
@@ -1111,6 +1112,7 @@ def test_auth_context_returns_current_organization(db_session: Session):
     assert context.organization_id == organization.id
     assert context.organization_slug == "cliente-contexto"
     assert context.organization_name == "Cliente Contexto"
+    assert context.organization_billing_status == "past_due"
 
 
 def test_agent_login_requires_explicit_organization_slug(db_session: Session):

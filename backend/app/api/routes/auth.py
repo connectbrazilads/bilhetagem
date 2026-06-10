@@ -44,6 +44,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         organization_id=user.organization_id,
         organization_slug=user.organization.slug if user.organization else None,
         organization_name=user.organization.name if user.organization else None,
+        organization_billing_status=user.organization.billing_status if user.organization else None,
     )
 
 
@@ -56,4 +57,5 @@ def current_auth_context(current_user: User = Depends(get_current_user)) -> Auth
         organization_id=current_user.organization_id,
         organization_slug=current_user.organization.slug,
         organization_name=current_user.organization.name,
+        organization_billing_status=current_user.organization.billing_status,
     )
