@@ -98,6 +98,7 @@ Entregaveis:
 - Agent validar SHA256 da atualizacao baixada antes de substituir o executavel.
 - Manter rollback simples se a atualizacao falhar.
 - Script de auto-update preservar backup `.bak` e restaurar a versao anterior se a troca/start falhar.
+- Script de auto-update registrar etapas, sucesso e rollback em `agent_update.log`.
 
 Criterios de aceite:
 

@@ -60,6 +60,8 @@ O backend expoe:
 - `GET /agent/download`
 - `GET /agent/releases`
 
+Quando o agent aplica uma atualizacao, ele registra as etapas em `agent_update.log` na pasta de instalacao. Se a troca falhar, o script restaura o executavel anterior a partir do backup `.bak` e tenta iniciar o servico novamente.
+
 Para publicar uma nova versao na VPS, copie `PrintBillingAgent.exe` para a pasta configurada em
 `AGENT_DOWNLOAD_DIR` e ajuste `AGENT_LATEST_VERSION` no ambiente do backend. Por padrao, o backend
 procura `agent_downloads/PrintBillingAgent.exe`.
