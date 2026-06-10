@@ -41,7 +41,7 @@ from app.services.report_service import dashboard_metrics
 from app.services.monthly_closing_service import build_monthly_snapshot
 from app.services.audit_service import write_audit
 from app.services.snmp_service import SnmpPrinterStatus, poll_printers_once
-from app.services.ldap_service import sync_ldap_users, test_ldap_connection as check_ldap_connection
+from app.services.ldap_service import LDAPUserRecord, sync_ldap_users, test_ldap_connection as check_ldap_connection
 from app.seed import ensure_user, validate_seed_password
 from app.api.routes.jobs import get_pdf_page_count
 from app.services.print_job_service import register_print_job
@@ -146,8 +146,27 @@ def test_snmp_poll_uses_real_status_payload(db_session: Session, monkeypatch):
     assert printer.paper_status == "Pronta"
 
 
-def test_ldap_user_and_department_sync(db_session: Session):
-    # Perform LDAP sync
+def test_ldap_user_and_department_sync(db_session: Session, monkeypatch):
+    technical_agent = User(
+        organization_id=1,
+        username="agent",
+        full_name="Agente Windows",
+        role=UserRole.agent,
+        is_active=True,
+    )
+    db_session.add(technical_agent)
+    db_session.commit()
+    monkeypatch.setattr(
+        "app.services.ldap_service._fetch_ldap_users",
+        lambda server, bind_dn, bind_password, search_base: [
+            LDAPUserRecord(username="ana.silva", full_name="Ana Silva", department="TI"),
+            LDAPUserRecord(username="pedro.santos", full_name="Pedro Santos", department="Financeiro"),
+            LDAPUserRecord(username="carla.souza", full_name="Carla Souza", department="Recursos Humanos"),
+            LDAPUserRecord(username="marcos.oliveira", full_name="Marcos Oliveira", department="Vendas"),
+            LDAPUserRecord(username="agent", full_name="Conta LDAP Agent", department="TI"),
+        ],
+    )
+
     result = sync_ldap_users(
         db=db_session,
         server="ldap://localhost:389",
@@ -159,6 +178,7 @@ def test_ldap_user_and_department_sync(db_session: Session):
     assert result["success"] is True
     assert result["total_synced"] == 4
     assert result["new_users"] == 4
+    assert result["skipped_users"] == 1
     
     # Verify users and departments are in the DB
     users = db_session.query(User).all()
@@ -167,24 +187,60 @@ def test_ldap_user_and_department_sync(db_session: Session):
     assert "pedro.santos" in usernames
     synced_user = db_session.query(User).filter(User.username == "ana.silva").one()
     assert synced_user.password_hash is None
+    db_session.refresh(technical_agent)
+    assert technical_agent.role == UserRole.agent
+    assert technical_agent.full_name == "Agente Windows"
     
     # Verify quotas were initialized
-    quota = db_session.query(Quota).filter(Quota.user_id == users[0].id).first()
+    quota = db_session.query(Quota).filter(Quota.user_id == synced_user.id).first()
     assert quota is not None
     assert quota.monthly_balance == 50.0
-    
-    # Test connection validation error
+
     with pytest.raises(ValueError):
         check_ldap_connection("", "", "")
-        
-    with pytest.raises(ValueError):
-        check_ldap_connection("ldap://fail-server", "admin", "error-pass")
+
+
+def test_ldap_connection_uses_real_bind_and_unbind(monkeypatch):
+    calls = []
+
+    class FakeServer:
+        def __init__(self, server, get_info=None, connect_timeout=None):
+            calls.append(("server", server, get_info, connect_timeout))
+
+    class FakeConnection:
+        def __init__(self, server, user=None, password=None, auto_bind=False, receive_timeout=None):
+            calls.append(("connection", user, password, auto_bind, receive_timeout))
+            self.bound = True
+
+        def unbind(self):
+            calls.append(("unbind",))
+
+    monkeypatch.setattr("app.services.ldap_service.Server", FakeServer)
+    monkeypatch.setattr("app.services.ldap_service.Connection", FakeConnection)
+    monkeypatch.setattr("app.services.ldap_service.LDAPException", Exception)
+    monkeypatch.setattr("app.services.ldap_service.ALL", "ALL")
+
+    assert check_ldap_connection("ldap://ad.local:389", "cn=admin,dc=empresa,dc=local", "secret") is True
+    assert calls == [
+        ("server", "ldap://ad.local:389", "ALL", 5),
+        ("connection", "cn=admin,dc=empresa,dc=local", "secret", True, 15),
+        ("unbind",),
+    ]
 
 
 def test_ldap_sync_endpoint_persists_audit_after_service_commit(db_session: Session, monkeypatch):
     actor = User(username="ldap-audit-admin", full_name="LDAP Audit Admin", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add(actor)
     db_session.commit()
+    monkeypatch.setattr(
+        "app.services.ldap_service._fetch_ldap_users",
+        lambda server, bind_dn, bind_password, search_base: [
+            LDAPUserRecord(username="ana.silva", full_name="Ana Silva", department="TI"),
+            LDAPUserRecord(username="pedro.santos", full_name="Pedro Santos", department="Financeiro"),
+            LDAPUserRecord(username="carla.souza", full_name="Carla Souza", department="Recursos Humanos"),
+            LDAPUserRecord(username="marcos.oliveira", full_name="Marcos Oliveira", department="Vendas"),
+        ],
+    )
     original_commit = db_session.commit
     commit_count = 0
 

@@ -104,7 +104,7 @@ def test_ldap_endpoint(
             bind_dn=payload.bind_dn,
             bind_password=payload.bind_password
         )
-        return {"success": True, "message": "Conexão com LDAP realizada com sucesso (MOCK)"}
+        return {"success": True, "message": "Conexão com LDAP realizada com sucesso"}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
