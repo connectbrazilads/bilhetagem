@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.department import Department
 from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus
+from app.models.agent_log import AgentLog
 from app.models.print_agent import PrintAgent
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
@@ -14,6 +15,7 @@ from app.models.user import User
 
 AGENT_ONLINE_WINDOW = timedelta(minutes=3)
 QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
+RECENT_AGENT_LOG_ALERT_WINDOW = timedelta(minutes=15)
 
 
 def _round_money(value: float) -> float:
@@ -88,10 +90,18 @@ def _queue_action_is_stale(action: AgentQueueAction, now: datetime) -> bool:
     return now - reference > QUEUE_ACTION_STALE_AFTER
 
 
-def _agent_has_operational_alert(agent: PrintAgent, aliases: list[PrinterAlias], queue_actions: list[AgentQueueAction], now: datetime) -> bool:
+def _agent_has_operational_alert(
+    agent: PrintAgent,
+    aliases: list[PrinterAlias],
+    queue_actions: list[AgentQueueAction],
+    has_recent_error_log: bool,
+    now: datetime,
+) -> bool:
     if not _agent_is_online(agent, now):
         return True
     if agent.last_error or agent.event_log_enabled is False:
+        return True
+    if has_recent_error_log:
         return True
     if any(_queue_action_is_stale(action, now) for action in queue_actions):
         return True
@@ -157,6 +167,20 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     queue_actions_by_agent: dict[int, list[AgentQueueAction]] = defaultdict(list)
     for action in pending_queue_actions:
         queue_actions_by_agent[action.agent_id].append(action)
+    recent_log_cutoff = now - RECENT_AGENT_LOG_ALERT_WINDOW
+    recent_error_agent_ids = {
+        int(row[0])
+        for row in (
+            db.query(AgentLog.agent_id)
+            .filter(
+                AgentLog.organization_id == organization_id,
+                AgentLog.received_at >= recent_log_cutoff,
+                AgentLog.level.in_(["error", "critical"]),
+            )
+            .distinct()
+            .all()
+        )
+    }
     agents_with_alerts = sum(
         1
         for agent in agents
@@ -164,6 +188,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
             agent,
             aliases_by_agent.get(agent.id, []),
             queue_actions_by_agent.get(agent.id, []),
+            agent.id in recent_error_agent_ids,
             now,
         )
     )
