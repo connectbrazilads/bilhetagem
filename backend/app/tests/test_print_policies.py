@@ -372,6 +372,80 @@ def test_policy_simulation_resolves_alias_by_fingerprint(db_session: Session):
     assert simulation.decision.action == PolicyAction.require_release
 
 
+def test_policy_simulation_resolves_alias_fingerprint_case_insensitive(db_session: Session):
+    user = User(username="alias-case-sim", full_name="Alias Case Sim", role=UserRole.user, is_active=True, organization_id=1)
+    printer = _printer(db_session)
+    alias = PrinterAlias(
+        organization_id=1,
+        printer_id=printer.id,
+        queue_name="KONICA CASE",
+        fingerprint="SERIAL:SN-CASE-POLICY",
+    )
+    db_session.add_all([user, alias])
+    db_session.flush()
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Bloquear fingerprint case",
+            priority=10,
+            rule_type=PolicyRuleType.always,
+            action=PolicyAction.block,
+            printer_alias_id=alias.id,
+        )
+    )
+    db_session.commit()
+
+    simulation = simulate_print_policy(
+        db_session,
+        PrintJobCreate(
+            username="alias-case-sim",
+            printer_name="Fila local",
+            queue_name="KONICA CASE",
+            pages=1,
+            is_color=False,
+            printer_fingerprint="serial:sn-case-policy",
+        ),
+        organization_id=1,
+    )
+
+    assert simulation.alias is not None
+    assert simulation.alias.id == alias.id
+    assert simulation.decision.action == PolicyAction.block
+
+
+def test_policy_simulation_resolves_printer_serial_case_insensitive(db_session: Session):
+    user = User(username="serial-case-sim", full_name="Serial Case Sim", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA SERIAL POLICY", is_color=True, serial_number="SN-POLICY-CASE")
+    db_session.add_all([user, printer])
+    db_session.flush()
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Liberar serial case",
+            priority=10,
+            rule_type=PolicyRuleType.color,
+            action=PolicyAction.require_release,
+            printer_id=printer.id,
+        )
+    )
+    db_session.commit()
+
+    simulation = simulate_print_policy(
+        db_session,
+        PrintJobCreate(
+            username="serial-case-sim",
+            printer_name="Nome local diferente",
+            pages=2,
+            is_color=True,
+            printer_serial="sn-policy-case",
+        ),
+        organization_id=1,
+    )
+
+    assert simulation.printer.id == printer.id
+    assert simulation.decision.action == PolicyAction.require_release
+
+
 def test_queue_name_policy_matches_normalized_queue_name(db_session: Session):
     _admin(db_session)
     _printer(db_session)

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.print_agent import PrintAgent
@@ -47,6 +48,41 @@ def _clean_optional(value: str | None) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _identity_key(value: str | None) -> str | None:
+    cleaned = _clean_optional(value)
+    return cleaned.lower() if cleaned else None
+
+
+def _find_alias_by_identity(db: Session, organization_id: int, column, value: str | None) -> PrinterAlias | None:
+    identity = _identity_key(value)
+    if not identity:
+        return None
+    return (
+        db.query(PrinterAlias)
+        .filter(
+            PrinterAlias.organization_id == organization_id,
+            column.isnot(None),
+            func.lower(column) == identity,
+        )
+        .first()
+    )
+
+
+def _find_printer_by_serial(db: Session, organization_id: int, serial_number: str | None) -> Printer | None:
+    identity = _identity_key(serial_number)
+    if not identity:
+        return None
+    return (
+        db.query(Printer)
+        .filter(
+            Printer.organization_id == organization_id,
+            Printer.serial_number.isnot(None),
+            func.lower(Printer.serial_number) == identity,
+        )
+        .first()
+    )
 
 
 def _allowed_weekdays(policy: PrintPolicy) -> set[int] | None:
@@ -197,16 +233,12 @@ def simulate_print_policy(db: Session, payload: PrintJobCreate, organization_id:
             .first()
         )
     if alias is None and _clean_optional(payload.printer_fingerprint):
-        alias = (
-            db.query(PrinterAlias)
-            .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.fingerprint == _clean_optional(payload.printer_fingerprint))
-            .first()
-        )
+        alias = _find_alias_by_identity(db, organization_id, PrinterAlias.fingerprint, payload.printer_fingerprint)
 
     printer = None
     serial = _clean_optional(payload.printer_serial)
     if serial:
-        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.serial_number == serial).first()
+        printer = _find_printer_by_serial(db, organization_id, serial)
     ip_address = _clean_optional(payload.printer_ip_address)
     if printer is None and ip_address:
         printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.ip_address == ip_address).first()
