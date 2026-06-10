@@ -320,6 +320,30 @@ def test_report_export_applies_department_filter(db_session: Session):
     assert audit.log_metadata["filter_summary"] == {"Departamento": "Financeiro"}
 
 
+def test_report_export_rejects_filters_from_other_organization(db_session: Session):
+    other_org = Organization(name="Cliente Relatorio B", slug="cliente-relatorio-b", is_active=True)
+    actor = User(username="report-scope-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    other_department = Department(organization=other_org, name="Financeiro")
+    other_user = User(username="report-scope-user", full_name="Outro Usuario", role=UserRole.user, is_active=True, organization=other_org, department=other_department)
+    other_printer = Printer(organization=other_org, name="KONICA OUTRA EMPRESA", is_color=True)
+    db_session.add_all([other_org, actor, other_department, other_user, other_printer])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as user_exc:
+        export_report(format="xlsx", user_id=other_user.id, db=db_session, actor=actor)
+    assert user_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as department_exc:
+        export_report(format="xlsx", department_id=other_department.id, db=db_session, actor=actor)
+    assert department_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as printer_exc:
+        export_report(format="xlsx", printer_id=other_printer.id, db=db_session, actor=actor)
+    assert printer_exc.value.status_code == 404
+
+    assert db_session.query(AuditLog).filter(AuditLog.action == "report_exported").count() == 0
+
+
 def test_report_export_pdf_uses_commercial_renderer_and_audit(db_session: Session):
     _seed_job_data(db_session)
     actor = User(username="report-general-pdf-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
