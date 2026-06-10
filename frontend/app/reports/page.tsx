@@ -60,6 +60,8 @@ type MonthlyClosing = {
     totals?: {
       released_jobs?: number;
       pending_pages?: number;
+      pending_cost?: number;
+      blocked_cost?: number;
     };
     by_user?: ClosingSnapshotRow[];
     by_department?: ClosingSnapshotRow[];
@@ -83,7 +85,9 @@ type ClosingPolicySnapshotRow = {
   jobs: number;
   billable_jobs: number;
   pending_jobs: number;
+  pending_cost?: number;
   blocked_jobs: number;
+  blocked_cost?: number;
   pages: number;
   saved_pages: number;
   cost: number;
@@ -476,7 +480,9 @@ export default function ReportsPage() {
                           <span>{(closing.snapshot.totals?.released_jobs ?? 0).toLocaleString("pt-BR")} liberado(s)</span>
                           <span>{closing.pending_jobs.toLocaleString("pt-BR")} pendente(s)</span>
                           <span>{(closing.snapshot.totals?.pending_pages ?? 0).toLocaleString("pt-BR")} pag. pendente(s)</span>
+                          <span>R$ {(closing.snapshot.totals?.pending_cost ?? 0).toFixed(2)} pendente</span>
                           <span>{closing.blocked_jobs.toLocaleString("pt-BR")} bloqueado(s)</span>
+                          <span>R$ {(closing.snapshot.totals?.blocked_cost ?? 0).toFixed(2)} bloqueado estimado</span>
                         </div>
                         <div className="grid gap-4 lg:grid-cols-4">
                           <SnapshotList title="Top usuarios" rows={closing.snapshot.by_user ?? []} />

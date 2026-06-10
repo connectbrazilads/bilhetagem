@@ -252,9 +252,9 @@ def render_monthly_closing_pdf(closing: MonthlyClosing) -> bytes:
     col_w = (PAGE_WIDTH - 100) / 4
     totals = closing.snapshot.get("totals", {}) if closing.snapshot else {}
     _draw_metric(pdf, 40, y, col_w, "Paginas cobraveis", str(closing.total_pages), f"{closing.billable_jobs} trab. | {totals.get('released_jobs', 0)} liberado(s)")
-    _draw_metric(pdf, 50 + col_w, y, col_w, "Custo total", _money(closing.total_cost), "Base para cobranca")
+    _draw_metric(pdf, 50 + col_w, y, col_w, "Custo total", _money(closing.total_cost), f"Pend.: {_money(float(totals.get('pending_cost', 0)))}")
     _draw_metric(pdf, 60 + col_w * 2, y, col_w, "Coloridas", str(closing.color_pages), f"P&B: {closing.mono_pages}")
-    _draw_metric(pdf, 70 + col_w * 3, y, col_w, "Paginas salvas", str(closing.blocked_pages), f"{closing.blocked_jobs} bloq. | {totals.get('pending_pages', 0)} pend.")
+    _draw_metric(pdf, 70 + col_w * 3, y, col_w, "Paginas salvas", str(closing.blocked_pages), f"{closing.blocked_jobs} bloq. | {_money(float(totals.get('blocked_cost', 0)))}")
     y -= 92
 
     eco = closing.snapshot.get("eco", {})
@@ -392,11 +392,13 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     summary.append(["Trabalhos liberados", closing.snapshot.get("totals", {}).get("released_jobs", 0)])
     summary.append(["Trabalhos pendentes", closing.pending_jobs])
     summary.append(["Paginas pendentes", closing.snapshot.get("totals", {}).get("pending_pages", 0)])
+    summary.append(["Custo pendente", closing.snapshot.get("totals", {}).get("pending_cost", 0)])
     summary.append(["Trabalhos bloqueados", closing.blocked_jobs])
     summary.append(["Paginas cobraveis", closing.total_pages])
     summary.append(["Paginas P&B", closing.mono_pages])
     summary.append(["Paginas coloridas", closing.color_pages])
     summary.append(["Paginas salvas", closing.blocked_pages])
+    summary.append(["Custo bloqueado estimado", closing.snapshot.get("totals", {}).get("blocked_cost", 0)])
     summary.append(["Custo total", closing.total_cost])
     eco = closing.snapshot.get("eco", {})
     summary.append(["CO2 evitado (g)", eco.get("co2_saved_g", 0)])
@@ -410,7 +412,8 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
         summary.append(["Impressoras ativas", contract.get("active_printers_count", 0)])
         summary.append(["Uso do contrato de impressoras (%)", contract.get("printer_usage_percent", 0.0)])
         summary.append(["Status do limite de impressoras", contract.get("printer_limit_status", "unlimited")])
-    summary["B14"].number_format = '"R$" #,##0.00'
+    for cell in ("B9", "B15", "B16"):
+        summary[cell].number_format = '"R$" #,##0.00'
     _style_sheet(summary)
 
     for sheet_name, key in (("Usuarios", "by_user"), ("Departamentos", "by_department"), ("Impressoras", "by_printer"), ("Tipo", "by_type")):
@@ -424,7 +427,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
         _style_sheet(sheet)
 
     policies = workbook.create_sheet("Politicas")
-    policies.append(["Politica", "Acao", "Trabalhos", "Cobraveis", "Pendentes", "Pag. Pendentes", "Bloqueados", "Paginas", "P&B", "Coloridas", "Salvas", "Custo", "Custo/Pag."])
+    policies.append(["Politica", "Acao", "Trabalhos", "Cobraveis", "Pendentes", "Pag. Pendentes", "Custo Pendente", "Bloqueados", "Custo Bloqueado", "Paginas", "P&B", "Coloridas", "Salvas", "Custo", "Custo/Pag."])
     for row in closing.snapshot.get("by_policy", []):
         policies.append(
             [
@@ -434,7 +437,9 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
                 row["billable_jobs"],
                 row["pending_jobs"],
                 row.get("pending_pages", 0),
+                row.get("pending_cost", 0),
                 row["blocked_jobs"],
+                row.get("blocked_cost", 0),
                 row["pages"],
                 row["mono_pages"],
                 row["color_pages"],
@@ -443,9 +448,10 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
                 row.get("cost_per_page", 0),
             ]
         )
-    for row in policies.iter_rows(min_row=2, min_col=12, max_col=13):
+    for row in policies.iter_rows(min_row=2, min_col=7, max_col=15):
         for cell in row:
-            cell.number_format = '"R$" #,##0.00'
+            if cell.column in {7, 9, 14, 15}:
+                cell.number_format = '"R$" #,##0.00'
     _style_sheet(policies)
 
     buffer = BytesIO()

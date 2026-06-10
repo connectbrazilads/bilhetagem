@@ -106,11 +106,13 @@ class MonthlyClosingTotalsSnapshot(BaseModel):
     billable_jobs: int = 0
     pending_jobs: int = 0
     pending_pages: int = 0
+    pending_cost: float = 0.0
     blocked_jobs: int = 0
     total_pages: int = 0
     mono_pages: int = 0
     color_pages: int = 0
     blocked_pages: int = 0
+    blocked_cost: float = 0.0
     total_cost: float = 0.0
     released_jobs: int = 0
 
@@ -132,7 +134,9 @@ class MonthlyClosingPolicySnapshot(BaseModel):
     billable_jobs: int = 0
     pending_jobs: int = 0
     pending_pages: int = 0
+    pending_cost: float = 0.0
     blocked_jobs: int = 0
+    blocked_cost: float = 0.0
     pages: int = 0
     mono_pages: int = 0
     color_pages: int = 0

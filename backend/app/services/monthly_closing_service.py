@@ -51,7 +51,9 @@ def _empty_policy_bucket(name: str, action: str | None) -> dict:
         "billable_jobs": 0,
         "pending_jobs": 0,
         "pending_pages": 0,
+        "pending_cost": 0.0,
         "blocked_jobs": 0,
+        "blocked_cost": 0.0,
         "pages": 0,
         "mono_pages": 0,
         "color_pages": 0,
@@ -92,11 +94,13 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
         "billable_jobs": 0,
         "pending_jobs": 0,
         "pending_pages": 0,
+        "pending_cost": 0.0,
         "blocked_jobs": 0,
         "total_pages": 0,
         "mono_pages": 0,
         "color_pages": 0,
         "blocked_pages": 0,
+        "blocked_cost": 0.0,
         "total_cost": 0.0,
         "released_jobs": 0,
     }
@@ -111,15 +115,19 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
         if job.status == JobStatus.pending_release:
             totals["pending_jobs"] += 1
             totals["pending_pages"] += job.pages
+            totals["pending_cost"] += job.cost
             if policy_bucket:
                 policy_bucket["pending_jobs"] += 1
                 policy_bucket["pending_pages"] += job.pages
+                policy_bucket["pending_cost"] += job.cost
         if job.status in blocked_statuses:
             totals["blocked_jobs"] += 1
             totals["blocked_pages"] += job.pages
+            totals["blocked_cost"] += job.cost
             if policy_bucket:
                 policy_bucket["blocked_jobs"] += 1
                 policy_bucket["saved_pages"] += job.pages
+                policy_bucket["blocked_cost"] += job.cost
             continue
         if job.status not in billable_statuses:
             continue
@@ -168,7 +176,9 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
                 "billable_jobs": data["billable_jobs"],
                 "pending_jobs": data["pending_jobs"],
                 "pending_pages": data["pending_pages"],
+                "pending_cost": _round_money(data["pending_cost"]),
                 "blocked_jobs": data["blocked_jobs"],
+                "blocked_cost": _round_money(data["blocked_cost"]),
                 "pages": data["pages"],
                 "mono_pages": data["mono_pages"],
                 "color_pages": data["color_pages"],
@@ -183,6 +193,8 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
         ]
 
     totals["total_cost"] = _round_money(totals["total_cost"])
+    totals["pending_cost"] = _round_money(totals["pending_cost"])
+    totals["blocked_cost"] = _round_money(totals["blocked_cost"])
     return {
         "organization": {
             "id": organization_id,

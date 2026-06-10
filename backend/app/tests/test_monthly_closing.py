@@ -117,6 +117,8 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert closing.total_cost == 1.5
     assert closing.snapshot["totals"]["released_jobs"] == 1
     assert closing.snapshot["totals"]["pending_pages"] == 5
+    assert closing.snapshot["totals"]["pending_cost"] == 1.25
+    assert closing.snapshot["totals"]["blocked_cost"] == 0.75
     assert closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
     assert closing.snapshot["by_printer"][0]["cost_per_page"] == 0.11
@@ -128,7 +130,9 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
             "billable_jobs": 0,
             "pending_jobs": 0,
             "pending_pages": 0,
+            "pending_cost": 0.0,
             "blocked_jobs": 1,
+            "blocked_cost": 0.75,
             "pages": 0,
             "mono_pages": 0,
             "color_pages": 0,
@@ -143,7 +147,9 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
             "billable_jobs": 1,
             "pending_jobs": 0,
             "pending_pages": 0,
+            "pending_cost": 0.0,
             "blocked_jobs": 0,
+            "blocked_cost": 0.0,
             "pages": 10,
             "mono_pages": 10,
             "color_pages": 0,
@@ -158,7 +164,9 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
             "billable_jobs": 0,
             "pending_jobs": 1,
             "pending_pages": 5,
+            "pending_cost": 1.25,
             "blocked_jobs": 0,
+            "blocked_cost": 0.0,
             "pages": 0,
             "mono_pages": 0,
             "color_pages": 0,
@@ -182,7 +190,10 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert validated_closing.snapshot.contract.billing_plan == "professional"
     assert validated_closing.snapshot.contract.printer_usage_percent == 50.0
     assert validated_closing.snapshot.totals.released_jobs == 1
+    assert validated_closing.snapshot.totals.pending_cost == 1.25
+    assert validated_closing.snapshot.totals.blocked_cost == 0.75
     assert validated_closing.snapshot.by_policy[0].name == "Bloquear colorido"
+    assert validated_closing.snapshot.by_policy[0].blocked_cost == 0.75
     assert validated_closing.snapshot.eco.pages_saved == 3
 
     user.full_name = "Ana Renomeada"
@@ -265,24 +276,30 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert workbook["Resumo"]["B6"].value == 1
     assert workbook["Resumo"]["A8"].value == "Paginas pendentes"
     assert workbook["Resumo"]["B8"].value == 5
-    assert workbook["Resumo"]["A14"].value == "Custo total"
-    assert workbook["Resumo"]["B14"].value == 1.5
-    assert workbook["Resumo"]["A18"].value == "Plano"
-    assert workbook["Resumo"]["B18"].value == "Enterprise"
-    assert workbook["Resumo"]["A19"].value == "Status comercial"
-    assert workbook["Resumo"]["B19"].value == "Em dia"
-    assert workbook["Resumo"]["A20"].value == "Limite contratado de impressoras"
-    assert workbook["Resumo"]["B20"].value == 3
-    assert workbook["Resumo"]["A23"].value == "Uso do contrato de impressoras (%)"
-    assert workbook["Resumo"]["B23"].value == 33.3
+    assert workbook["Resumo"]["A9"].value == "Custo pendente"
+    assert workbook["Resumo"]["B9"].value == 1.25
+    assert workbook["Resumo"]["A15"].value == "Custo bloqueado estimado"
+    assert workbook["Resumo"]["B15"].value == 0.75
+    assert workbook["Resumo"]["A16"].value == "Custo total"
+    assert workbook["Resumo"]["B16"].value == 1.5
+    assert workbook["Resumo"]["A20"].value == "Plano"
+    assert workbook["Resumo"]["B20"].value == "Enterprise"
+    assert workbook["Resumo"]["A21"].value == "Status comercial"
+    assert workbook["Resumo"]["B21"].value == "Em dia"
+    assert workbook["Resumo"]["A22"].value == "Limite contratado de impressoras"
+    assert workbook["Resumo"]["B22"].value == 3
+    assert workbook["Resumo"]["A25"].value == "Uso do contrato de impressoras (%)"
+    assert workbook["Resumo"]["B25"].value == 33.3
     assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"
     assert workbook["Impressoras"]["G1"].value == "Custo/Pag."
     assert workbook["Impressoras"]["G2"].value == 0.11
     assert workbook["Politicas"]["A1"].value == "Politica"
     assert workbook["Politicas"]["A2"].value == "Bloquear colorido"
     assert workbook["Politicas"]["B2"].value == "Bloqueio"
-    assert workbook["Politicas"]["G2"].value == 1
-    assert workbook["Politicas"]["K2"].value == 3
+    assert workbook["Politicas"]["G2"].value == 0
+    assert workbook["Politicas"]["H2"].value == 1
+    assert workbook["Politicas"]["I2"].value == 0.75
+    assert workbook["Politicas"]["M2"].value == 3
     audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_exported", AuditLog.entity_id == closing.id).one()
     assert audit.log_metadata == {"format": "xlsx"}
 
