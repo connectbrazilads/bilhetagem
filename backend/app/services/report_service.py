@@ -12,6 +12,7 @@ from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.user import User
+from app.services.agent_release_service import is_newer_version, published_agent_version
 
 AGENT_ONLINE_WINDOW = timedelta(minutes=3)
 QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
@@ -95,11 +96,14 @@ def _agent_has_operational_alert(
     aliases: list[PrinterAlias],
     queue_actions: list[AgentQueueAction],
     has_recent_error_log: bool,
+    latest_agent_version: str,
     now: datetime,
 ) -> bool:
     if not _agent_is_online(agent, now):
         return True
     if agent.last_error or agent.event_log_enabled is False:
+        return True
+    if is_newer_version(latest_agent_version, agent.version):
         return True
     if has_recent_error_log:
         return True
@@ -177,6 +181,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
             .all()
         )
     }
+    latest_agent_version = published_agent_version()
     agents_with_alerts = sum(
         1
         for agent in agents
@@ -185,6 +190,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
             aliases_by_agent.get(agent.id, []),
             queue_actions_by_agent.get(agent.id, []),
             agent.id in recent_error_agent_ids,
+            latest_agent_version,
             now,
         )
     )

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import Path
 import pytest
 from fastapi import HTTPException
 from openpyxl import load_workbook
@@ -29,6 +30,7 @@ from app.api.routes.departments import create_department, delete_department, lis
 from app.api.routes.printers import list_printers
 from app.api.routes.users import create_user_endpoint, delete_user_endpoint, list_users, update_user_endpoint
 from app.core.security import create_access_token, hash_password
+from app.core.config import settings
 from app.core.deps import get_current_user, require_roles
 from app.schemas.department import DepartmentCreate, DepartmentUpdate
 from app.schemas.auth import LoginRequest
@@ -510,7 +512,10 @@ def test_binding_alias_is_scoped_by_organization(db_session: Session):
     assert unchanged_alias.printer_id is None
 
 
-def test_organization_scope_isolates_core_views(db_session: Session):
+def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "agent_latest_version", "0.9.0")
+
     other_org = Organization(name="Cliente B", slug="cliente-b", is_active=True)
     db_session.add(other_org)
     db_session.flush()
@@ -559,6 +564,14 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         event_log_enabled=True,
         last_seen_at=now,
     )
+    org_one_outdated_agent = PrintAgent(
+        organization_id=1,
+        agent_uid="org1-outdated-agent",
+        computer_name="PC-OUTDATED",
+        event_log_enabled=True,
+        version="0.1.0",
+        last_seen_at=now,
+    )
     org_two_agent = PrintAgent(
         organization_id=other_org.id,
         agent_uid="org2-online-agent",
@@ -566,7 +579,7 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         event_log_enabled=True,
         last_seen_at=now,
     )
-    db_session.add_all([org_one_online_agent, org_one_alert_agent, org_one_stale_action_agent, org_one_recent_log_agent, org_two_agent])
+    db_session.add_all([org_one_online_agent, org_one_alert_agent, org_one_stale_action_agent, org_one_recent_log_agent, org_one_outdated_agent, org_two_agent])
     db_session.flush()
 
     db_session.add_all(
@@ -636,6 +649,15 @@ def test_organization_scope_isolates_core_views(db_session: Session):
                 source="spool",
                 occurred_at=now - timedelta(minutes=1),
                 received_at=now - timedelta(minutes=1),
+            ),
+            PrinterAlias(
+                organization_id=1,
+                printer_id=org_one_printer.id,
+                agent_id=org_one_outdated_agent.id,
+                queue_name="Org 1 Outdated Printer",
+                normalized_queue_name="org 1 outdated printer",
+                connection_type="network",
+                last_seen_at=now,
             ),
             PrinterAlias(
                 organization_id=other_org.id,
@@ -714,10 +736,10 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         {"printer": "Org 1 Printer", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
     ]
     assert metrics["operational_health"] == {
-        "agents_total": 4,
-        "agents_online": 3,
+        "agents_total": 5,
+        "agents_online": 4,
         "agents_offline": 1,
-        "agents_with_alerts": 4,
+        "agents_with_alerts": 5,
         "printers_total": 1,
         "printers_monitored": 1,
         "printers_unmonitored": 0,
