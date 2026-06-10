@@ -71,6 +71,20 @@ def load_json(path: Path) -> dict:
         return {}
 
 
+def pick_config_value(existing: dict, template: dict, key: str, default):
+    if key in existing:
+        return existing[key]
+    if key in template:
+        return template[key]
+    return default
+
+
+def as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"true", "1", "yes", "sim"}
+
+
 def build_config(existing: dict, template: dict, args: argparse.Namespace) -> dict:
     if args.silent:
         api_url = args.api_url or existing.get("PRINTBILLING_API_URL") or template.get("PRINTBILLING_API_URL", "")
@@ -112,18 +126,18 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         "PRINTBILLING_AGENT_USER": username,
         "PRINTBILLING_AGENT_PASSWORD": password,
         "PRINTBILLING_ORGANIZATION_SLUG": organization_slug,
-        "PRINTBILLING_CANCEL_BLOCKED": True,
-        "PRINTBILLING_POLL_INTERVAL": int(existing.get("PRINTBILLING_POLL_INTERVAL") or template.get("PRINTBILLING_POLL_INTERVAL", 5)),
+        "PRINTBILLING_CANCEL_BLOCKED": as_bool(pick_config_value(existing, template, "PRINTBILLING_CANCEL_BLOCKED", True)),
+        "PRINTBILLING_POLL_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_POLL_INTERVAL", 5)),
         "PRINTBILLING_DEFAULT_USERNAME": default_username,
-        "PRINTBILLING_SNMP_POLL_INTERVAL": int(existing.get("PRINTBILLING_SNMP_POLL_INTERVAL") or template.get("PRINTBILLING_SNMP_POLL_INTERVAL", 60)),
-        "PRINTBILLING_SNMP_COMMUNITY": existing.get("PRINTBILLING_SNMP_COMMUNITY") or template.get("PRINTBILLING_SNMP_COMMUNITY", "public"),
-        "PRINTBILLING_SNMP_TIMEOUT_SECONDS": float(existing.get("PRINTBILLING_SNMP_TIMEOUT_SECONDS") or template.get("PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2)),
-        "PRINTBILLING_SNMP_RETRIES": int(existing.get("PRINTBILLING_SNMP_RETRIES") or template.get("PRINTBILLING_SNMP_RETRIES", 1)),
-        "PRINTBILLING_USE_PRINT_EVENT_LOG": True,
-        "PRINTBILLING_AUTO_UPDATE": True,
-        "PRINTBILLING_UPDATE_CHECK_INTERVAL": int(existing.get("PRINTBILLING_UPDATE_CHECK_INTERVAL") or template.get("PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600)),
-        "PRINTBILLING_HEARTBEAT_INTERVAL": int(existing.get("PRINTBILLING_HEARTBEAT_INTERVAL") or template.get("PRINTBILLING_HEARTBEAT_INTERVAL", 60)),
-        "PRINTBILLING_QUEUE_ACTION_INTERVAL": int(existing.get("PRINTBILLING_QUEUE_ACTION_INTERVAL") or template.get("PRINTBILLING_QUEUE_ACTION_INTERVAL", 30)),
+        "PRINTBILLING_SNMP_POLL_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_SNMP_POLL_INTERVAL", 60)),
+        "PRINTBILLING_SNMP_COMMUNITY": pick_config_value(existing, template, "PRINTBILLING_SNMP_COMMUNITY", "public"),
+        "PRINTBILLING_SNMP_TIMEOUT_SECONDS": float(pick_config_value(existing, template, "PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2)),
+        "PRINTBILLING_SNMP_RETRIES": int(pick_config_value(existing, template, "PRINTBILLING_SNMP_RETRIES", 1)),
+        "PRINTBILLING_USE_PRINT_EVENT_LOG": as_bool(pick_config_value(existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)),
+        "PRINTBILLING_AUTO_UPDATE": as_bool(pick_config_value(existing, template, "PRINTBILLING_AUTO_UPDATE", True)),
+        "PRINTBILLING_UPDATE_CHECK_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600)),
+        "PRINTBILLING_HEARTBEAT_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_HEARTBEAT_INTERVAL", 60)),
+        "PRINTBILLING_QUEUE_ACTION_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_QUEUE_ACTION_INTERVAL", 30)),
     }
 
 

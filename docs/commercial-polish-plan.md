@@ -91,6 +91,7 @@ Entregaveis:
 - Gerar senhas aleatorias no instalador Lite e salvar credenciais iniciais localmente.
 - Gerar comandos silenciosos no painel usando a lista real de empresas para evitar slug incorreto.
 - Exigir senha do usuario tecnico do agent ao gerar comandos silenciosos, sem valor padrao inseguro.
+- Reinstalacao do agent preservar configuracoes locais existentes, incluindo flags de captura, bloqueio e auto-update.
 - Criar endpoint `/agent/version`.
 - Criar endpoint para baixar versao nova do agent.
 - Agent comparar versao local com versao publicada.
