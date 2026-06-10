@@ -609,7 +609,9 @@ def test_reorder_policies_updates_priorities_and_audits(db_session: Session):
 def test_create_and_delete_policy_audit_snapshots(db_session: Session):
     actor = _admin(db_session)
     department = Department(organization_id=1, name="Financeiro")
-    db_session.add(department)
+    user = User(username="policy-history-user", full_name="Historico Politica", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA POLICY HISTORY", is_color=True)
+    db_session.add_all([department, user, printer])
     db_session.commit()
 
     created = create_policy(
@@ -634,11 +636,32 @@ def test_create_and_delete_policy_audit_snapshots(db_session: Session):
     assert create_audit.log_metadata["snapshot"]["action"] == "block"
     assert create_audit.log_metadata["snapshot"]["message"] == "Colorido bloqueado"
 
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        pages=2,
+        is_color=True,
+        cost=0.50,
+        status=JobStatus.blocked,
+        policy_id=created.id,
+        policy_name=created.name,
+        policy_action=created.action.value,
+        submitted_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
     result = delete_policy(created.id, db=db_session, actor=actor)
 
     assert result == {"status": "deleted"}
+    db_session.refresh(job)
+    assert job.policy_id is None
+    assert job.policy_name == "Bloquear colorido financeiro"
+    assert job.policy_action == "block"
     delete_audit = db_session.query(AuditLog).filter(AuditLog.action == "policy_deleted", AuditLog.entity_id == created.id).one()
     assert delete_audit.log_metadata["snapshot"] == create_audit.log_metadata["snapshot"]
+    assert delete_audit.log_metadata["affected_jobs"] == 1
 
 
 def test_update_policy_active_status_audits_changes(db_session: Session):

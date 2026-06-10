@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.department import Department
+from app.models.print_job import PrintJob
 from app.models.print_policy import PrintPolicy, PolicyRuleType
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
@@ -257,13 +258,18 @@ def delete_policy(
     policy = db.query(PrintPolicy).filter(PrintPolicy.organization_id == actor.organization_id, PrintPolicy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="Politica nao encontrada")
+    affected_jobs = (
+        db.query(PrintJob)
+        .filter(PrintJob.organization_id == actor.organization_id, PrintJob.policy_id == policy.id)
+        .update({PrintJob.policy_id: None}, synchronize_session=False)
+    )
     write_audit(
         db,
         action="policy_deleted",
         entity="print_policies",
         entity_id=policy.id,
         actor_user_id=actor.id,
-        metadata={"snapshot": _policy_snapshot(policy)},
+        metadata={"snapshot": _policy_snapshot(policy), "affected_jobs": affected_jobs},
     )
     db.delete(policy)
     db.commit()
