@@ -5,6 +5,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
+from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus
 from app.models.print_agent import PrintAgent
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
@@ -12,6 +13,7 @@ from app.models.printer_alias import PrinterAlias
 from app.models.user import User
 
 AGENT_ONLINE_WINDOW = timedelta(minutes=3)
+QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
 
 
 def _round_money(value: float) -> float:
@@ -75,10 +77,23 @@ def _alias_is_present(agent: PrintAgent, alias: PrinterAlias) -> bool:
     return alias_seen >= agent_seen
 
 
-def _agent_has_operational_alert(agent: PrintAgent, aliases: list[PrinterAlias], now: datetime) -> bool:
+def _queue_action_is_stale(action: AgentQueueAction, now: datetime) -> bool:
+    if action.status not in (AgentQueueActionStatus.pending, AgentQueueActionStatus.running):
+        return False
+    reference = action.dispatched_at if action.status == AgentQueueActionStatus.running else action.requested_at
+    if reference is None:
+        return False
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
+    return now - reference > QUEUE_ACTION_STALE_AFTER
+
+
+def _agent_has_operational_alert(agent: PrintAgent, aliases: list[PrinterAlias], queue_actions: list[AgentQueueAction], now: datetime) -> bool:
     if not _agent_is_online(agent, now):
         return True
     if agent.last_error or agent.event_log_enabled is False:
+        return True
+    if any(_queue_action_is_stale(action, now) for action in queue_actions):
         return True
 
     present_aliases = [alias for alias in aliases if _alias_is_present(agent, alias)]
@@ -131,7 +146,27 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     for alias in aliases_with_agent:
         if alias.agent_id is not None:
             aliases_by_agent[alias.agent_id].append(alias)
-    agents_with_alerts = sum(1 for agent in agents if _agent_has_operational_alert(agent, aliases_by_agent.get(agent.id, []), now))
+    pending_queue_actions = (
+        db.query(AgentQueueAction)
+        .filter(
+            AgentQueueAction.organization_id == organization_id,
+            AgentQueueAction.status.in_([AgentQueueActionStatus.pending, AgentQueueActionStatus.running]),
+        )
+        .all()
+    )
+    queue_actions_by_agent: dict[int, list[AgentQueueAction]] = defaultdict(list)
+    for action in pending_queue_actions:
+        queue_actions_by_agent[action.agent_id].append(action)
+    agents_with_alerts = sum(
+        1
+        for agent in agents
+        if _agent_has_operational_alert(
+            agent,
+            aliases_by_agent.get(agent.id, []),
+            queue_actions_by_agent.get(agent.id, []),
+            now,
+        )
+    )
 
     return {
         "agents_total": len(agents),

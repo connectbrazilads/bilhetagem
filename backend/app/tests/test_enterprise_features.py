@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
+from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus, AgentQueueActionType
 from app.models.audit_log import AuditLog
 from app.models.printer import Printer
 from app.models.print_agent import PrintAgent
@@ -543,6 +544,13 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         last_error="Event Log indisponivel",
         last_seen_at=now - timedelta(minutes=10),
     )
+    org_one_stale_action_agent = PrintAgent(
+        organization_id=1,
+        agent_uid="org1-stale-action-agent",
+        computer_name="PC-STALE-ACTION",
+        event_log_enabled=True,
+        last_seen_at=now,
+    )
     org_two_agent = PrintAgent(
         organization_id=other_org.id,
         agent_uid="org2-online-agent",
@@ -550,7 +558,7 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         event_log_enabled=True,
         last_seen_at=now,
     )
-    db_session.add_all([org_one_online_agent, org_one_alert_agent, org_two_agent])
+    db_session.add_all([org_one_online_agent, org_one_alert_agent, org_one_stale_action_agent, org_two_agent])
     db_session.flush()
 
     db_session.add_all(
@@ -578,6 +586,23 @@ def test_organization_scope_isolates_core_views(db_session: Session):
                 queue_name="  org   1   printer ",
                 connection_type="network",
                 last_seen_at=now,
+            ),
+            PrinterAlias(
+                organization_id=1,
+                printer_id=org_one_printer.id,
+                agent_id=org_one_stale_action_agent.id,
+                queue_name="Org 1 Stale Action Printer",
+                normalized_queue_name="org 1 stale action printer",
+                connection_type="network",
+                last_seen_at=now,
+            ),
+            AgentQueueAction(
+                organization_id=1,
+                agent_id=org_one_stale_action_agent.id,
+                action_type=AgentQueueActionType.create_queue,
+                queue_name="Org 1 Stale Action Printer",
+                status=AgentQueueActionStatus.pending,
+                requested_at=now - timedelta(minutes=20),
             ),
             PrinterAlias(
                 organization_id=other_org.id,
@@ -656,10 +681,10 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         {"printer": "Org 1 Printer", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
     ]
     assert metrics["operational_health"] == {
-        "agents_total": 2,
-        "agents_online": 1,
+        "agents_total": 3,
+        "agents_online": 2,
         "agents_offline": 1,
-        "agents_with_alerts": 2,
+        "agents_with_alerts": 3,
         "printers_total": 1,
         "printers_monitored": 1,
         "printers_unmonitored": 0,
