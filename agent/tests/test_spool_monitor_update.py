@@ -167,3 +167,40 @@ def test_queue_action_processing_continues_after_malformed_action(monkeypatch, t
     assert api_client.finished[1] == (12, "succeeded", "Fila removida: OK", monitor._agent_uid)
     assert monitor._last_error is not None
     assert "desconhecida" in monitor._last_error
+
+
+def test_create_managed_queue_updates_existing_queue_binding(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
+    monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)
+
+    captured = {}
+
+    class FakeApiClient:
+        pass
+
+    monitor = SpoolMonitor(
+        FakeApiClient(),
+        agent_config=AgentConfig(queue_action_interval_seconds=0),
+        sleep=lambda _: None,
+    )
+
+    def fake_run_powershell(script: str) -> str:
+        captured["script"] = script
+        return "Fila atualizada: KONICA_FINANCEIRO"
+
+    monkeypatch.setattr(monitor, "_run_powershell", fake_run_powershell)
+
+    message = monitor._create_managed_queue(
+        queue_name="KONICA_FINANCEIRO",
+        driver_name="KONICA Driver",
+        port_name="IP_192.168.1.125",
+        ip_address="192.168.1.125",
+        success_verb="restaurada",
+    )
+
+    script = captured["script"]
+    assert message == "Fila atualizada: KONICA_FINANCEIRO"
+    assert "Get-PrinterDriver -Name $driverName" in script
+    assert "Add-PrinterPort -Name $portName -PrinterHostAddress $ipAddress" in script
+    assert "Set-Printer -Name $queueName -DriverName $driverName -PortName $portName" in script
+    assert '"Fila atualizada: $queueName"' in script

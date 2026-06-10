@@ -296,7 +296,13 @@ if (-not (Get-Printer -Name $queueName -ErrorAction SilentlyContinue)) {{
   Add-Printer -Name $queueName -DriverName $driverName -PortName $portName
   ("Fila {0}: {1}" -f $successVerb, $queueName)
 }} else {{
-  "Fila ja existia: $queueName"
+  $existingQueue = Get-Printer -Name $queueName
+  if ($existingQueue.DriverName -ne $driverName -or $existingQueue.PortName -ne $portName) {{
+    Set-Printer -Name $queueName -DriverName $driverName -PortName $portName
+    "Fila atualizada: $queueName"
+  }} else {{
+    "Fila ja existia: $queueName"
+  }}
 }}
 """
         return self._run_powershell(script)
