@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.print_agent import PrintAgent
 from app.models.print_job import PrintJob
+from app.models.print_policy import PrintPolicy
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.user import User, UserRole
@@ -309,8 +310,13 @@ def merge_printer_endpoint(
         {PrintJob.printer_id: target.id},
         synchronize_session=False,
     )
+    moved_policies = db.query(PrintPolicy).filter(PrintPolicy.organization_id == actor.organization_id, PrintPolicy.printer_id == source.id).update(
+        {PrintPolicy.printer_id: target.id},
+        synchronize_session=False,
+    )
     moved_aliases = 0
     merged_aliases = 0
+    moved_alias_policies = 0
     for alias in db.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.printer_id == source.id).all():
         target_aliases = (
             db.query(PrinterAlias)
@@ -323,6 +329,10 @@ def merge_printer_endpoint(
         )
         duplicate_alias = next((candidate for candidate in target_aliases if _same_alias_identity(alias, candidate)), None)
         if duplicate_alias:
+            moved_alias_policies += db.query(PrintPolicy).filter(PrintPolicy.organization_id == actor.organization_id, PrintPolicy.printer_alias_id == alias.id).update(
+                {PrintPolicy.printer_alias_id: duplicate_alias.id},
+                synchronize_session=False,
+            )
             db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.printer_alias_id == alias.id).update(
                 {PrintJob.printer_alias_id: duplicate_alias.id},
                 synchronize_session=False,
@@ -352,8 +362,10 @@ def merge_printer_endpoint(
             "source_printer": source.name,
             "target_printer": target.name,
             "moved_jobs": moved_jobs,
+            "moved_policies": moved_policies,
             "moved_aliases": moved_aliases,
             "merged_aliases": merged_aliases,
+            "moved_alias_policies": moved_alias_policies,
         },
     )
     db.delete(source)

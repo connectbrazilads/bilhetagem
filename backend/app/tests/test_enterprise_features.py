@@ -17,6 +17,7 @@ from app.models.printer_alias import PrinterAlias
 from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.print_job import JobStatus, PrintJob
+from app.models.print_policy import PolicyAction, PolicyRuleType, PrintPolicy
 from app.models.quota import Quota
 from app.api.routes.auth import current_auth_context, login
 from app.api.routes.agent_updates import list_agents
@@ -719,6 +720,65 @@ def test_merge_printer_collapses_duplicate_aliases_by_normalized_queue_name(db_s
     assert moved_job.printer_alias_id == target_alias.id
     assert [alias.id for alias in aliases] == [target_alias.id]
     assert audit.log_metadata["merged_aliases"] == 1
+
+
+def test_merge_printer_preserves_printer_and_alias_policies(db_session: Session):
+    actor = User(username="admin-merge-policies", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    target = Printer(organization_id=1, name="KONICA POLITICAS", ip_address="192.168.1.125", is_color=True)
+    source = Printer(organization_id=1, name="KONICA POLITICAS DUP", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-merge-policies", computer_name="PC-POL")
+    db_session.add_all([actor, target, source, agent])
+    db_session.flush()
+
+    target_alias = PrinterAlias(
+        organization_id=1,
+        printer_id=target.id,
+        agent_id=agent.id,
+        queue_name="KONICA Financeiro",
+        normalized_queue_name="konica financeiro",
+        computer_name="PC-POL",
+    )
+    source_alias = PrinterAlias(
+        organization_id=1,
+        printer_id=source.id,
+        agent_id=agent.id,
+        queue_name="  konica   financeiro ",
+        normalized_queue_name="konica financeiro",
+        computer_name="PC-POL",
+    )
+    db_session.add_all([target_alias, source_alias])
+    db_session.flush()
+
+    printer_policy = PrintPolicy(
+        organization_id=1,
+        name="Bloquear colorido na duplicada",
+        priority=10,
+        rule_type=PolicyRuleType.color,
+        action=PolicyAction.block,
+        printer_id=source.id,
+    )
+    alias_policy = PrintPolicy(
+        organization_id=1,
+        name="Liberar fila duplicada acima de 20",
+        priority=20,
+        rule_type=PolicyRuleType.max_pages,
+        action=PolicyAction.require_release,
+        max_pages=20,
+        printer_alias_id=source_alias.id,
+    )
+    db_session.add_all([printer_policy, alias_policy])
+    db_session.commit()
+
+    merge_printer_endpoint(source.id, target.id, db_session, actor)
+
+    db_session.refresh(printer_policy)
+    db_session.refresh(alias_policy)
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "printer_merged").one()
+    assert printer_policy.printer_id == target.id
+    assert alias_policy.printer_alias_id == target_alias.id
+    assert db_session.query(PrinterAlias).filter(PrinterAlias.id == source_alias.id).first() is None
+    assert audit.log_metadata["moved_policies"] == 1
+    assert audit.log_metadata["moved_alias_policies"] == 1
 
 
 def test_binding_alias_moves_historical_jobs_to_physical_printer(db_session: Session):
