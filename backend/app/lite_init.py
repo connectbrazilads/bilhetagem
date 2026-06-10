@@ -1,5 +1,5 @@
 from app.core.database import SessionLocal, engine
-from app.models import agent_queue_action, audit_log, department, monthly_closing, organization, print_agent, print_job, print_policy, printer, printer_alias, quota, user, system_setting  # noqa: F401
+from app.models import agent_log, agent_queue_action, audit_log, department, monthly_closing, organization, print_agent, print_job, print_policy, printer, printer_alias, quota, user, system_setting  # noqa: F401
 from app.models.base import Base
 from app.models.user import UserRole
 from app.seed import ensure_user
@@ -172,4 +172,25 @@ def _ensure_lite_schema() -> None:
                     UNIQUE (organization_id, year, month)
                 )
                 """
+            )
+        agent_logs_count = conn.exec_driver_sql(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='agent_logs'"
+        ).scalar()
+        if not agent_logs_count:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE agent_logs (
+                    id INTEGER PRIMARY KEY,
+                    organization_id INTEGER NOT NULL DEFAULT 1,
+                    agent_id INTEGER NOT NULL,
+                    level VARCHAR(20) NOT NULL,
+                    message VARCHAR(1000) NOT NULL,
+                    source VARCHAR(80),
+                    occurred_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    received_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX ix_agent_logs_agent_received ON agent_logs (agent_id, received_at)"
             )

@@ -9,12 +9,14 @@ from app.api.routes.agent_updates import (
     create_bulk_queue_actions,
     create_queue_action,
     finish_queue_action,
+    get_agent_detail,
     list_agent_releases,
     list_agents,
     poll_queue_actions,
 )
 from app.core.config import settings
 from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
+from app.models.agent_log import AgentLog
 from app.models.audit_log import AuditLog
 from app.models.organization import Organization
 from app.models.printer import Printer
@@ -167,6 +169,60 @@ def test_agent_health_alerts_report_operational_issues(db_session: Session, monk
     alert_codes = {alert.code for alert in response.health_alerts}
     assert {"last_error", "event_log_disabled", "unbound_queues", "outdated_version"}.issubset(alert_codes)
     assert "offline" not in alert_codes
+
+
+def test_agent_heartbeat_stores_recent_logs(db_session: Session):
+    actor = User(username="agent-logs", full_name="Agent Logs", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-logs",
+            computer_name="PC-LOGS",
+            logs=[
+                {"level": "warning", "message": "Falha temporaria ao consultar SNMP", "source": "snmp"},
+                {"level": "strange", "message": "Nivel desconhecido vira info", "source": "diagnostic"},
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+    detail = get_agent_detail(agent_id=response.id, db=db_session, actor=actor)
+
+    assert [log.message for log in detail.recent_logs] == ["Nivel desconhecido vira info", "Falha temporaria ao consultar SNMP"]
+    assert {log.level for log in detail.recent_logs} == {"info", "warning"}
+    assert detail.recent_logs[0].source == "diagnostic"
+
+
+def test_agent_logs_are_pruned_per_agent(db_session: Session):
+    actor = User(username="agent-prune", full_name="Agent Prune", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="pc-prune", computer_name="PC-PRUNE"),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    for index in range(205):
+        agent_heartbeat(
+            payload=AgentHeartbeatPayload(
+                agent_uid="pc-prune",
+                computer_name="PC-PRUNE",
+                logs=[{"level": "info", "message": f"evento {index:03d}", "source": "test"}],
+            ),
+            request=_request(),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert db_session.query(AgentLog).filter(AgentLog.agent_id == response.id).count() == 200
+    detail = get_agent_detail(agent_id=response.id, db=db_session, actor=actor)
+    assert len(detail.recent_logs) == 50
+    assert detail.recent_logs[0].message == "evento 204"
 
 
 def test_list_agents_is_scoped_by_organization(db_session: Session):

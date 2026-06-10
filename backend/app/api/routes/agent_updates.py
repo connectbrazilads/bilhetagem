@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
 from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus, AgentQueueActionType
+from app.models.agent_log import AgentLog
 from app.models.print_agent import PrintAgent
 from app.models.print_job import PrintJob
 from app.models.printer import Printer
@@ -20,6 +21,7 @@ from app.models.user import UserRole
 from app.schemas.agent import (
     AgentHeartbeatPayload,
     AgentHealthAlertRead,
+    AgentLogRead,
     AgentQueueBulkActionCreate,
     AgentReleaseFileRead,
     AgentReleaseRead,
@@ -213,6 +215,57 @@ def _recent_jobs(db: Session, agent: PrintAgent) -> list[AgentRecentJobRead]:
     ]
 
 
+def _recent_logs(db: Session, agent: PrintAgent) -> list[AgentLogRead]:
+    logs = (
+        db.query(AgentLog)
+        .filter(AgentLog.organization_id == agent.organization_id, AgentLog.agent_id == agent.id)
+        .order_by(AgentLog.occurred_at.desc(), AgentLog.id.desc())
+        .limit(50)
+        .all()
+    )
+    return [AgentLogRead.model_validate(log) for log in logs]
+
+
+def _store_agent_logs(db: Session, agent: PrintAgent, payload: AgentHeartbeatPayload, received_at: datetime) -> None:
+    allowed_levels = {"debug", "info", "warning", "error", "critical"}
+    new_logs: list[AgentLog] = []
+    for item in payload.logs:
+        level = (item.level or "info").strip().lower()
+        if level not in allowed_levels:
+            level = "info"
+        message = item.message.strip()
+        if not message:
+            continue
+        new_logs.append(
+            AgentLog(
+                organization_id=agent.organization_id,
+                agent_id=agent.id,
+                level=level,
+                message=message[:1000],
+                source=_clean_optional(item.source),
+                occurred_at=item.occurred_at or received_at,
+                received_at=received_at,
+            )
+        )
+    if not new_logs:
+        return
+
+    db.add_all(new_logs)
+    db.flush()
+    stale_ids = [
+        row[0]
+        for row in (
+            db.query(AgentLog.id)
+            .filter(AgentLog.organization_id == agent.organization_id, AgentLog.agent_id == agent.id)
+            .order_by(AgentLog.occurred_at.desc(), AgentLog.id.desc())
+            .offset(200)
+            .all()
+        )
+    ]
+    if stale_ids:
+        db.query(AgentLog).filter(AgentLog.id.in_(stale_ids)).delete(synchronize_session=False)
+
+
 def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealthAlertRead]:
     alerts: list[AgentHealthAlertRead] = []
     aliases = list(agent.aliases)
@@ -263,6 +316,7 @@ def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | 
         aliases=list(agent.aliases),
         recent_jobs=_recent_jobs(db, agent) if include_jobs and db is not None else [],
         queue_actions=queue_actions,
+        recent_logs=_recent_logs(db, agent) if include_jobs and db is not None else [],
     )
 
 
@@ -480,6 +534,7 @@ def agent_heartbeat(
         alias.fingerprint = _clean_optional(queue.fingerprint)
         alias.last_seen_at = now
 
+    _store_agent_logs(db, agent, payload, now)
     db.commit()
     agent = (
         db.query(PrintAgent)

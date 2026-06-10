@@ -123,6 +123,7 @@ Entregaveis:
 - Endpoint de heartbeat do agent.
 - Tabela ou campos de status: versao, ultimo contato, IP publico, computador, usuario Windows, modo de captura, Event Log ativo.
 - Agent enviar lista de filas locais periodicamente.
+- Agent enviar eventos recentes de diagnostico no heartbeat, com retencao curta por PC.
 - Tela "Agents" no painel.
 - Tela de detalhes do agent com logs recentes, filas detectadas e ultimos jobs.
 - Alertas visuais para agent offline, sem Event Log, sem impressoras ou com erro de API.

@@ -57,6 +57,7 @@ class SpoolMonitor:
         self._last_queue_action_poll = 0.0
         self._update_started = False
         self._last_error: str | None = None
+        self._diagnostic_logs: list[dict] = []
         self._server_safe_release_enabled = True
         self._event_log_reader = PrintEventLogReader(agent_config=self.config)
         self._agent_uid = self._load_agent_uid()
@@ -68,6 +69,7 @@ class SpoolMonitor:
             raise RuntimeError("pywin32 nao esta instalado ou o agente nao esta rodando em Windows")
 
         logger.info("PrintBilling Agent iniciado")
+        self._record_log("info", "PrintBilling Agent iniciado", "service")
         while not should_stop():
             self._refresh_server_settings_if_due()
             self._send_heartbeat_if_due()
@@ -114,6 +116,18 @@ class SpoolMonitor:
 
     def _record_error(self, message: str) -> None:
         self._last_error = message[:500]
+        self._record_log("error", message, "agent")
+
+    def _record_log(self, level: str, message: str, source: str) -> None:
+        self._diagnostic_logs.append(
+            {
+                "level": level,
+                "message": message[:1000],
+                "source": source[:80],
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        self._diagnostic_logs = self._diagnostic_logs[-100:]
 
     def _heartbeat_os_user(self) -> str | None:
         return self._active_windows_username() or self._clean_username(os.getenv("USERNAME"))
@@ -154,12 +168,14 @@ class SpoolMonitor:
             "auto_update_enabled": self.config.auto_update_enabled,
             "last_error": self._last_error,
             "queues": queues,
+            "logs": self._diagnostic_logs[-50:],
         }
         try:
             self.api_client.send_heartbeat(payload)
             if queues:
                 logger.debug("Heartbeat enviado com %d fila(s)", len(queues))
             self._last_error = None
+            self._diagnostic_logs.clear()
         except Exception as exc:
             logger.warning("Falha ao enviar heartbeat do agent: %s", exc)
             self._record_error(f"Falha ao enviar heartbeat: {exc}")
@@ -183,6 +199,7 @@ class SpoolMonitor:
                 message = self._execute_queue_action(action)
                 self.api_client.finish_queue_action(action_id, "succeeded", message)
                 logger.info("Acao remota de fila concluida: id=%s %s", action_id, message)
+                self._record_log("info", f"Acao remota de fila concluida: id={action_id} {message}", "queue_action")
             except Exception as exc:
                 message = str(exc)[:500]
                 logger.exception("Falha ao executar acao remota de fila id=%s", action_id)

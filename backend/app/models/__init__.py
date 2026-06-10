@@ -1,4 +1,5 @@
 from app.models.audit_log import AuditLog
+from app.models.agent_log import AgentLog
 from app.models.agent_queue_action import AgentQueueAction
 from app.models.department import Department
 from app.models.monthly_closing import MonthlyClosing
@@ -12,4 +13,4 @@ from app.models.quota import Quota
 from app.models.user import User
 from app.models.system_setting import SystemSetting
 
-__all__ = ["AgentQueueAction", "AuditLog", "Department", "MonthlyClosing", "Organization", "PrintAgent", "PrintJob", "PrintPolicy", "Printer", "PrinterAlias", "Quota", "User", "SystemSetting"]
+__all__ = ["AgentLog", "AgentQueueAction", "AuditLog", "Department", "MonthlyClosing", "Organization", "PrintAgent", "PrintJob", "PrintPolicy", "Printer", "PrinterAlias", "Quota", "User", "SystemSetting"]

@@ -39,6 +39,15 @@ type AgentHealthAlert = {
   message: string;
 };
 
+type AgentLog = {
+  id: number;
+  level: string;
+  message: string;
+  source: string | null;
+  occurred_at: string;
+  received_at: string;
+};
+
 type AgentRow = {
   id: number;
   agent_uid: string;
@@ -58,6 +67,7 @@ type AgentRow = {
   aliases: AgentQueue[];
   recent_jobs: AgentRecentJob[];
   queue_actions: AgentQueueAction[];
+  recent_logs: AgentLog[];
 };
 
 type AgentQueueAction = {
@@ -106,6 +116,12 @@ function alertClass(severity: string) {
   if (severity === "error") return "border-red-200 bg-red-50 text-red-700";
   if (severity === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-blue-200 bg-blue-50 text-blue-700";
+}
+
+function logLevelClass(level: string) {
+  if (level === "error" || level === "critical") return "border-red-200 bg-red-50 text-red-700";
+  if (level === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
 export default function AgentsPage() {
@@ -737,6 +753,43 @@ export default function AgentsPage() {
                         <tr>
                           <td className="p-4 text-center text-sm text-muted-foreground" colSpan={5}>
                             Nenhuma acao remota enviada ainda.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-sm font-bold">Logs recentes do agent</h3>
+                <div className="overflow-hidden rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted text-left">
+                      <tr>
+                        <th className="p-3">Data</th>
+                        <th className="p-3">Nivel</th>
+                        <th className="p-3">Origem</th>
+                        <th className="p-3">Mensagem</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedAgent.recent_logs.map((log) => (
+                        <tr key={log.id} className="border-t">
+                          <td className="p-3">{formatDate(log.occurred_at)}</td>
+                          <td className="p-3">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${logLevelClass(log.level)}`}>
+                              {log.level}
+                            </span>
+                          </td>
+                          <td className="p-3 text-xs text-muted-foreground">{log.source || "-"}</td>
+                          <td className="p-3 text-xs">{log.message}</td>
+                        </tr>
+                      ))}
+                      {selectedAgent.recent_logs.length === 0 ? (
+                        <tr>
+                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={4}>
+                            Nenhum log recente recebido deste agent.
                           </td>
                         </tr>
                       ) : null}

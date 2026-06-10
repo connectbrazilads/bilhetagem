@@ -42,6 +42,13 @@ class AgentQueuePayload(BaseModel):
     fingerprint: str | None = Field(default=None, max_length=255)
 
 
+class AgentLogPayload(BaseModel):
+    level: str = Field(default="info", max_length=20)
+    message: str = Field(min_length=1, max_length=1000)
+    source: str | None = Field(default=None, max_length=80)
+    occurred_at: datetime | None = None
+
+
 class AgentHeartbeatPayload(BaseModel):
     agent_uid: str = Field(min_length=1, max_length=120)
     computer_name: str | None = Field(default=None, max_length=180)
@@ -52,6 +59,7 @@ class AgentHeartbeatPayload(BaseModel):
     auto_update_enabled: bool | None = None
     last_error: str | None = Field(default=None, max_length=500)
     queues: list[AgentQueuePayload] = Field(default_factory=list, max_length=200)
+    logs: list[AgentLogPayload] = Field(default_factory=list, max_length=50)
 
 
 class AgentQueueRead(BaseModel):
@@ -86,6 +94,17 @@ class AgentHealthAlertRead(BaseModel):
     code: str
     severity: str
     message: str
+
+
+class AgentLogRead(BaseModel):
+    id: int
+    level: str
+    message: str
+    source: str | None
+    occurred_at: datetime
+    received_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class AgentQueueActionCreate(BaseModel):
@@ -151,3 +170,4 @@ class PrintAgentRead(BaseModel):
     aliases: list[AgentQueueRead] = Field(default_factory=list)
     recent_jobs: list[AgentRecentJobRead] = Field(default_factory=list)
     queue_actions: list[AgentQueueActionRead] = Field(default_factory=list)
+    recent_logs: list[AgentLogRead] = Field(default_factory=list)

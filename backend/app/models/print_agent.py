@@ -27,3 +27,4 @@ class PrintAgent(Base):
     organization = relationship("Organization", back_populates="print_agents")
     aliases = relationship("PrinterAlias", back_populates="agent")
     queue_actions = relationship("AgentQueueAction", back_populates="agent")
+    logs = relationship("AgentLog", back_populates="agent")
