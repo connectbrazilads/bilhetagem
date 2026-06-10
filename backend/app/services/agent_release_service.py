@@ -67,6 +67,43 @@ def _manifest_int(value) -> int | None:
     return parsed if parsed >= 0 else None
 
 
+def _published_release_checksums(version: str) -> dict[str, str] | None:
+    path = _release_file(version, "SHA256SUMS.txt")
+    if not path.is_file():
+        return None
+    checksums: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="ascii").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return {}
+    for line in lines:
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+        parts = trimmed.split(None, 1)
+        if len(parts) != 2:
+            return {}
+        checksum = _manifest_sha256(parts[0])
+        filename = parts[1].strip().lstrip("*")
+        if not checksum or not _is_safe_release_filename(filename):
+            return {}
+        if filename in checksums and checksums[filename] != checksum:
+            return {}
+        checksums[filename] = checksum
+    return checksums
+
+
+def _manifest_release_filenames(raw_files: list) -> set[str]:
+    filenames: set[str] = set()
+    for raw_file in raw_files:
+        if not isinstance(raw_file, dict):
+            continue
+        filename = str(raw_file.get("filename") or "")
+        if _is_safe_release_filename(filename):
+            filenames.add(filename)
+    return filenames
+
+
 def _release_file_matches_manifest(path: Path, file: dict) -> bool:
     expected_sha256 = _manifest_sha256(file.get("sha256"))
     expected_size = _manifest_int(file.get("size_bytes"))
@@ -95,6 +132,11 @@ def published_agent_version() -> str:
                 raw_files = release.get("files", [])
                 if not isinstance(raw_files, list):
                     continue
+                published_checksums = _published_release_checksums(version)
+                checksums_mismatch = (
+                    published_checksums is not None
+                    and set(published_checksums) != _manifest_release_filenames(raw_files)
+                )
                 for file in raw_files:
                     if not isinstance(file, dict):
                         continue
@@ -103,8 +145,13 @@ def published_agent_version() -> str:
                     if (
                         file.get("kind") == "agent"
                         and _is_safe_release_filename(filename)
+                        and not checksums_mismatch
                         and path.is_file()
                         and _release_file_matches_manifest(path, file)
+                        and (
+                            published_checksums is None
+                            or published_checksums.get(filename) == _sha256(path)
+                        )
                     ):
                         return version
         except (OSError, json.JSONDecodeError, TypeError, ValueError):

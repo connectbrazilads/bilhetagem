@@ -375,6 +375,65 @@ def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_sessio
     assert download_exc.value.status_code == 404
 
 
+def test_agent_releases_reject_version_when_published_checksums_diverge(db_session: Session, monkeypatch, tmp_path: Path):
+    old_release_dir = tmp_path / "0.6.0"
+    old_release_dir.mkdir()
+    (old_release_dir / "PrintBillingAgent.exe").write_bytes(b"agent-v6")
+    release_dir = tmp_path / "0.7.0"
+    release_dir.mkdir()
+    release_file = release_dir / "PrintBillingAgent.exe"
+    release_file.write_bytes(b"agent-v7")
+    (release_dir / "SHA256SUMS.txt").write_text(
+        "0000000000000000000000000000000000000000000000000000000000000000  PrintBillingAgent.exe\n",
+        encoding="ascii",
+    )
+    (tmp_path / "manifest.json").write_text(
+        f"""
+        {{
+          "versions": [
+            {{
+              "version": "0.7.0",
+              "published_at": "2026-07-01T00:00:00Z",
+              "files": [
+                {{
+                  "kind": "agent",
+                  "filename": "PrintBillingAgent.exe",
+                  "size_bytes": {release_file.stat().st_size},
+                  "sha256": "{hashlib.sha256(b"agent-v7").hexdigest()}"
+                }}
+              ]
+            }},
+            {{
+              "version": "0.6.0",
+              "published_at": "2026-06-01T00:00:00Z",
+              "files": [
+                {{"kind": "agent", "filename": "PrintBillingAgent.exe"}}
+              ]
+            }}
+          ]
+        }}
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_latest_version", "0.5.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    actor = User(username="checksum-diverge-admin", full_name="Release Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    releases = list_agent_releases(_=actor)
+    version = agent_version(current_version="0.5.0", _=actor)
+
+    assert [release.version for release in releases] == ["0.7.0", "0.6.0"]
+    assert releases[0].files == []
+    assert releases[0].signature_status == "empty"
+    assert releases[1].files[0].sha256 == hashlib.sha256(b"agent-v6").hexdigest()
+    assert published_agent_version() == "0.6.0"
+    assert version.latest_version == "0.6.0"
+    assert version.update_available is True
+    assert version.sha256 == hashlib.sha256(b"agent-v6").hexdigest()
+
+
 def test_agent_version_uses_newest_published_manifest_release(db_session: Session, monkeypatch, tmp_path: Path):
     old_release_dir = tmp_path / "0.3.0"
     old_release_dir.mkdir()
