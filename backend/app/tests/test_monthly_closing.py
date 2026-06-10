@@ -77,6 +77,10 @@ def _seed_job_data(db_session: Session) -> tuple[User, Printer]:
 
 def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     user, printer = _seed_job_data(db_session)
+    organization = db_session.get(Organization, 1)
+    organization.name = "Cliente Fechamento"
+    organization.slug = "cliente-fechamento"
+    db_session.commit()
 
     closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
 
@@ -90,20 +94,28 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
     assert closing.snapshot["by_printer"][0]["cost_per_page"] == 0.11
+    assert closing.snapshot["organization"] == {"id": 1, "name": "Cliente Fechamento", "slug": "cliente-fechamento"}
 
     user.full_name = "Ana Renomeada"
     printer.name = "KONICA_NOVA"
+    organization.name = "Cliente Renomeado"
+    organization.slug = "cliente-renomeado"
     db_session.commit()
     same_closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
 
     assert same_closing.id == closing.id
     assert same_closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert same_closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
+    assert same_closing.snapshot["organization"] == {"id": 1, "name": "Cliente Fechamento", "slug": "cliente-fechamento"}
 
 
 def test_monthly_closing_export_xlsx(db_session: Session):
     _seed_job_data(db_session)
+    organization = db_session.get(Organization, 1)
+    organization.name = "Cliente XLSX"
+    db_session.commit()
     closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
+    organization.name = "Cliente XLSX Renomeado"
     actor = User(username="report-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add(actor)
     db_session.commit()
@@ -114,6 +126,7 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert response.body.startswith(b"PK")
     workbook = load_workbook(BytesIO(response.body), data_only=True)
     assert workbook.sheetnames == ["Resumo", "Usuarios", "Departamentos", "Impressoras", "Tipo"]
+    assert workbook["Resumo"]["B2"].value == "Cliente XLSX"
     assert workbook["Resumo"]["A12"].value == "Custo total"
     assert workbook["Resumo"]["B12"].value == 1.5
     assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"

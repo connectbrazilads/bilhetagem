@@ -32,6 +32,9 @@ def _truncate(value: str, max_length: int) -> str:
 
 
 def _org_name(closing: MonthlyClosing) -> str:
+    snapshot_org = closing.snapshot.get("organization", {}) if closing.snapshot else {}
+    if snapshot_org.get("name"):
+        return str(snapshot_org["name"])
     organization = getattr(closing, "organization", None)
     return getattr(organization, "name", None) or "Sistema de Bilhetagem"
 

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.department import Department
 from app.models.monthly_closing import MonthlyClosing
+from app.models.organization import Organization
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.models.user import User
@@ -36,6 +37,7 @@ def _cost_per_page(cost: float, pages: int) -> float:
 
 def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: int) -> dict:
     start, end = period_bounds(year, month)
+    organization = db.get(Organization, organization_id)
     jobs = (
         db.query(PrintJob)
         .join(User, User.id == PrintJob.user_id)
@@ -114,6 +116,11 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
 
     totals["total_cost"] = _round_money(totals["total_cost"])
     return {
+        "organization": {
+            "id": organization_id,
+            "name": organization.name if organization else "",
+            "slug": organization.slug if organization else "",
+        },
         "period": {"year": year, "month": month, "start": start.isoformat(), "end": end.isoformat()},
         "totals": totals,
         "by_user": rows(by_user),
