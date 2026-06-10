@@ -5,7 +5,7 @@ import { BarChart3, Check, FileText, Info, Leaf, Printer, ShieldAlert, TrendingU
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Surface } from "@/components/ui";
-import { apiFetch, getCurrentUsername, type DashboardMetrics } from "@/lib/api";
+import { apiFetch, getCurrentRole, getCurrentUsername, type DashboardMetrics } from "@/lib/api";
 
 type JobRow = {
   id: number;
@@ -63,6 +63,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [username, setUsername] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [safeReleaseEnabled, setSafeReleaseEnabled] = useState(false);
 
   async function loadMetrics() {
@@ -78,6 +79,7 @@ export default function DashboardPage() {
       const rows = await apiFetch<JobRow[]>("/jobs", token);
       setJobs(rows);
       setUsername(getCurrentUsername(token));
+      setRole(getCurrentRole(token));
     } catch {
       setJobs([]);
     }
@@ -133,8 +135,9 @@ export default function DashboardPage() {
     }
   }
 
+  const canOperateReleaseQueue = role === "admin" || role === "manager";
   const pendingJobs = jobs.filter(
-    (job) => safeReleaseEnabled && job.status === "pending_release" && (username === "admin" || job.username === username)
+    (job) => safeReleaseEnabled && job.status === "pending_release" && (canOperateReleaseQueue || job.username === username)
   );
 
   const totalMonth = data?.pages_month ?? 0;

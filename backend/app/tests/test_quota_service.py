@@ -1,5 +1,11 @@
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
+import pytest
+
+from app.api.routes.jobs import cancel_job, release_job
+from app.models.audit_log import AuditLog
+from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.models.quota import Quota
 from app.models.user import User, UserRole
@@ -100,3 +106,110 @@ def test_reuses_existing_spool_job(db_session):
     second = register_print_job(db_session, payload)
 
     assert second.job_id == first.job_id
+
+
+def test_manager_can_release_pending_job_for_same_organization(db_session):
+    manager = User(username="manager-release", full_name="Manager", role=UserRole.manager, organization_id=1)
+    user = User(username="release-user", full_name="Release User", role=UserRole.user, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_RELEASE", is_color=False, cost_mono=0.05, cost_color=0.25)
+    db_session.add_all([manager, user, printer])
+    db_session.flush()
+    quota = Quota(
+        organization_id=1,
+        user_id=user.id,
+        year=2026,
+        month=6,
+        monthly_limit=100,
+        used_pages=0,
+        monthly_balance=50.0,
+        used_balance=0.0,
+    )
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        document_name="Contrato.pdf",
+        pages=10,
+        is_color=False,
+        cost=0.5,
+        status=JobStatus.pending_release,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add_all([quota, job])
+    db_session.commit()
+
+    decision = release_job(job.id, db=db_session, current_user=manager)
+
+    assert decision.authorized is True
+    assert decision.status == JobStatus.released
+    db_session.refresh(quota)
+    assert quota.used_pages == 10
+    assert quota.used_balance == 0.5
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "print_job_released").one()
+    assert audit.entity == "print_jobs"
+    assert audit.entity_id == job.id
+    assert audit.actor_user_id == manager.id
+    assert audit.log_metadata["job_username"] == "release-user"
+    assert audit.log_metadata["actor_role"] == "manager"
+    assert audit.log_metadata["printer"] == "KONICA_RELEASE"
+    assert audit.log_metadata["pages"] == 10
+
+
+def test_manager_can_cancel_pending_job_for_same_organization(db_session):
+    manager = User(username="manager-cancel", full_name="Manager", role=UserRole.manager, organization_id=1)
+    user = User(username="cancel-user", full_name="Cancel User", role=UserRole.user, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_CANCEL", is_color=True, cost_mono=0.05, cost_color=0.25)
+    db_session.add_all([manager, user, printer])
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        document_name="Planilha.xlsx",
+        pages=3,
+        is_color=True,
+        cost=0.75,
+        status=JobStatus.pending_release,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    result = cancel_job(job.id, db=db_session, current_user=manager)
+
+    assert result == {"status": "cancelled", "job_id": job.id}
+    db_session.refresh(job)
+    assert job.status == JobStatus.cancelled
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "print_job_cancelled").one()
+    assert audit.entity == "print_jobs"
+    assert audit.entity_id == job.id
+    assert audit.actor_user_id == manager.id
+    assert audit.log_metadata["job_username"] == "cancel-user"
+    assert audit.log_metadata["actor_role"] == "manager"
+    assert audit.log_metadata["printer"] == "KONICA_CANCEL"
+    assert audit.log_metadata["pages"] == 3
+
+
+def test_regular_user_cannot_release_another_users_pending_job(db_session):
+    owner = User(username="job-owner", full_name="Job Owner", role=UserRole.user, organization_id=1)
+    other_user = User(username="other-user", full_name="Other User", role=UserRole.user, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_PRIVATE", is_color=False)
+    db_session.add_all([owner, other_user, printer])
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=owner.id,
+        printer_id=printer.id,
+        pages=1,
+        is_color=False,
+        cost=0.05,
+        status=JobStatus.pending_release,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        release_job(job.id, db=db_session, current_user=other_user)
+
+    assert exc.value.status_code == 403

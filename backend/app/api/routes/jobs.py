@@ -16,10 +16,15 @@ from app.models.print_job import PrintJob, JobStatus
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate, PrintJobDecision, PrintJobRead
+from app.services.audit_service import write_audit
 from app.services.print_job_service import register_print_job
 from app.services.settings_service import get_system_settings_dict
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+def _can_operate_job(actor: User, job: PrintJob) -> bool:
+    return job.user_id == actor.id or actor.role in (UserRole.admin, UserRole.manager)
 
 
 @router.get("", response_model=list[PrintJobRead])
@@ -140,7 +145,7 @@ def release_job(
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho não encontrado")
         
-    if job.user_id != current_user.id and current_user.role != UserRole.admin:
+    if not _can_operate_job(current_user, job):
         raise HTTPException(status_code=403, detail="Permissão negada")
         
     if job.status != JobStatus.pending_release:
@@ -173,6 +178,19 @@ def release_job(
     quota.used_pages += job.pages
     quota.used_balance += job.cost
     job.status = JobStatus.released
+    write_audit(
+        db,
+        action="print_job_released",
+        entity="print_jobs",
+        entity_id=job.id,
+        actor_user_id=current_user.id,
+        metadata={
+            "job_username": job.user.username,
+            "actor_role": current_user.role.value,
+            "printer": job.printer.name,
+            "pages": job.pages,
+        },
+    )
     db.commit()
     db.refresh(job)
     return PrintJobDecision(
@@ -194,13 +212,26 @@ def cancel_job(
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho não encontrado")
         
-    if job.user_id != current_user.id and current_user.role != UserRole.admin:
+    if not _can_operate_job(current_user, job):
         raise HTTPException(status_code=403, detail="Permissão negada")
         
     if job.status != JobStatus.pending_release:
         raise HTTPException(status_code=400, detail="Trabalho não está pendente de liberação")
         
     job.status = JobStatus.cancelled
+    write_audit(
+        db,
+        action="print_job_cancelled",
+        entity="print_jobs",
+        entity_id=job.id,
+        actor_user_id=current_user.id,
+        metadata={
+            "job_username": job.user.username,
+            "actor_role": current_user.role.value,
+            "printer": job.printer.name,
+            "pages": job.pages,
+        },
+    )
     job.reason = "Cancelado pelo usuário"
     db.commit()
     return {"status": "cancelled", "job_id": job.id}
