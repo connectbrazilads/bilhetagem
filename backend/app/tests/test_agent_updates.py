@@ -458,6 +458,44 @@ def test_agent_heartbeat_binds_queue_by_serial_case_insensitive(db_session: Sess
     assert db_session.query(Printer).count() == 1
 
 
+def test_agent_heartbeat_updates_printer_ip_when_serial_matches(db_session: Session):
+    actor = User(username="agent-bind-serial-ip", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(
+        organization_id=1,
+        name="KONICA SERIAL IP HEARTBEAT",
+        serial_number="SN-HEARTBEAT-IP",
+        ip_address="192.168.1.10",
+        is_color=True,
+    )
+    db_session.add_all([actor, printer])
+    db_session.commit()
+
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-bind-serial-ip",
+            computer_name="PC-BIND-SERIAL-IP",
+            queues=[
+                {
+                    "queue_name": "Konica Local",
+                    "driver_name": "KONICA Driver",
+                    "connection_type": "network",
+                    "ip_address": "192.168.1.125",
+                    "serial_number": "sn-heartbeat-ip",
+                    "fingerprint": "serial:sn-heartbeat-ip",
+                }
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    updated = db_session.get(Printer, printer.id)
+    assert response.aliases[0].printer_id == printer.id
+    assert db_session.query(Printer).count() == 1
+    assert updated.ip_address == "192.168.1.125"
+
+
 def test_agent_heartbeat_auto_binds_usb_queue_by_known_device_id(db_session: Session):
     actor = User(username="agent-usb-bind", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="BROTHER USB FISICA", is_color=False)

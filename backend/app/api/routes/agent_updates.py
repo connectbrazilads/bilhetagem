@@ -222,6 +222,12 @@ def _identity_key(value: str | None) -> str | None:
     return cleaned.lower() if cleaned else None
 
 
+def _same_identity(left: str | None, right: str | None) -> bool:
+    left_key = _identity_key(left)
+    right_key = _identity_key(right)
+    return bool(left_key and right_key and left_key == right_key)
+
+
 def _find_printer_by_serial(db: Session, organization_id: int, serial_number: str | None) -> Printer | None:
     identity = _identity_key(serial_number)
     if not identity:
@@ -603,15 +609,19 @@ def _find_bound_printer_alias(
 
 def _find_printer_for_queue_metadata(db: Session, organization_id: int, queue: AgentQueuePayload) -> Printer | None:
     serial_number = _clean_optional(queue.serial_number)
+    ip_address = _clean_optional(queue.ip_address)
     if serial_number:
         printer = _find_printer_by_serial(db, organization_id, serial_number)
         if printer:
+            if ip_address:
+                printer.ip_address = ip_address
             return printer
 
-    ip_address = _clean_optional(queue.ip_address)
     if ip_address:
         printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.ip_address == ip_address).first()
         if printer:
+            if serial_number and not printer.serial_number:
+                printer.serial_number = serial_number
             return printer
 
     alias = _find_bound_printer_alias(
@@ -623,6 +633,10 @@ def _find_printer_for_queue_metadata(db: Session, organization_id: int, queue: A
         fingerprint=queue.fingerprint,
     )
     if alias and alias.printer:
+        if serial_number and not alias.printer.serial_number:
+            alias.printer.serial_number = serial_number
+        if ip_address and (not alias.printer.ip_address or _same_identity(alias.printer.serial_number, serial_number)):
+            alias.printer.ip_address = ip_address
         return alias.printer
     return None
 
