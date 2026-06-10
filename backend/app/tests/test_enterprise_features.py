@@ -1340,6 +1340,52 @@ def test_updating_organization_writes_changed_fields_to_audit(db_session: Sessio
     assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 1
 
 
+def test_organization_printer_limit_cannot_be_reduced_below_active_printers(db_session: Session):
+    platform_admin = User(username="platform-limit-admin", full_name="Platform Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    organization = Organization(name="Cliente Limite Reducao", slug="cliente-limite-reducao", is_active=True, contracted_printer_limit=5)
+    db_session.add_all([platform_admin, organization])
+    db_session.flush()
+    db_session.add_all(
+        [
+            Printer(organization_id=organization.id, name="Limite Ativa A", is_color=False, is_active=True),
+            Printer(organization_id=organization.id, name="Limite Ativa B", is_color=False, is_active=True),
+            Printer(organization_id=organization.id, name="Limite Inativa", is_color=False, is_active=False),
+        ]
+    )
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        update_organization(
+            organization.id,
+            OrganizationUpdate(contracted_printer_limit=1),
+            db=db_session,
+            actor=platform_admin,
+        )
+
+    assert exc.value.status_code == 409
+    assert "Limite contratado menor que as impressoras ativas atuais" in exc.value.detail
+    db_session.rollback()
+    unchanged = db_session.query(Organization).filter(Organization.id == organization.id).one()
+    assert unchanged.contracted_printer_limit == 5
+    assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 0
+
+    updated = update_organization(
+        organization.id,
+        OrganizationUpdate(contracted_printer_limit=2),
+        db=db_session,
+        actor=platform_admin,
+    )
+    assert updated.contracted_printer_limit == 2
+
+    unlimited = update_organization(
+        organization.id,
+        OrganizationUpdate(contracted_printer_limit=0),
+        db=db_session,
+        actor=platform_admin,
+    )
+    assert unlimited.contracted_printer_limit == 0
+
+
 def test_admin_cannot_deactivate_own_organization(db_session: Session):
     tenant_org = Organization(name="Cliente Lockout", slug="cliente-lockout", is_active=True)
     db_session.add(tenant_org)

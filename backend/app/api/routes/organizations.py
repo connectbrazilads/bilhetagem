@@ -66,17 +66,21 @@ def _printer_limit_status(active_printers: int, limit: int) -> tuple[float, str]
     return usage_percent, "ok"
 
 
+def _active_printers_count(db: Session, organization_id: int) -> int:
+    return (
+        db.query(Printer)
+        .filter(Printer.organization_id == organization_id, Printer.is_active.is_(True))
+        .count()
+    )
+
+
 def _organization_read(db: Session, organization: Organization) -> OrganizationRead:
     now = datetime.now(timezone.utc)
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization.id).all()
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
     printers_count = db.query(Printer).filter(Printer.organization_id == organization.id).count()
-    active_printers_count = (
-        db.query(Printer)
-        .filter(Printer.organization_id == organization.id, Printer.is_active.is_(True))
-        .count()
-    )
+    active_printers_count = _active_printers_count(db, organization.id)
     printer_usage_percent, printer_limit_status = _printer_limit_status(
         active_printers_count,
         organization.contracted_printer_limit,
@@ -210,6 +214,17 @@ def update_organization(
         raise HTTPException(status_code=400, detail="Nao e possivel desativar a empresa em uso pelo usuario logado")
     if payload.billing_status == "suspended" and organization.id == actor.organization_id:
         raise HTTPException(status_code=400, detail="Nao e possivel suspender a empresa em uso pelo usuario logado")
+    if payload.contracted_printer_limit is not None and payload.contracted_printer_limit > 0:
+        active_printers = _active_printers_count(db, organization.id)
+        if active_printers > payload.contracted_printer_limit:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Limite contratado menor que as impressoras ativas atuais "
+                    f"({active_printers}/{payload.contracted_printer_limit}). "
+                    "Desative ou mescle impressoras antes de reduzir o contrato."
+                ),
+            )
 
     before = {
         "name": organization.name,
