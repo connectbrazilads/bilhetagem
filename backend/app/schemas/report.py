@@ -17,17 +17,52 @@ class OperationalHealth(BaseModel):
     duplicate_queue_aliases: int = 0
 
 
+class DashboardUserUsage(BaseModel):
+    username: str
+    pages: int = Field(ge=0)
+    cost: float = 0.0
+    cost_per_page: float = 0.0
+
+
+class DashboardPrinterUsage(BaseModel):
+    printer: str
+    pages: int = Field(ge=0)
+    cost: float = 0.0
+    cost_per_page: float = 0.0
+
+
+class DashboardDepartmentUsage(BaseModel):
+    department: str
+    pages: int = Field(ge=0)
+    cost: float = 0.0
+    cost_per_page: float = 0.0
+
+
+class DashboardColorUsage(BaseModel):
+    type: str
+    pages: int = Field(ge=0)
+    cost: float = 0.0
+    cost_per_page: float = 0.0
+
+
+class DashboardEcoMetrics(BaseModel):
+    pages_saved: int = Field(ge=0)
+    co2_saved_g: float = 0.0
+    water_saved_l: float = 0.0
+    trees_saved: float = 0.0
+
+
 class DashboardMetrics(BaseModel):
     prints_today: int
     prints_month: int
     pages_today: int
     pages_month: int
     operational_health: OperationalHealth | None = None
-    top_users: list[dict]
-    top_printers: list[dict]
-    department_usage: list[dict]
-    color_usage: list[dict]
-    eco_metrics: dict | None = None
+    top_users: list[DashboardUserUsage]
+    top_printers: list[DashboardPrinterUsage]
+    department_usage: list[DashboardDepartmentUsage]
+    color_usage: list[DashboardColorUsage]
+    eco_metrics: DashboardEcoMetrics | None = None
 
 
 class MonthlyClosingCreate(BaseModel):
