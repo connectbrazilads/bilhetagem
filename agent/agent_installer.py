@@ -94,7 +94,12 @@ def pick_arg_or_existing(arg_value, existing: dict, key: str, default="", *, all
 def as_bool(value) -> bool:
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in {"true", "1", "yes", "sim"}
+    cleaned = str(value).strip().lower()
+    if cleaned in {"true", "1", "yes", "sim"}:
+        return True
+    if cleaned in {"false", "0", "no", "nao", "não"}:
+        return False
+    raise RuntimeError(f"Valor booleano invalido: {value}")
 
 
 def normalize_text(value) -> str:
@@ -116,6 +121,9 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             allow_empty_arg=True,
         )
         spool_server = pick_arg_or_config(args.spool_server, existing, template, "PRINTBILLING_SPOOL_SERVER", "")
+        cancel_blocked = pick_arg_or_config(args.cancel_blocked, existing, template, "PRINTBILLING_CANCEL_BLOCKED", True)
+        use_print_event_log = pick_arg_or_config(args.use_print_event_log, existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)
+        auto_update = pick_arg_or_config(args.auto_update, existing, template, "PRINTBILLING_AUTO_UPDATE", True)
         if not api_url or not username or not password or not organization_slug:
             raise RuntimeError("Modo silencioso requer --api-url, --username, --password e --organization em instalacoes novas.")
     else:
@@ -148,6 +156,9 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             "Servidor de impressao remoto (opcional)",
             existing.get("PRINTBILLING_SPOOL_SERVER") or template.get("PRINTBILLING_SPOOL_SERVER", ""),
         )
+        cancel_blocked = pick_config_value(existing, template, "PRINTBILLING_CANCEL_BLOCKED", True)
+        use_print_event_log = pick_config_value(existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)
+        auto_update = pick_config_value(existing, template, "PRINTBILLING_AUTO_UPDATE", True)
 
     api_url = normalize_text(api_url)
     username = normalize_text(username)
@@ -163,15 +174,15 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         "PRINTBILLING_AGENT_USER": username,
         "PRINTBILLING_AGENT_PASSWORD": password,
         "PRINTBILLING_ORGANIZATION_SLUG": organization_slug,
-        "PRINTBILLING_CANCEL_BLOCKED": as_bool(pick_config_value(existing, template, "PRINTBILLING_CANCEL_BLOCKED", True)),
+        "PRINTBILLING_CANCEL_BLOCKED": as_bool(cancel_blocked),
         "PRINTBILLING_POLL_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_POLL_INTERVAL", 5)),
         "PRINTBILLING_DEFAULT_USERNAME": default_username,
         "PRINTBILLING_SNMP_POLL_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_SNMP_POLL_INTERVAL", 60)),
         "PRINTBILLING_SNMP_COMMUNITY": pick_config_value(existing, template, "PRINTBILLING_SNMP_COMMUNITY", "public"),
         "PRINTBILLING_SNMP_TIMEOUT_SECONDS": float(pick_config_value(existing, template, "PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2)),
         "PRINTBILLING_SNMP_RETRIES": int(pick_config_value(existing, template, "PRINTBILLING_SNMP_RETRIES", 1)),
-        "PRINTBILLING_USE_PRINT_EVENT_LOG": as_bool(pick_config_value(existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)),
-        "PRINTBILLING_AUTO_UPDATE": as_bool(pick_config_value(existing, template, "PRINTBILLING_AUTO_UPDATE", True)),
+        "PRINTBILLING_USE_PRINT_EVENT_LOG": as_bool(use_print_event_log),
+        "PRINTBILLING_AUTO_UPDATE": as_bool(auto_update),
         "PRINTBILLING_UPDATE_CHECK_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600)),
         "PRINTBILLING_HEARTBEAT_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_HEARTBEAT_INTERVAL", 60)),
         "PRINTBILLING_QUEUE_ACTION_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_QUEUE_ACTION_INTERVAL", 30)),
@@ -241,6 +252,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--organization", help="Slug da empresa")
     parser.add_argument("--default-username", help="Usuario padrao quando o Windows nao informar")
     parser.add_argument("--spool-server", help="Servidor de impressao remoto opcional para enumerar filas")
+    parser.add_argument("--cancel-blocked", help="Cancela trabalhos bloqueados no spool: true ou false")
+    parser.add_argument("--use-print-event-log", help="Usa Event Log de impressao do Windows: true ou false")
+    parser.add_argument("--auto-update", help="Permite auto-update do agent: true ou false")
     return parser.parse_args()
 
 

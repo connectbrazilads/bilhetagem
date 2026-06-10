@@ -15,6 +15,9 @@
     <Property Id="ORGANIZATION" Secure="yes" Value="default" />
     <Property Id="DEFAULTUSERNAME" Secure="yes" />
     <Property Id="SPOOLSERVER" Secure="yes" />
+    <Property Id="CANCELBLOCKED" Secure="yes" />
+    <Property Id="USEPRINTEVENTLOG" Secure="yes" />
+    <Property Id="AUTOUPDATE" Secure="yes" />
 
     <StandardDirectory Id="ProgramFilesFolder">
       <Directory Id="INSTALLFOLDER" Name="PrintBillingAgentBootstrap">
@@ -28,7 +31,7 @@
     <CustomAction
       Id="RunAgentInstaller"
       BinaryRef="AgentInstallerExe"
-      ExeCommand="--silent --api-url &quot;[APIURL]&quot; --username &quot;[AGENTUSER]&quot; --password &quot;[AGENTPASSWORD]&quot; --organization &quot;[ORGANIZATION]&quot; --default-username &quot;[DEFAULTUSERNAME]&quot; --spool-server &quot;[SPOOLSERVER]&quot;"
+      ExeCommand="--silent --api-url &quot;[APIURL]&quot; --username &quot;[AGENTUSER]&quot; --password &quot;[AGENTPASSWORD]&quot; --organization &quot;[ORGANIZATION]&quot; --default-username &quot;[DEFAULTUSERNAME]&quot; --spool-server &quot;[SPOOLSERVER]&quot; --cancel-blocked &quot;[CANCELBLOCKED]&quot; --use-print-event-log &quot;[USEPRINTEVENTLOG]&quot; --auto-update &quot;[AUTOUPDATE]&quot;"
       Execute="deferred"
       Return="check"
       Impersonate="no" />

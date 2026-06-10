@@ -50,12 +50,13 @@ Para remover:
 ## Instalacao silenciosa
 
 ```powershell
-.\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "SENHA_FORTE_DO_AGENT" --organization default --default-username ""
+.\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "SENHA_FORTE_DO_AGENT" --organization default --default-username "" --use-print-event-log "true" --cancel-blocked "true" --auto-update "true"
 ```
 
 Na instalacao silenciosa nova, informe `--api-url`, `--username`, `--password` e `--organization`.
 Na reinstalacao silenciosa, parametros omitidos reutilizam o `config.json` existente. Para remover um usuario padrao antigo do PC, envie explicitamente `--default-username ""`.
 Se o agent precisa monitorar filas de um servidor de impressao remoto, adicione `--spool-server "\\SRV-PRINT01"`.
+Use `--use-print-event-log`, `--cancel-blocked` e `--auto-update` com `true` ou `false` para padronizar o modo de captura e comportamento do agent em implantacoes em lote.
 
 ## Auto-update
 
@@ -134,5 +135,5 @@ $env:PRINTBILLING_CERT_PASSWORD="senha"
 MSI silencioso:
 
 ```powershell
-msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="SENHA_FORTE_DO_AGENT" ORGANIZATION="default" SPOOLSERVER="\\SRV-PRINT01" /qn
+msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="SENHA_FORTE_DO_AGENT" ORGANIZATION="default" SPOOLSERVER="\\SRV-PRINT01" USEPRINTEVENTLOG="true" CANCELBLOCKED="true" AUTOUPDATE="true" /qn
 ```

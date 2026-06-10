@@ -83,6 +83,9 @@ export default function DownloadsPage() {
   const [deployPassword, setDeployPassword] = useState("");
   const [defaultUsername, setDefaultUsername] = useState("");
   const [spoolServer, setSpoolServer] = useState("");
+  const [cancelBlocked, setCancelBlocked] = useState(true);
+  const [usePrintEventLog, setUsePrintEventLog] = useState(true);
+  const [autoUpdate, setAutoUpdate] = useState(true);
   const [copiedCommand, setCopiedCommand] = useState<"exe" | "msi" | null>(null);
 
   async function load() {
@@ -163,11 +166,14 @@ export default function DownloadsPage() {
   const commandMissingMessage = selectedOrganizationActive
     ? "Informe empresa, usuario e senha do agent para gerar o comando."
     : "Empresa inativa: reative a empresa antes de gerar comando de instalacao.";
+  const cancelBlockedArg = cancelBlocked ? "true" : "false";
+  const usePrintEventLogArg = usePrintEventLog ? "true" : "false";
+  const autoUpdateArg = autoUpdate ? "true" : "false";
   const exeCommand = installerFile && commandReady
-    ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}" --spool-server "${spoolServer}"`
+    ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}" --spool-server "${spoolServer}" --cancel-blocked "${cancelBlockedArg}" --use-print-event-log "${usePrintEventLogArg}" --auto-update "${autoUpdateArg}"`
     : "";
   const msiCommand = msiFile && commandReady
-    ? `msiexec /i "${msiFile.filename}" APIURL="${API_URL}" AGENTUSER="${deployUser}" AGENTPASSWORD="${deployPassword}" ORGANIZATION="${deployOrg}" DEFAULTUSERNAME="${defaultUsername}" SPOOLSERVER="${spoolServer}" /qn`
+    ? `msiexec /i "${msiFile.filename}" APIURL="${API_URL}" AGENTUSER="${deployUser}" AGENTPASSWORD="${deployPassword}" ORGANIZATION="${deployOrg}" DEFAULTUSERNAME="${defaultUsername}" SPOOLSERVER="${spoolServer}" CANCELBLOCKED="${cancelBlockedArg}" USEPRINTEVENTLOG="${usePrintEventLogArg}" AUTOUPDATE="${autoUpdateArg}" /qn`
     : "";
 
   return (
@@ -234,6 +240,20 @@ export default function DownloadsPage() {
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
               Servidor de impressao
               <Input placeholder="Opcional: \\SRV-PRINT01" value={spoolServer} onChange={(event) => setSpoolServer(event.target.value)} />
+            </label>
+          </div>
+          <div className="mb-4 grid gap-2 md:grid-cols-3">
+            <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground">
+              <input type="checkbox" checked={cancelBlocked} onChange={(event) => setCancelBlocked(event.target.checked)} />
+              Cancelar bloqueados
+            </label>
+            <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground">
+              <input type="checkbox" checked={usePrintEventLog} onChange={(event) => setUsePrintEventLog(event.target.checked)} />
+              Usar Event Log
+            </label>
+            <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground">
+              <input type="checkbox" checked={autoUpdate} onChange={(event) => setAutoUpdate(event.target.checked)} />
+              Auto-update
             </label>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">

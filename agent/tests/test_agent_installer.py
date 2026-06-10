@@ -15,6 +15,9 @@ def args(**overrides):
         "organization": None,
         "default_username": None,
         "spool_server": None,
+        "cancel_blocked": None,
+        "use_print_event_log": None,
+        "auto_update": None,
     }
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -114,6 +117,90 @@ def test_silent_install_can_set_remote_spool_server():
     )
 
     assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\SRV-PRINT01"
+
+
+def test_silent_install_can_override_capture_and_update_flags():
+    config = build_config(
+        {},
+        {},
+        args(
+            api_url="https://billing.example.com",
+            username="agent",
+            password="secret",
+            organization="cliente-a",
+            cancel_blocked="false",
+            use_print_event_log="false",
+            auto_update="false",
+        ),
+    )
+
+    assert config["PRINTBILLING_CANCEL_BLOCKED"] is False
+    assert config["PRINTBILLING_USE_PRINT_EVENT_LOG"] is False
+    assert config["PRINTBILLING_AUTO_UPDATE"] is False
+
+
+def test_silent_install_keeps_template_flags_when_not_overridden():
+    template = {
+        "PRINTBILLING_CANCEL_BLOCKED": False,
+        "PRINTBILLING_USE_PRINT_EVENT_LOG": False,
+        "PRINTBILLING_AUTO_UPDATE": False,
+    }
+
+    config = build_config(
+        {},
+        template,
+        args(
+            api_url="https://billing.example.com",
+            username="agent",
+            password="secret",
+            organization="cliente-a",
+        ),
+    )
+
+    assert config["PRINTBILLING_CANCEL_BLOCKED"] is False
+    assert config["PRINTBILLING_USE_PRINT_EVENT_LOG"] is False
+    assert config["PRINTBILLING_AUTO_UPDATE"] is False
+
+
+def test_silent_install_ignores_empty_boolean_args_from_msi():
+    existing = {
+        "PRINTBILLING_API_URL": "https://billing.example.com",
+        "PRINTBILLING_AGENT_USER": "agent",
+        "PRINTBILLING_AGENT_PASSWORD": "secret",
+        "PRINTBILLING_ORGANIZATION_SLUG": "cliente-a",
+        "PRINTBILLING_CANCEL_BLOCKED": False,
+        "PRINTBILLING_USE_PRINT_EVENT_LOG": False,
+        "PRINTBILLING_AUTO_UPDATE": False,
+    }
+
+    config = build_config(
+        existing,
+        {},
+        args(cancel_blocked="", use_print_event_log="", auto_update=""),
+    )
+
+    assert config["PRINTBILLING_CANCEL_BLOCKED"] is False
+    assert config["PRINTBILLING_USE_PRINT_EVENT_LOG"] is False
+    assert config["PRINTBILLING_AUTO_UPDATE"] is False
+
+
+def test_silent_install_rejects_invalid_boolean_arg():
+    try:
+        build_config(
+            {},
+            {},
+            args(
+                api_url="https://billing.example.com",
+                username="agent",
+                password="secret",
+                organization="cliente-a",
+                auto_update="talvez",
+            ),
+        )
+    except RuntimeError as exc:
+        assert "booleano invalido" in str(exc)
+    else:
+        raise AssertionError("Valor booleano invalido deveria falhar")
 
 
 def test_silent_new_install_requires_explicit_organization_slug():
