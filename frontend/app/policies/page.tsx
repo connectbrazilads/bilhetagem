@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Edit, Plus, ShieldCheck, TestTube2, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Edit, Plus, ShieldCheck, TestTube2, Trash2 } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -274,6 +274,27 @@ export default function PoliciesPage() {
     }
   }
 
+  async function reorderPolicy(policyId: number, direction: "up" | "down") {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const currentIndex = policies.findIndex((policy) => policy.id === policyId);
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= policies.length) return;
+
+    const ordered = [...policies];
+    [ordered[currentIndex], ordered[targetIndex]] = [ordered[targetIndex], ordered[currentIndex]];
+    setError(null);
+    try {
+      const updated = await apiFetch<PolicyRow[]>("/policies/reorder", token, {
+        method: "POST",
+        body: JSON.stringify({ policy_ids: ordered.map((policy) => policy.id) }),
+      });
+      setPolicies(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao reordenar politicas");
+    }
+  }
+
   function describePolicy(policy: PolicyRow) {
     const parts = [ruleLabels[policy.rule_type]];
     if (policy.max_pages) parts.push(`>${policy.max_pages} pag.`);
@@ -505,7 +526,7 @@ export default function PoliciesPage() {
             </tr>
           </thead>
           <tbody>
-            {policies.map((policy) => (
+            {policies.map((policy, index) => (
               <tr key={policy.id} className="border-t bg-white hover:bg-muted/30">
                 <td className="p-4 font-semibold">{policy.priority}</td>
                 <td className="p-4">
@@ -521,6 +542,26 @@ export default function PoliciesPage() {
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      title="Subir prioridade"
+                      disabled={index === 0}
+                      onClick={() => reorderPolicy(policy.id, "up")}
+                    >
+                      <ArrowUp className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      title="Descer prioridade"
+                      disabled={index === policies.length - 1}
+                      onClick={() => reorderPolicy(policy.id, "down")}
+                    >
+                      <ArrowDown className="h-4 w-4 text-muted-foreground" />
+                    </Button>
                     <Button variant="ghost" className="h-8 w-8 p-0" title="Editar" onClick={() => startEdit(policy)}>
                       <Edit className="h-4 w-4 text-muted-foreground" />
                     </Button>

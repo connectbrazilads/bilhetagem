@@ -2,12 +2,15 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.api.routes.policies import reorder_policies
+from app.models.audit_log import AuditLog
 from app.models.department import Department
 from app.models.print_job import JobStatus, PrintJob
 from app.models.print_policy import PolicyAction, PolicyRuleType, PrintPolicy
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate
+from app.schemas.policy import PrintPolicyReorder
 from app.services.policy_service import simulate_print_policy
 from app.services.print_job_service import register_print_job
 
@@ -196,6 +199,29 @@ def test_inactive_policy_does_not_interfere_with_new_jobs(db_session: Session):
     job = db_session.query(PrintJob).filter(PrintJob.id == decision.job_id).one()
     assert job.policy_name is None
     assert job.policy_action is None
+
+
+def test_reorder_policies_updates_priorities_and_audits(db_session: Session):
+    actor = _admin(db_session)
+    policies = [
+        PrintPolicy(organization_id=1, name="Primeira", priority=10, rule_type=PolicyRuleType.always, action=PolicyAction.allow),
+        PrintPolicy(organization_id=1, name="Segunda", priority=20, rule_type=PolicyRuleType.color, action=PolicyAction.block),
+        PrintPolicy(organization_id=1, name="Terceira", priority=30, rule_type=PolicyRuleType.max_pages, action=PolicyAction.require_release, max_pages=5),
+    ]
+    db_session.add_all(policies)
+    db_session.commit()
+
+    reordered = reorder_policies(
+        PrintPolicyReorder(policy_ids=[policies[2].id, policies[0].id, policies[1].id]),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert [policy.id for policy in reordered] == [policies[2].id, policies[0].id, policies[1].id]
+    assert [policy.priority for policy in reordered] == [10, 20, 30]
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "policy_reordered").one()
+    assert audit.log_metadata["old_order"][0]["id"] == policies[0].id
+    assert audit.log_metadata["new_order"][0] == {"id": policies[2].id, "priority": 10}
 
 
 def test_policy_simulation_does_not_create_job_or_debit_quota(db_session: Session):

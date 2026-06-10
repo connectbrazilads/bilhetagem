@@ -63,6 +63,10 @@ class PrintPolicyRead(PrintPolicyBase):
     model_config = {"from_attributes": True}
 
 
+class PrintPolicyReorder(BaseModel):
+    policy_ids: list[int] = Field(min_length=1)
+
+
 class PrintPolicySimulationRequest(PrintJobCreate):
     pass
 

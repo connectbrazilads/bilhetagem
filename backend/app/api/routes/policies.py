@@ -9,7 +9,14 @@ from app.models.print_policy import PrintPolicy, PolicyRuleType
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.user import User, UserRole
-from app.schemas.policy import PrintPolicyCreate, PrintPolicyRead, PrintPolicySimulationRead, PrintPolicySimulationRequest, PrintPolicyUpdate
+from app.schemas.policy import (
+    PrintPolicyCreate,
+    PrintPolicyRead,
+    PrintPolicyReorder,
+    PrintPolicySimulationRead,
+    PrintPolicySimulationRequest,
+    PrintPolicyUpdate,
+)
 from app.services.audit_service import write_audit
 from app.services.policy_service import simulate_print_policy
 
@@ -120,6 +127,49 @@ def simulate_policy(
         user_id=simulation.user.id,
         printer_id=simulation.printer.id,
         printer_alias_id=simulation.alias.id if simulation.alias else None,
+    )
+
+
+@router.post("/reorder", response_model=list[PrintPolicyRead])
+def reorder_policies(
+    payload: PrintPolicyReorder,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> list[PrintPolicy]:
+    current_policies = (
+        db.query(PrintPolicy)
+        .filter(PrintPolicy.organization_id == actor.organization_id)
+        .order_by(PrintPolicy.priority, PrintPolicy.id)
+        .all()
+    )
+    current_ids = [policy.id for policy in current_policies]
+    requested_ids = payload.policy_ids
+    if len(set(requested_ids)) != len(requested_ids):
+        raise HTTPException(status_code=422, detail="Lista de politicas contem IDs duplicados")
+    if set(requested_ids) != set(current_ids):
+        raise HTTPException(status_code=422, detail="Informe todas as politicas da empresa para reordenar")
+
+    by_id = {policy.id: policy for policy in current_policies}
+    old_order = [{"id": policy.id, "priority": policy.priority} for policy in current_policies]
+    for index, policy_id in enumerate(requested_ids, start=1):
+        by_id[policy_id].priority = index * 10
+
+    write_audit(
+        db,
+        action="policy_reordered",
+        entity="print_policies",
+        actor_user_id=actor.id,
+        metadata={
+            "old_order": old_order,
+            "new_order": [{"id": policy_id, "priority": index * 10} for index, policy_id in enumerate(requested_ids, start=1)],
+        },
+    )
+    db.commit()
+    return (
+        db.query(PrintPolicy)
+        .filter(PrintPolicy.organization_id == actor.organization_id)
+        .order_by(PrintPolicy.priority, PrintPolicy.id)
+        .all()
     )
 
 
