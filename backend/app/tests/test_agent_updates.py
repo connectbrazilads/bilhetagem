@@ -303,7 +303,7 @@ def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_sessio
         """,
         encoding="utf-8",
     )
-    monkeypatch.setattr(settings, "agent_latest_version", "0.3.1")
+    monkeypatch.setattr(settings, "agent_latest_version", "0.2.0")
     monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
     actor = User(username="stale-manifest-admin", full_name="Release Admin", role=UserRole.admin, is_active=True)
     db_session.add(actor)
@@ -318,6 +318,8 @@ def test_agent_releases_skip_files_when_manifest_hash_or_size_is_stale(db_sessio
     assert release.files == []
     assert release.signature_status == "empty"
     assert release.signature_summary == "Nenhum arquivo publicado"
+    assert published_agent_version() == "0.2.0"
+    assert version.latest_version == "0.2.0"
     assert version.update_available is False
     assert version.sha256 is None
     assert checksums.body.decode("utf-8") == ""

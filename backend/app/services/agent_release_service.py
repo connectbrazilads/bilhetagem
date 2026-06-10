@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 
 from app.core.config import settings
@@ -39,6 +40,43 @@ def _is_safe_release_filename(filename: str) -> bool:
     return bool(filename) and Path(filename).name == filename and "/" not in filename and "\\" not in filename
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _manifest_sha256(value) -> str | None:
+    if value is None:
+        return None
+    expected = str(value).strip().lower()
+    if len(expected) != 64 or any(char not in "0123456789abcdef" for char in expected):
+        return ""
+    return expected
+
+
+def _manifest_int(value) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _release_file_matches_manifest(path: Path, file: dict) -> bool:
+    expected_sha256 = _manifest_sha256(file.get("sha256"))
+    expected_size = _manifest_int(file.get("size_bytes"))
+    if expected_size is not None and expected_size != path.stat().st_size:
+        return False
+    if expected_sha256 is not None and expected_sha256 != _sha256(path):
+        return False
+    return True
+
+
 def _release_sort_key(release: dict) -> tuple[str, tuple[int, ...]]:
     return (str(release.get("published_at") or ""), version_tuple(str(release.get("version") or "")))
 
@@ -61,7 +99,13 @@ def published_agent_version() -> str:
                     if not isinstance(file, dict):
                         continue
                     filename = str(file.get("filename") or "")
-                    if file.get("kind") == "agent" and _is_safe_release_filename(filename) and _release_file(version, filename).is_file():
+                    path = _release_file(version, filename)
+                    if (
+                        file.get("kind") == "agent"
+                        and _is_safe_release_filename(filename)
+                        and path.is_file()
+                        and _release_file_matches_manifest(path, file)
+                    ):
                         return version
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             pass
