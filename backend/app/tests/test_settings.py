@@ -14,14 +14,18 @@ from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
 from app.api.routes.settings import (
     get_general_settings,
+    get_ldap_settings_endpoint,
     get_operational_settings,
+    test_ldap_endpoint as ldap_test_endpoint,
+    sync_ldap_endpoint,
     update_general_settings,
+    update_ldap_settings_endpoint,
     update_monthly_report_email_settings_endpoint,
 )
 from app.api.routes.printers import create_printer_endpoint
 from app.models.audit_log import AuditLog
 from app.schemas.printer import PrinterCreate
-from app.schemas.settings import GeneralSettings, MonthlyReportEmailSettings
+from app.schemas.settings import GeneralSettings, LDAPSettings, MonthlyReportEmailSettings
 
 
 def test_general_settings_api(db_session: Session):
@@ -89,6 +93,95 @@ def test_general_settings_fall_back_when_stored_values_are_invalid(db_session: S
     assert settings.blocking_enabled is True
     assert settings.show_balance is False
     assert settings.web_print_enabled is True
+
+
+def test_ldap_settings_are_saved_per_organization_without_returning_password(db_session: Session):
+    actor = User(username="admin-ldap-settings", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    updated = update_ldap_settings_endpoint(
+        payload=LDAPSettings(
+            server="ldap://ad.empresa.local:389",
+            bind_dn="cn=admin,dc=empresa,dc=local",
+            bind_password="secret",
+            search_base="dc=empresa,dc=local",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    loaded = get_ldap_settings_endpoint(db=db_session, actor=actor)
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "ldap_settings_updated").one()
+    password_row = (
+        db_session.query(SystemSetting)
+        .filter(SystemSetting.organization_id == actor.organization_id, SystemSetting.key == "ldap_bind_password")
+        .one()
+    )
+    assert updated.server == "ldap://ad.empresa.local:389"
+    assert updated.has_bind_password is True
+    assert loaded.bind_dn == "cn=admin,dc=empresa,dc=local"
+    assert loaded.has_bind_password is True
+    assert password_row.value == "secret"
+    assert "bind_password" not in loaded.model_dump()
+    assert "secret" not in str(audit.log_metadata)
+    assert "ldap_bind_password" not in str(audit.log_metadata)
+
+
+def test_ldap_test_endpoint_uses_saved_password_when_payload_omits_it(db_session: Session, monkeypatch):
+    actor = User(username="admin-ldap-test", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    update_ldap_settings_endpoint(
+        payload=LDAPSettings(
+            server="ldap://ad.empresa.local:389",
+            bind_dn="cn=admin,dc=empresa,dc=local",
+            bind_password="secret",
+            search_base="dc=empresa,dc=local",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+    calls = []
+
+    def fake_test_connection(server: str, bind_dn: str, bind_password: str) -> bool:
+        calls.append((server, bind_dn, bind_password))
+        return True
+
+    monkeypatch.setattr("app.api.routes.settings.test_ldap_connection", fake_test_connection)
+
+    response = ldap_test_endpoint(payload=LDAPSettings(), db=db_session, actor=actor)
+
+    assert response["success"] is True
+    assert calls == [("ldap://ad.empresa.local:389", "cn=admin,dc=empresa,dc=local", "secret")]
+
+
+def test_ldap_sync_endpoint_uses_saved_settings_when_payload_omits_them(db_session: Session, monkeypatch):
+    actor = User(username="admin-ldap-sync-settings", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    update_ldap_settings_endpoint(
+        payload=LDAPSettings(
+            server="ldap://ad.empresa.local:389",
+            bind_dn="cn=admin,dc=empresa,dc=local",
+            bind_password="secret",
+            search_base="dc=empresa,dc=local",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+    calls = []
+
+    def fake_sync_users(db: Session, server: str, bind_dn: str, bind_password: str, search_base: str, organization_id: int | None = None) -> dict:
+        calls.append((server, bind_dn, bind_password, search_base, organization_id))
+        return {"success": True, "total_synced": 0, "new_users": 0, "updated_users": 0, "skipped_users": 0}
+
+    monkeypatch.setattr("app.api.routes.settings.sync_ldap_users", fake_sync_users)
+
+    response = sync_ldap_endpoint(payload=LDAPSettings(), db=db_session, actor=actor)
+
+    assert response["success"] is True
+    assert calls == [("ldap://ad.empresa.local:389", "cn=admin,dc=empresa,dc=local", "secret", "dc=empresa,dc=local", 1)]
 
 
 def test_settings_updates_are_audited(db_session: Session):

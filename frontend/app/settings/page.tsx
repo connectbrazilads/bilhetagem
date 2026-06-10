@@ -22,6 +22,13 @@ type MonthlyReportEmailSettings = {
   include_xlsx: boolean;
 };
 
+type LdapSettings = {
+  server: string;
+  bind_dn: string;
+  search_base: string;
+  has_bind_password: boolean;
+};
+
 export default function SettingsPage() {
   const [defaultQuota, setDefaultQuota] = useState(500);
   const [defaultPrinterCostMono, setDefaultPrinterCostMono] = useState(0.05);
@@ -40,8 +47,9 @@ export default function SettingsPage() {
 
   const [ldapServer, setLdapServer] = useState("ldap://localhost:389");
   const [ldapBindDn, setLdapBindDn] = useState("cn=admin,dc=example,dc=com");
-  const [ldapBindPassword, setLdapBindPassword] = useState("secret");
+  const [ldapBindPassword, setLdapBindPassword] = useState("");
   const [ldapSearchBase, setLdapSearchBase] = useState("dc=example,dc=com");
+  const [hasSavedLdapPassword, setHasSavedLdapPassword] = useState(false);
 
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [selectedPrinterId, setSelectedPrinterId] = useState("");
@@ -97,20 +105,22 @@ export default function SettingsPage() {
           setMonthlyEmailXlsx(data.include_xlsx);
         })
         .catch((err) => console.error("Erro ao buscar envio mensal:", err));
+
+      apiFetch<LdapSettings>("/settings/ldap", token)
+        .then((data) => {
+          if (data.server) setLdapServer(data.server);
+          if (data.bind_dn) setLdapBindDn(data.bind_dn);
+          if (data.search_base) setLdapSearchBase(data.search_base);
+          setHasSavedLdapPassword(data.has_bind_password);
+          setLdapBindPassword("");
+        })
+        .catch((err) => console.error("Erro ao buscar LDAP:", err));
     }
 
     if (typeof window !== "undefined") {
       const url = localStorage.getItem("settings_apiUrl");
       if (url) setApiUrl(url);
 
-      const srv = localStorage.getItem("settings_ldapServer");
-      if (srv) setLdapServer(srv);
-      const dn = localStorage.getItem("settings_ldapBindDn");
-      if (dn) setLdapBindDn(dn);
-      const pwd = localStorage.getItem("settings_ldapBindPassword");
-      if (pwd) setLdapBindPassword(pwd);
-      const sb = localStorage.getItem("settings_ldapSearchBase");
-      if (sb) setLdapSearchBase(sb);
     }
   }, []);
 
@@ -131,10 +141,6 @@ export default function SettingsPage() {
 
     if (typeof window !== "undefined") {
       localStorage.setItem("settings_apiUrl", apiUrl);
-      localStorage.setItem("settings_ldapServer", ldapServer);
-      localStorage.setItem("settings_ldapBindDn", ldapBindDn);
-      localStorage.setItem("settings_ldapBindPassword", ldapBindPassword);
-      localStorage.setItem("settings_ldapSearchBase", ldapSearchBase);
     }
 
     try {
@@ -161,6 +167,18 @@ export default function SettingsPage() {
           include_xlsx: monthlyEmailXlsx,
         }),
       });
+      const ldapPayload: Record<string, string> = {
+        server: ldapServer,
+        bind_dn: ldapBindDn,
+        search_base: ldapSearchBase,
+      };
+      if (ldapBindPassword.trim()) ldapPayload.bind_password = ldapBindPassword;
+      const ldapSettings = await apiFetch<LdapSettings>("/settings/ldap", token, {
+        method: "PUT",
+        body: JSON.stringify(ldapPayload),
+      });
+      setHasSavedLdapPassword(ldapSettings.has_bind_password);
+      setLdapBindPassword("");
       setStatusMsg({ text: "Configuracoes salvas com sucesso.", type: "success" });
       setTimeout(() => setStatusMsg(null), 3000);
     } catch (err: any) {
@@ -180,7 +198,7 @@ export default function SettingsPage() {
         body: JSON.stringify({
           server: ldapServer,
           bind_dn: ldapBindDn,
-          bind_password: ldapBindPassword,
+          bind_password: ldapBindPassword.trim() || undefined,
           search_base: ldapSearchBase,
         }),
       });
@@ -205,17 +223,18 @@ export default function SettingsPage() {
         total_synced: number;
         new_users: number;
         updated_users: number;
+        skipped_users?: number;
       }>("/settings/ldap/sync", token, {
         method: "POST",
         body: JSON.stringify({
           server: ldapServer,
           bind_dn: ldapBindDn,
-          bind_password: ldapBindPassword,
+          bind_password: ldapBindPassword.trim() || undefined,
           search_base: ldapSearchBase,
         }),
       });
       setStatusMsg({
-        text: `Sincronizacao concluida: ${response.total_synced} usuario(s), ${response.new_users} novo(s), ${response.updated_users} atualizado(s).`,
+        text: `Sincronizacao concluida: ${response.total_synced} usuario(s), ${response.new_users} novo(s), ${response.updated_users} atualizado(s), ${response.skipped_users || 0} ignorado(s).`,
         type: "success",
       });
     } catch (err: any) {
@@ -409,7 +428,13 @@ export default function SettingsPage() {
             </label>
             <label className="text-sm font-medium">
               Senha de bind
-              <Input className="mt-1.5" type="password" value={ldapBindPassword} onChange={(event) => setLdapBindPassword(event.target.value)} />
+              <Input
+                className="mt-1.5"
+                type="password"
+                value={ldapBindPassword}
+                placeholder={hasSavedLdapPassword ? "Senha salva - preencha apenas para alterar" : ""}
+                onChange={(event) => setLdapBindPassword(event.target.value)}
+              />
             </label>
             <label className="text-sm font-medium">
               Base de pesquisa

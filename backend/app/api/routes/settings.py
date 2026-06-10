@@ -4,11 +4,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.user import User, UserRole
-from app.schemas.settings import LDAPSettings, GeneralSettings, MonthlyReportEmailSettings, OperationalSettings
+from app.schemas.settings import LDAPSettings, LDAPSettingsRead, GeneralSettings, MonthlyReportEmailSettings, OperationalSettings
 from app.services.ldap_service import test_ldap_connection, sync_ldap_users
 from app.services.settings_service import (
+    get_ldap_settings,
     get_monthly_report_email_settings,
     get_system_settings_dict,
+    update_ldap_settings,
     update_monthly_report_email_settings,
     update_system_settings,
 )
@@ -93,16 +95,60 @@ def update_monthly_report_email_settings_endpoint(
     return MonthlyReportEmailSettings(**updated)
 
 
+def _resolved_ldap_settings(payload: LDAPSettings, db: Session, organization_id: int) -> dict[str, str]:
+    stored = get_ldap_settings(db, organization_id, include_password=True)
+    data = {
+        "server": payload.server or stored.get("server") or "",
+        "bind_dn": payload.bind_dn or stored.get("bind_dn") or "",
+        "bind_password": payload.bind_password or stored.get("bind_password") or "",
+        "search_base": payload.search_base or stored.get("search_base") or "",
+    }
+    if any(not value.strip() for value in data.values()):
+        raise ValueError("Configuracao LDAP incompleta. Informe servidor, DN, senha e base de pesquisa.")
+    return data
+
+
+@router.get("/ldap", response_model=LDAPSettingsRead)
+def get_ldap_settings_endpoint(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> LDAPSettingsRead:
+    return LDAPSettingsRead(**get_ldap_settings(db, actor.organization_id))
+
+
+@router.put("/ldap", response_model=LDAPSettingsRead)
+def update_ldap_settings_endpoint(
+    payload: LDAPSettings,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> LDAPSettingsRead:
+    before = get_ldap_settings(db, actor.organization_id)
+    updated = update_ldap_settings(db, payload.model_dump(exclude_unset=True), actor.organization_id)
+    changes = _changed_values(before, updated)
+    if changes:
+        write_audit(
+            db,
+            action="ldap_settings_updated",
+            entity="settings",
+            actor_user_id=actor.id,
+            metadata={"changes": changes},
+        )
+        db.commit()
+    return LDAPSettingsRead(**updated)
+
+
 @router.post("/ldap/test")
 def test_ldap_endpoint(
     payload: LDAPSettings,
-    _: User = Depends(require_roles(UserRole.admin)),
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
 ) -> dict:
     try:
+        ldap_settings = _resolved_ldap_settings(payload, db, actor.organization_id)
         test_ldap_connection(
-            server=payload.server,
-            bind_dn=payload.bind_dn,
-            bind_password=payload.bind_password
+            server=ldap_settings["server"],
+            bind_dn=ldap_settings["bind_dn"],
+            bind_password=ldap_settings["bind_password"],
         )
         return {"success": True, "message": "Conexão com LDAP realizada com sucesso"}
     except ValueError as exc:
@@ -115,12 +161,13 @@ def sync_ldap_endpoint(
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> dict:
     try:
+        ldap_settings = _resolved_ldap_settings(payload, db, actor.organization_id)
         result = sync_ldap_users(
             db=db,
-            server=payload.server,
-            bind_dn=payload.bind_dn,
-            bind_password=payload.bind_password,
-            search_base=payload.search_base,
+            server=ldap_settings["server"],
+            bind_dn=ldap_settings["bind_dn"],
+            bind_password=ldap_settings["bind_password"],
+            search_base=ldap_settings["search_base"],
             organization_id=actor.organization_id,
         )
         write_audit(
@@ -130,7 +177,7 @@ def sync_ldap_endpoint(
             entity_id=actor.id,
             actor_user_id=actor.id,
             metadata={
-                "server": payload.server,
+                "server": ldap_settings["server"],
                 "new_users": result.get("new_users", 0),
                 "total_synced": result.get("total_synced", 0)
             }

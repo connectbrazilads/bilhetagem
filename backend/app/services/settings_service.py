@@ -16,6 +16,13 @@ MONTHLY_REPORT_EMAIL_DEFAULTS = {
     "include_xlsx": True,
 }
 
+LDAP_SETTING_KEYS = {
+    "server": "ldap_server",
+    "bind_dn": "ldap_bind_dn",
+    "bind_password": "ldap_bind_password",
+    "search_base": "ldap_search_base",
+}
+
 
 def _resolve_organization_id(db: Session, organization_id: int | None) -> int:
     return organization_id or get_or_create_default_organization(db).id
@@ -127,6 +134,44 @@ def update_monthly_report_email_settings(db: Session, updates: dict[str, Any], o
     prefixed = {f"monthly_report_email_{key}": value for key, value in updates.items()}
     update_system_settings(db, prefixed, organization_id)
     return get_monthly_report_email_settings(db, organization_id)
+
+
+def get_ldap_settings(db: Session, organization_id: int | None = None, *, include_password: bool = False) -> dict[str, Any]:
+    organization_id = _resolve_organization_id(db, organization_id)
+    rows = db.query(SystemSetting).filter(SystemSetting.organization_id == organization_id).all()
+    settings_dict = {row.key: row.value for row in rows}
+    password = settings_dict.get(LDAP_SETTING_KEYS["bind_password"], "")
+    data = {
+        "server": settings_dict.get(LDAP_SETTING_KEYS["server"], ""),
+        "bind_dn": settings_dict.get(LDAP_SETTING_KEYS["bind_dn"], ""),
+        "search_base": settings_dict.get(LDAP_SETTING_KEYS["search_base"], ""),
+        "has_bind_password": bool(password),
+    }
+    if include_password:
+        data["bind_password"] = password
+    return data
+
+
+def update_ldap_settings(db: Session, updates: dict[str, Any], organization_id: int | None = None) -> dict[str, Any]:
+    organization_id = _resolve_organization_id(db, organization_id)
+    rows = db.query(SystemSetting).filter(SystemSetting.organization_id == organization_id).all()
+    existing = {row.key: row for row in rows}
+    for field, key in LDAP_SETTING_KEYS.items():
+        if field not in updates:
+            continue
+        value = updates.get(field)
+        if field == "bind_password" and (value is None or str(value).strip() == ""):
+            continue
+        str_val = "" if value is None else str(value).strip()
+        setting = existing.get(key)
+        if not setting:
+            setting = SystemSetting(organization_id=organization_id, key=key, value=str_val)
+            db.add(setting)
+            existing[key] = setting
+        else:
+            setting.value = str_val
+    db.commit()
+    return get_ldap_settings(db, organization_id)
 
 
 def release_pending_jobs(db: Session, organization_id: int, actor_user_id: int | None = None) -> None:
