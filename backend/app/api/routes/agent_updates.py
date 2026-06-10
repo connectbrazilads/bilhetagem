@@ -2,6 +2,7 @@ import hashlib
 import json
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+import unicodedata
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
@@ -293,6 +294,24 @@ def _normalize_alias_name(value: str | None) -> str | None:
     return " ".join(value.strip().lower().split()) or None
 
 
+def _plain_text_key(value: str | None) -> str | None:
+    cleaned = _clean_optional(value)
+    if not cleaned:
+        return None
+    normalized = unicodedata.normalize("NFKD", cleaned)
+    ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
+    return " ".join(ascii_text.lower().split()) or None
+
+
+def _is_generic_queue_name(value: str | None) -> bool:
+    return _plain_text_key(value) in {
+        "documento de impressao",
+        "print document",
+        "user",
+        "unknown",
+    }
+
+
 def _client_ip(request: Request) -> str | None:
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
@@ -437,6 +456,7 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None 
     stale_queues = [alias.queue_name for alias in aliases if not _alias_is_present(agent, alias)]
     unbound_queues = [alias.queue_name for alias in present_aliases if alias.printer_id is None]
     duplicate_queues = _duplicate_present_queue_aliases(present_aliases)
+    generic_queues = [alias.queue_name for alias in present_aliases if _is_generic_queue_name(alias.queue_name)]
     stale_actions = _stale_queue_actions(agent)
 
     if not is_online:
@@ -466,6 +486,11 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None 
         sample = ", ".join(duplicate_queues[:3])
         suffix = f": {sample}" if sample else ""
         alerts.append(AgentHealthAlertRead(code="duplicate_queue_aliases", severity="warning", message=f"{count} fila(s) duplicada(s) por nome normalizado{suffix}"))
+    if generic_queues:
+        count = len(generic_queues)
+        sample = ", ".join(generic_queues[:3])
+        suffix = f": {sample}" if sample else ""
+        alerts.append(AgentHealthAlertRead(code="generic_queue_names", severity="warning", message=f"{count} fila(s) com nome generico; padronize ou vincule a fila correta{suffix}"))
     if stale_actions:
         count = len(stale_actions)
         sample = ", ".join(action.queue_name for action in stale_actions[:3])

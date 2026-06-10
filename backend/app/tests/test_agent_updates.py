@@ -704,6 +704,42 @@ def test_agent_health_alerts_report_duplicate_queue_aliases(db_session: Session)
     assert "konica" in alerts["duplicate_queue_aliases"].message.lower()
 
 
+def test_agent_health_alerts_report_generic_queue_names(db_session: Session):
+    now = datetime.now(timezone.utc)
+    actor = User(username="agent-generic-alias", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
+    agent = PrintAgent(organization_id=1, agent_uid="pc-generic-alias", computer_name="PC-GENERIC", last_seen_at=now)
+    printer = Printer(organization_id=1, name="KONICA FISICA", is_color=True)
+    db_session.add_all([actor, agent, printer])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PrinterAlias(
+                organization_id=1,
+                agent_id=agent.id,
+                printer_id=printer.id,
+                queue_name="USER",
+                normalized_queue_name="user",
+                last_seen_at=now,
+            ),
+            PrinterAlias(
+                organization_id=1,
+                agent_id=agent.id,
+                printer_id=printer.id,
+                queue_name="KONICA Financeiro",
+                normalized_queue_name="konica financeiro",
+                last_seen_at=now,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = get_agent_detail(agent.id, db=db_session, actor=actor)
+
+    alerts = {alert.code: alert for alert in response.health_alerts}
+    assert alerts["generic_queue_names"].severity == "warning"
+    assert "USER" in alerts["generic_queue_names"].message
+
+
 def test_agent_health_alerts_report_operational_issues(db_session: Session, monkeypatch):
     monkeypatch.setattr(settings, "agent_latest_version", "0.3.0")
     actor = User(username="agent-alerts", full_name="Agent Alerts", role=UserRole.admin, is_active=True, organization_id=1)
@@ -734,7 +770,7 @@ def test_agent_health_alerts_report_operational_issues(db_session: Session, monk
     )
 
     alert_codes = {alert.code for alert in response.health_alerts}
-    assert {"last_error", "event_log_disabled", "unbound_queues", "outdated_version"}.issubset(alert_codes)
+    assert {"last_error", "event_log_disabled", "unbound_queues", "generic_queue_names", "outdated_version"}.issubset(alert_codes)
     assert "offline" not in alert_codes
 
 
