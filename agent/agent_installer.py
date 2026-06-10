@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 SERVICE_NAME = "PrintBillingAgent"
@@ -160,6 +161,14 @@ def is_unsafe_agent_password(value: str) -> bool:
     return normalize_text(value).lower() in UNSAFE_AGENT_PASSWORDS
 
 
+def normalize_api_url(value: str) -> str:
+    cleaned = normalize_text(value).rstrip("/")
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError("URL da API invalida. Use http:// ou https:// com host da VPS.")
+    return cleaned
+
+
 def build_config(existing: dict, template: dict, args: argparse.Namespace) -> dict:
     if args.silent:
         api_url = pick_arg_or_existing(args.api_url, existing, "PRINTBILLING_API_URL", "")
@@ -221,20 +230,20 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         use_print_event_log = as_config_bool(pick_config_value(existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True), True)
         auto_update = as_config_bool(pick_config_value(existing, template, "PRINTBILLING_AUTO_UPDATE", True), True)
 
-    api_url = normalize_text(api_url)
+    api_url = normalize_api_url(api_url)
     username = normalize_text(username)
     password = normalize_text(password)
     organization_slug = normalize_text(organization_slug)
     default_username = normalize_text(default_username)
     spool_server = normalize_text(spool_server)
     log_level = as_log_level(log_level)
-    if not api_url or not username or not password or not organization_slug:
+    if not username or not password or not organization_slug:
         raise RuntimeError("Configuracao do agent requer API URL, usuario, senha e slug da empresa.")
     if is_unsafe_agent_password(password):
         raise RuntimeError("Senha do usuario tecnico do agent e insegura. Gere uma senha exclusiva para esta empresa.")
 
     return {
-        "PRINTBILLING_API_URL": api_url.rstrip("/"),
+        "PRINTBILLING_API_URL": api_url,
         "PRINTBILLING_AGENT_USER": username,
         "PRINTBILLING_AGENT_PASSWORD": password,
         "PRINTBILLING_ORGANIZATION_SLUG": organization_slug,

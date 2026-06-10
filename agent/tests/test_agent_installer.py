@@ -82,6 +82,24 @@ def test_silent_install_trims_text_values_before_writing_config():
     assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\PRINTSERVER"
 
 
+def test_silent_install_rejects_api_url_without_http_scheme():
+    try:
+        build_config(
+            {},
+            {},
+            args(
+                api_url="billing.example.com",
+                username="agent",
+                password="secret",
+                organization="cliente-a",
+            ),
+        )
+    except RuntimeError as exc:
+        assert "URL da API invalida" in str(exc)
+    else:
+        raise AssertionError("Instalador nao deve aceitar URL sem http ou https")
+
+
 def test_silent_reinstall_preserves_capture_and_update_flags():
     existing = {
         "PRINTBILLING_API_URL": "https://billing.example.com",
