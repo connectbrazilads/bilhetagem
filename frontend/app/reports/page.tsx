@@ -372,7 +372,7 @@ export default function ReportsPage() {
         <Summary label="Paginas salvas" value={summary.savedPages} icon={FileText} />
         <Summary label="Usuarios" value={summary.users.size} icon={Users} />
         <Summary label="Impressoras" value={summary.printers.size} icon={Printer} />
-        <Summary label="Custo cobravel" value={`R$ ${summary.cost.toFixed(2)}`} icon={FileText} />
+        <Summary label="Custo cobravel" value={money(summary.cost)} icon={FileText} />
       </div>
 
       <Surface className="mb-4 grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_180px_auto]">
@@ -420,8 +420,8 @@ export default function ReportsPage() {
           <ClosingMetric label="Fechamentos" value={closingSummary.count} detail="Snapshots gerados" icon={CalendarCheck} />
           <ClosingMetric label="Ultimo periodo" value={closingSummary.latestPeriod} detail="Base para cobranca" icon={FileText} />
           <ClosingMetric label="Paginas fechadas" value={closingSummary.pages} detail="Volume cobravel congelado" icon={Printer} />
-          <ClosingMetric label="Custo fechado" value={`R$ ${closingSummary.cost.toFixed(2)}`} detail="Total faturavel" icon={FileText} />
-          <ClosingMetric label="Custo medio" value={`R$ ${closingAverageCost.toFixed(2)}`} detail="Por pagina fechada" icon={FileText} />
+          <ClosingMetric label="Custo fechado" value={money(closingSummary.cost)} detail="Total faturavel" icon={FileText} />
+          <ClosingMetric label="Custo medio" value={money(closingAverageCost)} detail="Por pagina fechada" icon={FileText} />
           <ClosingMetric label="Paginas salvas" value={closingSummary.savedPages} detail="Bloqueios e cancelamentos" icon={FileText} tone="success" />
           <ClosingMetric label="Pendencias" value={closingSummary.pendingJobs} detail="Jobs aguardando acao" icon={FileText} tone={closingSummary.pendingJobs > 0 ? "warn" : "neutral"} />
         </div>
@@ -482,7 +482,7 @@ export default function ReportsPage() {
                       <td className="p-4 text-right font-semibold">{closing.total_pages.toLocaleString("pt-BR")}</td>
                       <td className="p-4 text-right">{closing.mono_pages.toLocaleString("pt-BR")}</td>
                       <td className="p-4 text-right">{closing.color_pages.toLocaleString("pt-BR")}</td>
-                      <td className="p-4 text-right font-semibold">R$ {closing.total_cost.toFixed(2)}</td>
+                      <td className="p-4 text-right font-semibold">{money(closing.total_cost)}</td>
                       <td className="p-4 text-right">{closing.blocked_pages.toLocaleString("pt-BR")}</td>
                       <td className="p-4 text-muted-foreground">{new Date(closing.generated_at).toLocaleString("pt-BR")}</td>
                       <td className="p-4">
@@ -505,10 +505,10 @@ export default function ReportsPage() {
                           <span>{(closing.snapshot.totals?.released_jobs ?? 0).toLocaleString("pt-BR")} liberado(s)</span>
                           <span>{closing.pending_jobs.toLocaleString("pt-BR")} pendente(s)</span>
                           <span>{(closing.snapshot.totals?.pending_pages ?? 0).toLocaleString("pt-BR")} pag. pendente(s)</span>
-                          <span>R$ {(closing.snapshot.totals?.pending_cost ?? 0).toFixed(2)} pendente</span>
+                          <span>{money(closing.snapshot.totals?.pending_cost ?? 0)} pendente</span>
                           <span>{closing.blocked_jobs.toLocaleString("pt-BR")} bloqueado(s)</span>
-                          <span>R$ {(closing.snapshot.totals?.blocked_cost ?? 0).toFixed(2)} bloqueado estimado</span>
-                          <span>R$ {(closing.snapshot.totals?.cost_per_page ?? 0).toFixed(2)}/pag. medio</span>
+                          <span>{money(closing.snapshot.totals?.blocked_cost ?? 0)} bloqueado estimado</span>
+                          <span>{money(closing.snapshot.totals?.cost_per_page ?? 0)}/pag. medio</span>
                           <span>{(closing.snapshot.totals?.color_page_share_percent ?? 0).toFixed(1)}% coloridas</span>
                           <span>{(closing.snapshot.totals?.saved_page_share_percent ?? 0).toFixed(1)}% salvas</span>
                         </div>
@@ -572,7 +572,7 @@ export default function ReportsPage() {
                       {job.document_name ?? "N/A"}
                     </td>
                     <td className="whitespace-nowrap p-4 text-right font-semibold">{job.pages} pag.</td>
-                    <td className="whitespace-nowrap p-4 text-right font-semibold">R$ {job.cost.toFixed(2)}</td>
+                    <td className="whitespace-nowrap p-4 text-right font-semibold">{money(job.cost)}</td>
                     <td className="p-4">
                       <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${job.is_color ? "border-purple-200 bg-purple-50 text-purple-700" : "border-slate-200 bg-slate-100 text-slate-700"}`}>
                         {job.is_color ? "Colorido" : "P&B"}
@@ -630,8 +630,8 @@ function SnapshotList({ title, rows }: { title: string; rows: ClosingSnapshotRow
             <div key={row.name} className="grid grid-cols-[1fr_auto] gap-3 text-sm">
               <span className="truncate font-medium">{row.name}</span>
               <span className="whitespace-nowrap text-right text-muted-foreground">
-                {row.pages.toLocaleString("pt-BR")} pag. | R$ {row.cost.toFixed(2)}
-                {typeof row.cost_per_page === "number" ? ` | R$ ${row.cost_per_page.toFixed(2)}/pag.` : ""}
+                {row.pages.toLocaleString("pt-BR")} pag. | {money(row.cost)}
+                {typeof row.cost_per_page === "number" ? ` | ${money(row.cost_per_page)}/pag.` : ""}
                 {typeof row.page_share_percent === "number" ? ` | ${row.page_share_percent.toFixed(1)}%` : ""}
               </span>
             </div>
@@ -654,8 +654,8 @@ function PolicySnapshotList({ rows }: { rows: ClosingPolicySnapshotRow[] }) {
           {topRows.map((row) => {
             const details = [
               `${policyActionLabel(row.action)} | ${row.jobs.toLocaleString("pt-BR")} job(s)`,
-              row.pending_cost ? `R$ ${row.pending_cost.toFixed(2)} pendente` : null,
-              row.blocked_cost ? `R$ ${row.blocked_cost.toFixed(2)} bloqueado` : null,
+              row.pending_cost ? `${money(row.pending_cost)} pendente` : null,
+              row.blocked_cost ? `${money(row.blocked_cost)} bloqueado` : null,
               row.saved_pages ? `${row.saved_pages.toLocaleString("pt-BR")} salvas` : null,
             ].filter(Boolean);
             return (
@@ -687,6 +687,10 @@ function policyActionLabel(action?: string | null) {
   if (action === "require_release") return "Liberacao";
   if (action === "force_mono") return "Cobrar P&B";
   return "Politica";
+}
+
+function money(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function readError(err: { message?: string }) {
