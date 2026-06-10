@@ -8,6 +8,7 @@ class OperationalHealth(BaseModel):
     agents_online: int = 0
     agents_offline: int = 0
     agents_with_alerts: int = 0
+    agents_without_local_admin: int = 0
     printers_total: int = 0
     printers_monitored: int = 0
     printers_unmonitored: int = 0
