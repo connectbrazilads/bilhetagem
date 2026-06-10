@@ -99,6 +99,24 @@ def test_agent_config_environment_overrides_file_config(monkeypatch):
     assert config.log_level == "DEBUG"
 
 
+def test_agent_config_does_not_default_to_organization_slug(monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setattr(agent_config, "file_config", {})
+
+    config = agent_config.AgentConfig()
+
+    assert config.organization_slug is None
+
+
+def test_agent_config_reads_explicit_organization_slug_from_file(monkeypatch):
+    clear_env(monkeypatch)
+    monkeypatch.setattr(agent_config, "file_config", {"PRINTBILLING_ORGANIZATION_SLUG": " cliente-a "})
+
+    config = agent_config.AgentConfig()
+
+    assert config.organization_slug == "cliente-a"
+
+
 def test_agent_config_runtime_validation_accepts_secure_credentials():
     config = agent_config.AgentConfig(
         api_base_url="https://billing.example.com",

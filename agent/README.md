@@ -7,7 +7,7 @@ O agente deve ser instalado no servidor de impressao Windows ou em uma estacao q
 - `PRINTBILLING_API_URL`: URL da API, por exemplo `https://billing.empresa.local`
 - `PRINTBILLING_AGENT_USER`: usuario tecnico cadastrado na API com perfil `agent`
 - `PRINTBILLING_AGENT_PASSWORD`: senha do usuario tecnico
-- `PRINTBILLING_ORGANIZATION_SLUG`: slug da empresa no SaaS; informe explicitamente em instalacoes novas
+- `PRINTBILLING_ORGANIZATION_SLUG`: slug da empresa no SaaS; obrigatorio para o agent iniciar
 - `PRINTBILLING_CANCEL_BLOCKED`: `true` para cancelar trabalhos bloqueados
 - `PRINTBILLING_POLL_INTERVAL`: intervalo de varredura em segundos
 - `PRINTBILLING_AUTO_UPDATE`: `true` para permitir auto-update do agent

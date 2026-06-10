@@ -112,7 +112,7 @@ class AgentConfig:
     api_base_url: str = field(default_factory=lambda: _config_str("PRINTBILLING_API_URL", "http://localhost:8000", strip_trailing_slash=True))
     api_username: str = field(default_factory=lambda: _config_str("PRINTBILLING_AGENT_USER", "agent"))
     api_password: str = field(default_factory=lambda: _config_str("PRINTBILLING_AGENT_PASSWORD", ""))
-    organization_slug: str | None = field(default_factory=lambda: _config_optional_str("PRINTBILLING_ORGANIZATION_SLUG", "default"))
+    organization_slug: str | None = field(default_factory=lambda: _config_optional_str("PRINTBILLING_ORGANIZATION_SLUG"))
     poll_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_POLL_INTERVAL", 5, min_value=1))
     snmp_poll_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_SNMP_POLL_INTERVAL", 60, min_value=1))
     snmp_community: str = field(default_factory=lambda: _config_str("PRINTBILLING_SNMP_COMMUNITY", "public"))
