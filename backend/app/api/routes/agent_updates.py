@@ -198,6 +198,8 @@ def _latest_agent_release_file() -> tuple[AgentReleaseRead, AgentReleaseFileRead
 
 
 def _release_or_404(version: str) -> AgentReleaseRead:
+    if not _is_safe_release_version(version):
+        raise HTTPException(status_code=400, detail="Versao invalida")
     releases = {release.version: release for release in _load_release_manifest()}
     release = releases.get(version)
     if not release:

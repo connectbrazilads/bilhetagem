@@ -12,6 +12,7 @@ from app.api.routes.agent_updates import (
     agent_version,
     create_bulk_queue_actions,
     create_queue_action,
+    download_agent_release_file,
     download_agent_release_checksums,
     finish_queue_action,
     get_agent_detail,
@@ -178,6 +179,38 @@ def test_agent_releases_ignore_unsafe_versions_and_malformed_entries(db_session:
     assert version.latest_version == "0.5.0"
     assert version.update_available is True
     assert version.sha256 == hashlib.sha256(b"agent-v5").hexdigest()
+
+
+def test_agent_release_downloads_reject_unsafe_versions(db_session: Session, monkeypatch, tmp_path: Path):
+    release_dir = tmp_path / "0.5.0"
+    release_dir.mkdir()
+    (release_dir / "PrintBillingAgent.exe").write_bytes(b"agent")
+    (tmp_path / "manifest.json").write_text(
+        """
+        {
+          "versions": [
+            {
+              "version": "0.5.0",
+              "published_at": "2026-05-01T00:00:00Z",
+              "files": [{"kind": "agent", "filename": "PrintBillingAgent.exe"}]
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    actor = User(username="unsafe-release-download-admin", full_name="Release Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as download_exc:
+        download_agent_release_file(version="../0.5.0", filename="PrintBillingAgent.exe", _=actor)
+    with pytest.raises(HTTPException) as checksums_exc:
+        download_agent_release_checksums(version="../0.5.0", _=actor)
+
+    assert download_exc.value.status_code == 400
+    assert checksums_exc.value.status_code == 400
 
 
 def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypatch, tmp_path: Path):
