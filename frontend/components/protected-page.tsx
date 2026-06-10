@@ -6,9 +6,18 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/shell";
 import { getCurrentRole, isTokenExpired } from "@/lib/api";
 
-export function ProtectedPage({ children }: { children: React.ReactNode }) {
+type ProtectedPageProps = {
+  children: React.ReactNode;
+  roles?: string[];
+};
+
+const DEFAULT_PANEL_ROLES = ["admin", "manager"];
+
+export function ProtectedPage({ children, roles }: ProtectedPageProps) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const allowedRoles = roles ?? DEFAULT_PANEL_ROLES;
+  const allowedRolesKey = allowedRoles.join(",");
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -17,13 +26,23 @@ export function ProtectedPage({ children }: { children: React.ReactNode }) {
       router.replace("/");
       return;
     }
-    if (getCurrentRole(token) === "agent") {
+    const role = getCurrentRole(token);
+    if (!role || role === "agent") {
       localStorage.removeItem("token");
       router.replace("/");
       return;
     }
+    if (!allowedRoles.includes(role)) {
+      if (role === "manager") {
+        router.replace("/dashboard");
+      } else {
+        localStorage.removeItem("token");
+        router.replace("/");
+      }
+      return;
+    }
     setReady(true);
-  }, [router]);
+  }, [router, allowedRolesKey]);
 
   if (!ready) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Carregando...</div>;

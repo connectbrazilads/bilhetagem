@@ -101,7 +101,7 @@ export default function OrganizationsPage() {
   }
 
   return (
-    <ProtectedPage>
+    <ProtectedPage roles={["admin"]}>
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">Empresas</h1>
         <p className="mt-1 text-sm text-muted-foreground">Gerencie clientes e o isolamento de dados do ambiente SaaS.</p>
