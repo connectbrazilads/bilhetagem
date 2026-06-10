@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.department import Department
@@ -329,6 +330,12 @@ def _ensure_pdf_content(file_content: bytes) -> None:
         raise HTTPException(status_code=400, detail="Arquivo PDF invalido")
 
 
+def _ensure_web_print_size(file_content: bytes) -> None:
+    max_bytes = settings.web_print_max_upload_mb * 1024 * 1024
+    if len(file_content) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"PDF excede o limite de {settings.web_print_max_upload_mb} MB")
+
+
 @router.post("/web-print", response_model=PrintJobDecision)
 def web_print_endpoint(
     file: UploadFile = File(...),
@@ -351,6 +358,7 @@ def web_print_endpoint(
         raise HTTPException(status_code=400, detail="Erro ao ler arquivo enviado") from exc
 
     document_name = _clean_web_print_filename(file.filename)
+    _ensure_web_print_size(file_content)
     _ensure_pdf_content(file_content)
     page_count = get_pdf_page_count(file_content)
     
