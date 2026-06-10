@@ -537,6 +537,46 @@ def test_usb_job_matches_known_alias_device_id_case_insensitive(db_session: Sess
     assert db_session.query(PrinterAlias).filter(PrinterAlias.queue_name == "USER").one().printer_id == printer.id
 
 
+def test_network_job_uses_known_fingerprint_instead_of_creating_duplicate_printer(db_session: Session):
+    printer = Printer(organization_id=1, name="KONICA FISICA WSD", is_color=True)
+    known_alias = PrinterAlias(
+        organization_id=1,
+        printer=printer,
+        queue_name="KONICA Financeiro",
+        connection_type="network",
+        port_name="WSD-12345",
+        driver_name="KONICA Driver",
+        fingerprint="network:wsd-12345|konica driver",
+    )
+    db_session.add_all([printer, known_alias])
+    db_session.commit()
+
+    register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="diego",
+            printer_name="Impressora Sala",
+            pages=3,
+            is_color=True,
+            external_job_id="eventlog:network-fingerprint",
+            agent_uid="agent-network-fingerprint",
+            computer_name="PC-RH",
+            queue_name="Impressora Sala",
+            printer_port_name="WSD-12345",
+            printer_driver_name="KONICA Driver",
+            printer_connection_type="network",
+            printer_fingerprint="network:wsd-12345|konica driver",
+        ),
+    )
+
+    job = db_session.query(PrintJob).one()
+    local_alias = db_session.query(PrinterAlias).filter(PrinterAlias.queue_name == "Impressora Sala").one()
+    assert db_session.query(Printer).count() == 1
+    assert job.printer_id == printer.id
+    assert local_alias.printer_id == printer.id
+    assert local_alias.fingerprint == "network:wsd-12345|konica driver"
+
+
 def test_generic_printer_name_uses_single_bound_agent_printer(db_session: Session):
     printer = Printer(organization_id=1, name="KONICA MINOLTA C368SeriesPS", is_color=True)
     agent = PrintAgent(organization_id=1, agent_uid="agent-single-printer", computer_name="PC-FIN")

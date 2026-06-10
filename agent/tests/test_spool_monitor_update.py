@@ -160,6 +160,36 @@ def test_agent_heartbeat_reports_local_admin_state(monkeypatch, tmp_path: Path):
     assert api_client.payload["local_admin"] is False
 
 
+def test_network_fingerprint_uses_port_and_driver_instead_of_queue_name():
+    first = SpoolMonitor._printer_fingerprint(
+        {
+            "computer_name": "PC-FINANCEIRO",
+            "queue_name": "KONICA Financeiro",
+            "printer_connection_type": "network",
+            "printer_port_name": "WSD-12345",
+            "printer_driver_name": "KONICA Driver",
+            "printer_serial": None,
+            "printer_ip_address": None,
+            "printer_device_id": None,
+        }
+    )
+    second = SpoolMonitor._printer_fingerprint(
+        {
+            "computer_name": "PC-RH",
+            "queue_name": "Impressora Sala",
+            "printer_connection_type": "network",
+            "printer_port_name": "WSD-12345",
+            "printer_driver_name": "KONICA Driver",
+            "printer_serial": None,
+            "printer_ip_address": None,
+            "printer_device_id": None,
+        }
+    )
+
+    assert first == "network:wsd-12345|konica driver"
+    assert second == first
+
+
 def test_queue_action_processing_continues_after_malformed_action(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
     monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)

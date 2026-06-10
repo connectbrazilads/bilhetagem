@@ -575,6 +575,12 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
                 computer = metadata.get("computer_name") or ""
                 return f"usb:{computer}|{metadata['printer_device_id']}".lower()
             return f"device:{metadata['printer_device_id']}".lower()
+        if metadata.get("printer_connection_type") == "network" and metadata.get("printer_port_name"):
+            parts = [
+                metadata.get("printer_port_name") or "",
+                metadata.get("printer_driver_name") or "",
+            ]
+            return "network:" + "|".join(part.strip().lower() for part in parts)
         parts = [
             metadata.get("computer_name") or "",
             metadata.get("queue_name") or "",
