@@ -580,6 +580,13 @@ def test_organization_scope_isolates_core_views(db_session: Session):
             ),
             PrinterAlias(
                 organization_id=1,
+                agent_id=org_one_online_agent.id,
+                queue_name="Org 1 fila antiga sem vinculo",
+                connection_type="network",
+                last_seen_at=now - timedelta(minutes=30),
+            ),
+            PrinterAlias(
+                organization_id=1,
                 printer_id=org_one_printer.id,
                 agent_id=org_one_online_agent.id,
                 queue_name="Org 1 Printer",

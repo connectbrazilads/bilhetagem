@@ -134,28 +134,24 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
     monitored_printers = sum(1 for printer in printers if printer.ip_address)
     low_toner_printers = sum(1 for printer in printers if any(value <= 10 for value in _toner_values(printer)))
-    unbound_queues = (
-        db.query(func.count(PrinterAlias.id))
-        .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.printer_id.is_(None))
-        .scalar()
-        or 0
-    )
-    usb_queues = (
-        db.query(func.count(PrinterAlias.id))
-        .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.connection_type == "usb")
-        .scalar()
-        or 0
-    )
     aliases_with_agent = (
         db.query(PrinterAlias)
         .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.agent_id.isnot(None))
         .all()
     )
-    duplicate_queue_aliases = _duplicate_queue_alias_count(aliases_with_agent)
     aliases_by_agent: dict[int, list[PrinterAlias]] = defaultdict(list)
     for alias in aliases_with_agent:
         if alias.agent_id is not None:
             aliases_by_agent[alias.agent_id].append(alias)
+    present_aliases = [
+        alias
+        for agent in agents
+        for alias in aliases_by_agent.get(agent.id, [])
+        if _alias_is_present(agent, alias)
+    ]
+    unbound_queues = sum(1 for alias in present_aliases if alias.printer_id is None)
+    usb_queues = sum(1 for alias in present_aliases if alias.connection_type == "usb")
+    duplicate_queue_aliases = _duplicate_queue_alias_count(present_aliases)
     pending_queue_actions = (
         db.query(AgentQueueAction)
         .filter(
