@@ -509,6 +509,16 @@ def test_organization_scope_isolates_core_views(db_session: Session):
                 printer_id=org_one_printer.id,
                 agent_id=org_one_online_agent.id,
                 queue_name="Org 1 Printer",
+                normalized_queue_name="org 1 printer",
+                connection_type="network",
+                last_seen_at=now,
+            ),
+            PrinterAlias(
+                organization_id=1,
+                printer_id=org_one_printer.id,
+                agent_id=org_one_online_agent.id,
+                queue_name="  org   1   printer ",
+                normalized_queue_name="org 1 printer",
                 connection_type="network",
                 last_seen_at=now,
             ),
@@ -599,6 +609,7 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         "low_toner_printers": 1,
         "unbound_queues": 1,
         "usb_queues": 1,
+        "duplicate_queue_aliases": 1,
     }
     assert metrics["department_usage"] == [
         {"department": "Financeiro", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},

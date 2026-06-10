@@ -294,8 +294,8 @@ export default function DashboardPage() {
           <HealthStat
             label="Filas sem vinculo"
             value={health.unbound_queues}
-            detail={`${health.usb_queues.toLocaleString("pt-BR")} fila(s) USB detectadas`}
-            tone={health.unbound_queues > 0 ? "warn" : "ok"}
+            detail={`${health.usb_queues.toLocaleString("pt-BR")} USB, ${health.duplicate_queue_aliases.toLocaleString("pt-BR")} duplicada(s)`}
+            tone={health.unbound_queues > 0 || health.duplicate_queue_aliases > 0 ? "warn" : "ok"}
             icon={Activity}
           />
           <HealthStat

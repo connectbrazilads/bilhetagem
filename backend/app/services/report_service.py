@@ -76,6 +76,18 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         .scalar()
         or 0
     )
+    duplicate_queue_rows = (
+        db.query(func.count(PrinterAlias.id).label("alias_count"))
+        .filter(
+            PrinterAlias.organization_id == organization_id,
+            PrinterAlias.agent_id.isnot(None),
+            PrinterAlias.normalized_queue_name.isnot(None),
+        )
+        .group_by(PrinterAlias.agent_id, PrinterAlias.normalized_queue_name)
+        .having(func.count(PrinterAlias.id) > 1)
+        .all()
+    )
+    duplicate_queue_aliases = sum(int(row.alias_count) - 1 for row in duplicate_queue_rows)
 
     return {
         "agents_total": len(agents),
@@ -88,6 +100,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         "low_toner_printers": low_toner_printers,
         "unbound_queues": int(unbound_queues),
         "usb_queues": int(usb_queues),
+        "duplicate_queue_aliases": duplicate_queue_aliases,
     }
 
 
