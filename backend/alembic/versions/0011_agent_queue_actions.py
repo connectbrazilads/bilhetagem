@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision: str = "0011_agent_queue_actions"
 down_revision: Union[str, None] = "0010_agent_health"
@@ -17,10 +18,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    action_type = sa.Enum("create_queue", "remove_queue", name="agentqueueactiontype")
-    action_status = sa.Enum("pending", "running", "succeeded", "failed", name="agentqueueactionstatus")
-    action_type.create(op.get_bind(), checkfirst=True)
-    action_status.create(op.get_bind(), checkfirst=True)
+    action_type_enum = postgresql.ENUM("create_queue", "remove_queue", name="agentqueueactiontype")
+    action_status_enum = postgresql.ENUM("pending", "running", "succeeded", "failed", name="agentqueueactionstatus")
+    action_type_enum.create(op.get_bind(), checkfirst=True)
+    action_status_enum.create(op.get_bind(), checkfirst=True)
+    action_type = postgresql.ENUM("create_queue", "remove_queue", name="agentqueueactiontype", create_type=False)
+    action_status = postgresql.ENUM("pending", "running", "succeeded", "failed", name="agentqueueactionstatus", create_type=False)
 
     op.create_table(
         "agent_queue_actions",

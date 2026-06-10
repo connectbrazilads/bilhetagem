@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision: str = "0012_print_policies"
 down_revision: Union[str, None] = "0011_agent_queue_actions"
@@ -17,10 +18,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    rule_type = sa.Enum("always", "max_pages", "color", "time_window", name="policyruletype")
-    action = sa.Enum("allow", "block", "require_release", "force_mono", name="policyaction")
-    rule_type.create(op.get_bind(), checkfirst=True)
-    action.create(op.get_bind(), checkfirst=True)
+    rule_type_enum = postgresql.ENUM("always", "max_pages", "color", "time_window", name="policyruletype")
+    action_enum = postgresql.ENUM("allow", "block", "require_release", "force_mono", name="policyaction")
+    rule_type_enum.create(op.get_bind(), checkfirst=True)
+    action_enum.create(op.get_bind(), checkfirst=True)
+    rule_type = postgresql.ENUM("always", "max_pages", "color", "time_window", name="policyruletype", create_type=False)
+    action = postgresql.ENUM("allow", "block", "require_release", "force_mono", name="policyaction", create_type=False)
 
     op.create_table(
         "print_policies",
