@@ -321,7 +321,7 @@ export default function DashboardPage() {
           <HealthStat
             label="Agents com alerta"
             value={health.agents_with_alerts}
-            detail={`${health.agents_offline.toLocaleString("pt-BR")} offline, ${health.agents_without_local_admin.toLocaleString("pt-BR")} sem admin, ${health.agents_without_event_log.toLocaleString("pt-BR")} sem Event Log`}
+            detail={`${health.agents_offline.toLocaleString("pt-BR")} offline, ${health.agents_without_local_admin.toLocaleString("pt-BR")} sem admin, ${health.agents_without_event_log.toLocaleString("pt-BR")} sem Event Log, ${health.outdated_agents.toLocaleString("pt-BR")} desat.`}
             tone={health.agents_with_alerts > 0 ? "danger" : "ok"}
             icon={AlertTriangle}
           />

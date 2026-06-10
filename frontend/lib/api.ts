@@ -20,6 +20,7 @@ export type DashboardMetrics = {
     agents_with_alerts: number;
     agents_without_local_admin: number;
     agents_without_event_log: number;
+    outdated_agents: number;
     printers_total: number;
     printers_monitored: number;
     printers_unmonitored: number;
