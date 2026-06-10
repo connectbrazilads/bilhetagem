@@ -187,10 +187,13 @@ class BillingApiClient:
         return response.json()
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
-    def update_printer_status(self, printer_id: int, status: dict) -> dict:
+    def update_printer_status(self, printer_id: int, status: dict, agent_uid: str | None = None) -> dict:
+        payload = dict(status)
+        if agent_uid:
+            payload["agent_uid"] = agent_uid
         response = self.session.put(
             f"{self.config.api_base_url}/printers/{printer_id}/status",
-            json=status,
+            json=payload,
             headers={**self._headers()},
             timeout=15,
         )
@@ -198,7 +201,7 @@ class BillingApiClient:
             self._token = None
             response = self.session.put(
                 f"{self.config.api_base_url}/printers/{printer_id}/status",
-                json=status,
+                json=payload,
                 headers={**self._headers()},
                 timeout=15,
             )

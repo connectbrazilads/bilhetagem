@@ -22,9 +22,9 @@ from app.api.routes.auth import current_auth_context, login
 from app.api.routes.audit_logs import export_audit_logs, list_audit_log_facets, list_audit_logs
 from app.api.routes.organizations import create_organization, list_organizations, update_organization
 from app.api.routes.reports import export_report
-from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint, update_printer_endpoint
+from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint, update_printer_endpoint, update_printer_status_endpoint
 from app.api.routes.settings import sync_ldap_endpoint
-from app.schemas.printer import PrinterAliasBind, PrinterUpdate
+from app.schemas.printer import PrinterAliasBind, PrinterStatusUpdate, PrinterUpdate
 from app.api.routes.jobs import list_jobs
 from app.api.routes.quotas import update_quota
 from app.api.routes.departments import create_department, delete_department, list_departments, update_department
@@ -583,6 +583,62 @@ def test_binding_alias_is_scoped_by_organization(db_session: Session):
     db_session.rollback()
     unchanged_alias = db_session.query(PrinterAlias).filter(PrinterAlias.id == alias.id).one()
     assert unchanged_alias.printer_id is None
+
+
+def test_agent_printer_status_update_requires_bound_alias(db_session: Session):
+    admin = User(username="admin-status", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    agent_user = User(username="agent-status", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-status-pc", computer_name="PC-STATUS")
+    bound_printer = Printer(organization_id=1, name="KONICA STATUS", ip_address="192.168.1.125", is_color=True)
+    other_printer = Printer(organization_id=1, name="BROTHER STATUS", ip_address="192.168.1.126", is_color=False)
+    db_session.add_all([admin, agent_user, agent, bound_printer, other_printer])
+    db_session.flush()
+    db_session.add(
+        PrinterAlias(
+            organization_id=1,
+            printer_id=bound_printer.id,
+            agent_id=agent.id,
+            queue_name="KONICA LOCAL",
+            normalized_queue_name="konica local",
+        )
+    )
+    db_session.commit()
+
+    updated = update_printer_status_endpoint(
+        bound_printer.id,
+        PrinterStatusUpdate(agent_uid=agent.agent_uid, page_counter=1234, toner_level=88),
+        db_session,
+        agent_user,
+    )
+
+    assert updated.page_counter == 1234
+    assert updated.toner_level == 88
+
+    with pytest.raises(HTTPException) as missing_uid:
+        update_printer_status_endpoint(
+            bound_printer.id,
+            PrinterStatusUpdate(page_counter=2222),
+            db_session,
+            agent_user,
+        )
+    assert missing_uid.value.status_code == 403
+
+    with pytest.raises(HTTPException) as unbound_printer:
+        update_printer_status_endpoint(
+            other_printer.id,
+            PrinterStatusUpdate(agent_uid=agent.agent_uid, page_counter=3333),
+            db_session,
+            agent_user,
+        )
+    assert unbound_printer.value.status_code == 403
+
+    admin_updated = update_printer_status_endpoint(
+        other_printer.id,
+        PrinterStatusUpdate(page_counter=4444),
+        db_session,
+        admin,
+    )
+    assert admin_updated.page_counter == 4444
 
 
 def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch, tmp_path: Path):

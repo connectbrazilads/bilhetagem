@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.deps import require_roles
+from app.models.print_agent import PrintAgent
 from app.models.print_job import PrintJob
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
@@ -35,6 +36,32 @@ def _same_alias_identity(left: PrinterAlias, right: PrinterAlias) -> bool:
     left_normalized = left.normalized_queue_name or _normalize_alias_name(left.queue_name)
     right_normalized = right.normalized_queue_name or _normalize_alias_name(right.queue_name)
     return bool(left_normalized and left_normalized == right_normalized)
+
+
+def _ensure_agent_can_update_printer_status(db: Session, actor: User, printer_id: int, agent_uid: str | None) -> None:
+    if actor.role != UserRole.agent:
+        return
+    cleaned_agent_uid = (agent_uid or "").strip()
+    if not cleaned_agent_uid:
+        raise HTTPException(status_code=403, detail="agent_uid obrigatorio para atualizar status da impressora")
+    agent = (
+        db.query(PrintAgent)
+        .filter(PrintAgent.organization_id == actor.organization_id, PrintAgent.agent_uid == cleaned_agent_uid)
+        .first()
+    )
+    if not agent:
+        raise HTTPException(status_code=403, detail="Agent nao autorizado para atualizar esta impressora")
+    alias = (
+        db.query(PrinterAlias.id)
+        .filter(
+            PrinterAlias.organization_id == actor.organization_id,
+            PrinterAlias.agent_id == agent.id,
+            PrinterAlias.printer_id == printer_id,
+        )
+        .first()
+    )
+    if not alias:
+        raise HTTPException(status_code=403, detail="Agent nao possui fila vinculada a esta impressora")
 
 
 @router.get("", response_model=list[PrinterRead])
@@ -138,6 +165,7 @@ def update_printer_status_endpoint(
     printer = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == printer_id).first()
     if not printer:
         raise HTTPException(status_code=404, detail="Impressora nao encontrada")
+    _ensure_agent_can_update_printer_status(db, actor, printer.id, payload.agent_uid)
 
     printer.toner_level = payload.toner_level
     printer.toner_levels = payload.toner_levels

@@ -64,6 +64,7 @@ class PrinterUpdate(BaseModel):
 
 
 class PrinterStatusUpdate(BaseModel):
+    agent_uid: str | None = Field(default=None, min_length=1, max_length=120)
     toner_level: int | None = Field(default=None, ge=0, le=100)
     toner_levels: dict[str, int] | None = None
     paper_status: str | None = Field(default=None, max_length=50)

@@ -742,7 +742,7 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
                 continue
             try:
                 status = fetch_snmp_status(ip_address, self.config)
-                self.api_client.update_printer_status(printer_id, status.as_payload())
+                self.api_client.update_printer_status(printer_id, status.as_payload(), agent_uid=self._agent_uid)
                 logger.info("Status SNMP atualizado para impressora %s (%s)", printer.get("name"), ip_address)
             except Exception as exc:
                 logger.warning(
