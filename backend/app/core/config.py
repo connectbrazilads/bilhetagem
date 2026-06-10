@@ -5,12 +5,14 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_SECRET_KEY = "change-me-in-production"
+DEFAULT_DATABASE_URL = "postgresql+psycopg://printbilling:printbilling@localhost:5432/printbilling"
+DEFAULT_DATABASE_CREDENTIALS = "://printbilling:printbilling@"
 
 
 class Settings(BaseSettings):
     app_name: str = "Sistema de Bilhetagem"
     environment: str = "development"
-    database_url: str = "postgresql+psycopg://printbilling:printbilling@localhost:5432/printbilling"
+    database_url: str = DEFAULT_DATABASE_URL
     secret_key: str = Field(default=DEFAULT_SECRET_KEY, min_length=16)
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
@@ -63,6 +65,8 @@ class Settings(BaseSettings):
             return self
         if self.secret_key == DEFAULT_SECRET_KEY:
             raise ValueError("SECRET_KEY proprio e obrigatorio em producao")
+        if self.database_url == DEFAULT_DATABASE_URL or DEFAULT_DATABASE_CREDENTIALS in self.database_url:
+            raise ValueError("DATABASE_URL com credenciais proprias e obrigatorio em producao")
         if isinstance(self.cors_origins, list) and any(origin.strip() == "*" for origin in self.cors_origins):
             raise ValueError("CORS_ORIGINS nao pode usar wildcard em producao")
         return self
