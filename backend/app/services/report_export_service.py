@@ -210,10 +210,11 @@ def render_monthly_closing_pdf(closing: MonthlyClosing) -> bytes:
     y = _draw_header(pdf, closing)
 
     col_w = (PAGE_WIDTH - 100) / 4
-    _draw_metric(pdf, 40, y, col_w, "Paginas cobraveis", str(closing.total_pages), f"{closing.billable_jobs} trabalho(s)")
+    totals = closing.snapshot.get("totals", {}) if closing.snapshot else {}
+    _draw_metric(pdf, 40, y, col_w, "Paginas cobraveis", str(closing.total_pages), f"{closing.billable_jobs} trab. | {totals.get('released_jobs', 0)} liberado(s)")
     _draw_metric(pdf, 50 + col_w, y, col_w, "Custo total", _money(closing.total_cost), "Base para cobranca")
     _draw_metric(pdf, 60 + col_w * 2, y, col_w, "Coloridas", str(closing.color_pages), f"P&B: {closing.mono_pages}")
-    _draw_metric(pdf, 70 + col_w * 3, y, col_w, "Paginas salvas", str(closing.blocked_pages), f"{closing.blocked_jobs} bloqueio(s)")
+    _draw_metric(pdf, 70 + col_w * 3, y, col_w, "Paginas salvas", str(closing.blocked_pages), f"{closing.blocked_jobs} bloq. | {totals.get('pending_pages', 0)} pend.")
     y -= 92
 
     eco = closing.snapshot.get("eco", {})
@@ -347,7 +348,9 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     summary.append(["Periodo", f"{closing.month:02d}/{closing.year}"])
     summary.append(["Trabalhos", closing.total_jobs])
     summary.append(["Trabalhos cobraveis", closing.billable_jobs])
+    summary.append(["Trabalhos liberados", closing.snapshot.get("totals", {}).get("released_jobs", 0)])
     summary.append(["Trabalhos pendentes", closing.pending_jobs])
+    summary.append(["Paginas pendentes", closing.snapshot.get("totals", {}).get("pending_pages", 0)])
     summary.append(["Trabalhos bloqueados", closing.blocked_jobs])
     summary.append(["Paginas cobraveis", closing.total_pages])
     summary.append(["Paginas P&B", closing.mono_pages])
@@ -358,7 +361,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     summary.append(["CO2 evitado (g)", eco.get("co2_saved_g", 0)])
     summary.append(["Agua preservada (L)", eco.get("water_saved_l", 0)])
     summary.append(["Arvores salvas", eco.get("trees_saved", 0)])
-    summary["B12"].number_format = '"R$" #,##0.00'
+    summary["B14"].number_format = '"R$" #,##0.00'
     _style_sheet(summary)
 
     for sheet_name, key in (("Usuarios", "by_user"), ("Departamentos", "by_department"), ("Impressoras", "by_printer"), ("Tipo", "by_type")):
@@ -372,7 +375,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
         _style_sheet(sheet)
 
     policies = workbook.create_sheet("Politicas")
-    policies.append(["Politica", "Acao", "Trabalhos", "Cobraveis", "Pendentes", "Bloqueados", "Paginas", "P&B", "Coloridas", "Salvas", "Custo", "Custo/Pag."])
+    policies.append(["Politica", "Acao", "Trabalhos", "Cobraveis", "Pendentes", "Pag. Pendentes", "Bloqueados", "Paginas", "P&B", "Coloridas", "Salvas", "Custo", "Custo/Pag."])
     for row in closing.snapshot.get("by_policy", []):
         policies.append(
             [
@@ -381,6 +384,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
                 row["jobs"],
                 row["billable_jobs"],
                 row["pending_jobs"],
+                row.get("pending_pages", 0),
                 row["blocked_jobs"],
                 row["pages"],
                 row["mono_pages"],
@@ -390,7 +394,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
                 row.get("cost_per_page", 0),
             ]
         )
-    for row in policies.iter_rows(min_row=2, min_col=11, max_col=12):
+    for row in policies.iter_rows(min_row=2, min_col=12, max_col=13):
         for cell in row:
             cell.number_format = '"R$" #,##0.00'
     _style_sheet(policies)

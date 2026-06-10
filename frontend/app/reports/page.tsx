@@ -57,6 +57,10 @@ type MonthlyClosing = {
   blocked_pages: number;
   total_cost: number;
   snapshot: {
+    totals?: {
+      released_jobs?: number;
+      pending_pages?: number;
+    };
     by_user?: ClosingSnapshotRow[];
     by_department?: ClosingSnapshotRow[];
     by_printer?: ClosingSnapshotRow[];
@@ -407,7 +411,9 @@ export default function ReportsPage() {
                       <td colSpan={8} className="p-4">
                         <div className="mb-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
                           <span>{closing.billable_jobs.toLocaleString("pt-BR")} trabalho(s) cobraveis</span>
+                          <span>{(closing.snapshot.totals?.released_jobs ?? 0).toLocaleString("pt-BR")} liberado(s)</span>
                           <span>{closing.pending_jobs.toLocaleString("pt-BR")} pendente(s)</span>
+                          <span>{(closing.snapshot.totals?.pending_pages ?? 0).toLocaleString("pt-BR")} pag. pendente(s)</span>
                           <span>{closing.blocked_jobs.toLocaleString("pt-BR")} bloqueado(s)</span>
                         </div>
                         <div className="grid gap-4 lg:grid-cols-4">

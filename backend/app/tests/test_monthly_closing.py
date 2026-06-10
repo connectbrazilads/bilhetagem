@@ -66,6 +66,19 @@ def _seed_job_data(db_session: Session) -> tuple[User, Printer]:
             organization_id=1,
             user_id=user.id,
             printer_id=printer.id,
+            pages=5,
+            is_color=True,
+            cost=1.25,
+            status=JobStatus.pending_release,
+            reason="Liberacao exigida",
+            policy_name="Liberacao segura",
+            policy_action="require_release",
+            submitted_at=datetime(2026, 5, 13, 10, tzinfo=timezone.utc),
+        ),
+        PrintJob(
+            organization_id=1,
+            user_id=user.id,
+            printer_id=printer.id,
             pages=99,
             is_color=False,
             cost=4.95,
@@ -87,13 +100,16 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
 
     closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
 
-    assert closing.total_jobs == 3
+    assert closing.total_jobs == 4
     assert closing.billable_jobs == 2
+    assert closing.pending_jobs == 1
     assert closing.total_pages == 14
     assert closing.mono_pages == 10
     assert closing.color_pages == 4
     assert closing.blocked_pages == 3
     assert closing.total_cost == 1.5
+    assert closing.snapshot["totals"]["released_jobs"] == 1
+    assert closing.snapshot["totals"]["pending_pages"] == 5
     assert closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
     assert closing.snapshot["by_printer"][0]["cost_per_page"] == 0.11
@@ -104,6 +120,7 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
             "jobs": 1,
             "billable_jobs": 0,
             "pending_jobs": 0,
+            "pending_pages": 0,
             "blocked_jobs": 1,
             "pages": 0,
             "mono_pages": 0,
@@ -118,6 +135,7 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
             "jobs": 1,
             "billable_jobs": 1,
             "pending_jobs": 0,
+            "pending_pages": 0,
             "blocked_jobs": 0,
             "pages": 10,
             "mono_pages": 10,
@@ -125,6 +143,21 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
             "saved_pages": 0,
             "cost": 0.5,
             "cost_per_page": 0.05,
+        },
+        {
+            "name": "Liberacao segura",
+            "action": "require_release",
+            "jobs": 1,
+            "billable_jobs": 0,
+            "pending_jobs": 1,
+            "pending_pages": 5,
+            "blocked_jobs": 0,
+            "pages": 0,
+            "mono_pages": 0,
+            "color_pages": 0,
+            "saved_pages": 0,
+            "cost": 0.0,
+            "cost_per_page": 0.0,
         },
     ]
     assert closing.snapshot["organization"] == {"id": 1, "name": "Cliente Fechamento", "slug": "cliente-fechamento"}
@@ -160,16 +193,20 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     workbook = load_workbook(BytesIO(response.body), data_only=True)
     assert workbook.sheetnames == ["Resumo", "Usuarios", "Departamentos", "Impressoras", "Tipo", "Politicas"]
     assert workbook["Resumo"]["B2"].value == "Cliente XLSX"
-    assert workbook["Resumo"]["A12"].value == "Custo total"
-    assert workbook["Resumo"]["B12"].value == 1.5
+    assert workbook["Resumo"]["A6"].value == "Trabalhos liberados"
+    assert workbook["Resumo"]["B6"].value == 1
+    assert workbook["Resumo"]["A8"].value == "Paginas pendentes"
+    assert workbook["Resumo"]["B8"].value == 5
+    assert workbook["Resumo"]["A14"].value == "Custo total"
+    assert workbook["Resumo"]["B14"].value == 1.5
     assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"
     assert workbook["Impressoras"]["G1"].value == "Custo/Pag."
     assert workbook["Impressoras"]["G2"].value == 0.11
     assert workbook["Politicas"]["A1"].value == "Politica"
     assert workbook["Politicas"]["A2"].value == "Bloquear colorido"
     assert workbook["Politicas"]["B2"].value == "Bloqueio"
-    assert workbook["Politicas"]["F2"].value == 1
-    assert workbook["Politicas"]["J2"].value == 3
+    assert workbook["Politicas"]["G2"].value == 1
+    assert workbook["Politicas"]["K2"].value == 3
     audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_exported", AuditLog.entity_id == closing.id).one()
     assert audit.log_metadata == {"format": "xlsx"}
 
@@ -217,12 +254,13 @@ def test_report_export_applies_department_filter(db_session: Session):
     sheet = workbook.active
     exported_users = [row[1].value for row in sheet.iter_rows(min_row=2)]
     assert set(exported_users) == {"Ana Financeiro"}
-    assert len(exported_users) == 4
+    assert len(exported_users) == 5
     assert sheet["C2"].value == "Financeiro"
     assert sheet["I2"].value in {0.5, 1.0, 0.75, 4.95}
-    assert sheet["J5"].value == "Cobrar colorido como PB"
-    assert sheet["K5"].value == "Cobrar P&B"
-    assert sheet["L5"].value == "Cobrado como P&B pela politica: Cobrar colorido como PB"
+    policy_rows = [row for row in sheet.iter_rows(min_row=2, values_only=True) if row[9] == "Cobrar colorido como PB"]
+    assert len(policy_rows) == 1
+    assert policy_rows[0][10] == "Cobrar P&B"
+    assert policy_rows[0][11] == "Cobrado como P&B pela politica: Cobrar colorido como PB"
     assert workbook["Resumo"]["A8"].value == "Custo filtrado"
     assert workbook["Resumo"]["B8"].value == 6.45
     assert workbook["Resumo"]["A10"].value == "Filtros aplicados"
@@ -232,7 +270,7 @@ def test_report_export_applies_department_filter(db_session: Session):
     audit = db_session.query(AuditLog).filter(AuditLog.action == "report_exported").one()
     assert audit.actor_user_id == actor.id
     assert audit.log_metadata["format"] == "xlsx"
-    assert audit.log_metadata["rows"] == 4
+    assert audit.log_metadata["rows"] == 5
     assert audit.log_metadata["filters"]["department_id"] == user.department_id
     assert audit.log_metadata["filter_summary"] == {"Departamento": "Financeiro"}
 
@@ -250,7 +288,7 @@ def test_report_export_pdf_uses_commercial_renderer_and_audit(db_session: Sessio
     audit = db_session.query(AuditLog).filter(AuditLog.action == "report_exported").one()
     assert audit.actor_user_id == actor.id
     assert audit.log_metadata["format"] == "pdf"
-    assert audit.log_metadata["rows"] == 4
+    assert audit.log_metadata["rows"] == 5
 
 
 def test_monthly_report_email_settings_api(db_session: Session):

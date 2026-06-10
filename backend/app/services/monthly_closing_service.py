@@ -42,6 +42,7 @@ def _empty_policy_bucket(name: str, action: str | None) -> dict:
         "jobs": 0,
         "billable_jobs": 0,
         "pending_jobs": 0,
+        "pending_pages": 0,
         "blocked_jobs": 0,
         "pages": 0,
         "mono_pages": 0,
@@ -82,6 +83,7 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
         "total_jobs": len(jobs),
         "billable_jobs": 0,
         "pending_jobs": 0,
+        "pending_pages": 0,
         "blocked_jobs": 0,
         "total_pages": 0,
         "mono_pages": 0,
@@ -100,8 +102,10 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
 
         if job.status == JobStatus.pending_release:
             totals["pending_jobs"] += 1
+            totals["pending_pages"] += job.pages
             if policy_bucket:
                 policy_bucket["pending_jobs"] += 1
+                policy_bucket["pending_pages"] += job.pages
         if job.status in blocked_statuses:
             totals["blocked_jobs"] += 1
             totals["blocked_pages"] += job.pages
@@ -155,6 +159,7 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
                 "jobs": data["jobs"],
                 "billable_jobs": data["billable_jobs"],
                 "pending_jobs": data["pending_jobs"],
+                "pending_pages": data["pending_pages"],
                 "blocked_jobs": data["blocked_jobs"],
                 "pages": data["pages"],
                 "mono_pages": data["mono_pages"],
