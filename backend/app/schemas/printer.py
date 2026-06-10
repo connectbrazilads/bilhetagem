@@ -14,6 +14,7 @@ class PrinterCreate(BaseModel):
 
 class PrinterAliasRead(BaseModel):
     id: int
+    printer_id: int | None
     queue_name: str
     computer_name: str | None
     driver_name: str | None
@@ -25,6 +26,10 @@ class PrinterAliasRead(BaseModel):
     last_seen_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class PrinterAliasBind(BaseModel):
+    printer_id: int | None = None
 
 
 class PrinterRead(BaseModel):

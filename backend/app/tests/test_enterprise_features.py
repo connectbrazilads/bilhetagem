@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.printer import Printer
@@ -10,7 +11,8 @@ from app.models.user import User, UserRole
 from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
 from app.api.routes.auth import login
-from app.api.routes.printers import merge_printer_endpoint
+from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
+from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
 from app.api.routes.printers import list_printers
 from app.api.routes.users import list_users
@@ -186,6 +188,70 @@ def test_merge_printer_moves_jobs_and_aliases(db_session: Session):
     assert moved_job.printer_id == target.id
     assert moved_job.printer_alias_id == alias.id
     assert moved_alias.printer_id == target.id
+
+
+def test_binding_alias_moves_historical_jobs_to_physical_printer(db_session: Session):
+    actor = User(username="admin-bind", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="diego-bind", full_name="Diego", role=UserRole.user, is_active=True, organization_id=1)
+    detected = Printer(organization_id=1, name="USER", is_color=False)
+    physical = Printer(organization_id=1, name="KONICA MINOLTA C368SeriesPS", ip_address="192.168.1.125", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-bind", computer_name="PC-A")
+    db_session.add_all([actor, user, detected, physical, agent])
+    db_session.flush()
+
+    alias = PrinterAlias(
+        organization_id=1,
+        printer_id=detected.id,
+        agent_id=agent.id,
+        queue_name="USER",
+        normalized_queue_name="user",
+        computer_name="PC-A",
+        fingerprint="queue:pc-a|user|usb001|driver",
+    )
+    db_session.add(alias)
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=detected.id,
+        printer_alias_id=alias.id,
+        agent_id=agent.id,
+        document_name="Documento",
+        computer_name="PC-A",
+        queue_name="USER",
+        pages=2,
+        is_color=False,
+        cost=0.10,
+        status=JobStatus.authorized,
+        submitted_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    updated_alias = bind_printer_alias_endpoint(alias.id, PrinterAliasBind(printer_id=physical.id), db_session, actor)
+
+    moved_job = db_session.query(PrintJob).filter(PrintJob.id == job.id).one()
+    assert updated_alias.printer_id == physical.id
+    assert moved_job.printer_id == physical.id
+
+
+def test_binding_alias_is_scoped_by_organization(db_session: Session):
+    other_org = Organization(name="Cliente Alias B", slug="cliente-alias-b", is_active=True)
+    db_session.add(other_org)
+    db_session.flush()
+    actor = User(username="admin-alias-a", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    alias = PrinterAlias(organization_id=1, queue_name="KONICA LOCAL")
+    other_printer = Printer(organization_id=other_org.id, name="KONICA OUTRA EMPRESA", is_color=True)
+    db_session.add_all([actor, alias, other_printer])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        bind_printer_alias_endpoint(alias.id, PrinterAliasBind(printer_id=other_printer.id), db_session, actor)
+    assert exc.value.status_code == 404
+
+    db_session.rollback()
+    unchanged_alias = db_session.query(PrinterAlias).filter(PrinterAlias.id == alias.id).one()
+    assert unchanged_alias.printer_id is None
 
 
 def test_organization_scope_isolates_core_views(db_session: Session):

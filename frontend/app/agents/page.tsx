@@ -179,6 +179,25 @@ export default function AgentsPage() {
     }
   }
 
+  async function bindAlias(aliasId: number, printerId: string) {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setActionMessage(null);
+    try {
+      await apiFetch(`/printers/aliases/${aliasId}`, token, {
+        method: "PUT",
+        body: JSON.stringify({ printer_id: printerId ? Number(printerId) : null }),
+      });
+      setActionMessage("Vinculo da fila atualizado.");
+      if (selectedAgent) {
+        await refreshSelectedAgent(selectedAgent.id);
+      }
+      await load();
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Falha ao vincular fila");
+    }
+  }
+
   async function createBulkQueueAction() {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -558,11 +577,21 @@ export default function AgentsPage() {
                             <div className="text-xs text-muted-foreground">{queue.port_name || "-"}</div>
                           </td>
                           <td className="p-3">
-                            {queue.printer_id ? (
-                              <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">Vinculada</span>
-                            ) : (
-                              <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Sem vinculo</span>
-                            )}
+                            <select
+                              className={`h-8 max-w-[220px] rounded-md border bg-white px-2 text-xs font-semibold outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20 ${
+                                queue.printer_id ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"
+                              }`}
+                              value={queue.printer_id?.toString() || ""}
+                              onChange={(event) => bindAlias(queue.id, event.target.value)}
+                              title="Vincular esta fila a uma impressora fisica"
+                            >
+                              <option value="">Sem vinculo</option>
+                              {printers.map((printer) => (
+                                <option key={printer.id} value={printer.id}>
+                                  {printer.name}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td className="p-3 text-right">
                             <Button variant="ghost" className="h-8 w-8 p-0" title="Remover fila neste PC" onClick={() => createQueueAction("remove_queue", queue)}>

@@ -10,7 +10,7 @@ from app.models.printer_alias import PrinterAlias
 from app.models.quota import Quota
 from app.models.user import User, UserRole
 from app.repositories.printers import create_printer
-from app.schemas.printer import PrinterCreate, PrinterRead, PrinterStatusUpdate, PrinterUpdate
+from app.schemas.printer import PrinterAliasBind, PrinterAliasRead, PrinterCreate, PrinterRead, PrinterStatusUpdate, PrinterUpdate
 from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/printers", tags=["printers"])
@@ -98,6 +98,53 @@ def update_printer_status_endpoint(
     db.commit()
     db.refresh(printer)
     return printer
+
+
+@router.put("/aliases/{alias_id}", response_model=PrinterAliasRead)
+def bind_printer_alias_endpoint(
+    alias_id: int,
+    payload: PrinterAliasBind,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> PrinterAlias:
+    alias = db.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.id == alias_id).first()
+    if not alias:
+        raise HTTPException(status_code=404, detail="Fila/alias nao encontrada")
+
+    target_printer = None
+    if payload.printer_id is not None:
+        target_printer = (
+            db.query(Printer)
+            .filter(Printer.organization_id == actor.organization_id, Printer.id == payload.printer_id)
+            .first()
+        )
+        if not target_printer:
+            raise HTTPException(status_code=404, detail="Impressora nao encontrada")
+
+    alias.printer_id = target_printer.id if target_printer else None
+    moved_jobs = 0
+    if target_printer:
+        moved_jobs = (
+            db.query(PrintJob)
+            .filter(PrintJob.organization_id == actor.organization_id, PrintJob.printer_alias_id == alias.id)
+            .update({PrintJob.printer_id: target_printer.id}, synchronize_session=False)
+        )
+
+    write_audit(
+        db,
+        action="printer_alias_bound" if target_printer else "printer_alias_unbound",
+        entity="printer_aliases",
+        entity_id=alias.id,
+        actor_user_id=actor.id,
+        metadata={
+            "queue_name": alias.queue_name,
+            "printer_id": alias.printer_id,
+            "moved_jobs": moved_jobs,
+        },
+    )
+    db.commit()
+    db.refresh(alias)
+    return alias
 
 
 @router.delete("/{printer_id}")
