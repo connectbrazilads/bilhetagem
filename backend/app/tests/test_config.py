@@ -49,6 +49,22 @@ def test_production_rejects_default_database_credentials_on_other_host():
         )
 
 
+def test_production_rejects_sqlite_database_url():
+    with pytest.raises(ValidationError):
+        Settings(
+            environment="production",
+            database_url="sqlite:///printbilling.db",
+            secret_key="custom-production-secret-2026",
+            _env_file=None,
+        )
+
+
+def test_development_allows_sqlite_database_url():
+    settings = Settings(database_url="sqlite:///printbilling.db", _env_file=None)
+
+    assert settings.database_url == "sqlite:///printbilling.db"
+
+
 def test_production_rejects_wildcard_cors_origins():
     with pytest.raises(ValidationError):
         Settings(

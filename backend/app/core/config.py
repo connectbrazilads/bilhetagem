@@ -65,6 +65,8 @@ class Settings(BaseSettings):
             return self
         if self.secret_key == DEFAULT_SECRET_KEY:
             raise ValueError("SECRET_KEY proprio e obrigatorio em producao")
+        if self.database_url.startswith("sqlite"):
+            raise ValueError("DATABASE_URL deve usar banco servidor em producao")
         if self.database_url == DEFAULT_DATABASE_URL or DEFAULT_DATABASE_CREDENTIALS in self.database_url:
             raise ValueError("DATABASE_URL com credenciais proprias e obrigatorio em producao")
         if isinstance(self.cors_origins, list) and any(origin.strip() == "*" for origin in self.cors_origins):
