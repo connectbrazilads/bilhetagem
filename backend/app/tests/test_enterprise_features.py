@@ -367,6 +367,36 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
     assert token.organization_id == other_org.id
 
 
+def test_inactive_organization_cannot_issue_login_token(db_session: Session):
+    inactive_org = Organization(name="Cliente Inativo", slug="cliente-inativo", is_active=False)
+    db_session.add(inactive_org)
+    db_session.flush()
+    inactive_user = User(
+        organization_id=inactive_org.id,
+        username="bloqueado",
+        full_name="Bloqueado",
+        password_hash=hash_password("admin12345"),
+        role=UserRole.admin,
+        is_active=True,
+    )
+    db_session.add(inactive_user)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as slug_exc:
+        login(
+            LoginRequest(username="bloqueado", password="admin12345", organization_slug="cliente-inativo"),
+            db=db_session,
+        )
+    assert slug_exc.value.status_code == 401
+
+    with pytest.raises(HTTPException) as no_slug_exc:
+        login(
+            LoginRequest(username="bloqueado", password="admin12345", organization_slug=None),
+            db=db_session,
+        )
+    assert no_slug_exc.value.status_code == 401
+
+
 def test_organization_list_includes_scoped_usage_counts(db_session: Session):
     other_org = Organization(name="Cliente Usage", slug="cliente-usage", is_active=True)
     admin = User(username="usage-admin", full_name="Usage Admin", role=UserRole.admin, is_active=True, organization_id=1)

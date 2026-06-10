@@ -12,12 +12,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    query = db.query(User).filter(User.username == payload.username, User.is_active.is_(True))
-    if payload.organization_slug:
-        query = query.join(Organization).filter(
-            Organization.slug == payload.organization_slug,
+    query = (
+        db.query(User)
+        .join(Organization)
+        .filter(
+            User.username == payload.username,
+            User.is_active.is_(True),
             Organization.is_active.is_(True),
         )
+    )
+    if payload.organization_slug:
+        query = query.filter(Organization.slug == payload.organization_slug)
     user = query.first()
     if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario ou senha invalidos")
