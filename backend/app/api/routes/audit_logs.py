@@ -3,7 +3,7 @@ import csv
 import io
 import json
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,11 @@ from app.schemas.audit import AuditLogFacets, AuditLogRead
 from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
+
+
+def _validate_date_range(date_from: datetime | None, date_to: datetime | None) -> None:
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=400, detail="Periodo invalido: data inicial maior que data final")
 
 
 def _audit_query(
@@ -65,6 +70,7 @@ def list_audit_logs(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> list[AuditLogRead]:
+    _validate_date_range(date_from, date_to)
     rows = _audit_query(
         db,
         actor,
@@ -111,6 +117,7 @@ def export_audit_logs(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> Response:
+    _validate_date_range(date_from, date_to)
     rows = _audit_query(
         db,
         actor,

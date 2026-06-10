@@ -862,6 +862,25 @@ def test_job_listing_rejects_filters_from_other_organization(db_session: Session
     assert printer_exc.value.status_code == 404
 
 
+def test_job_listing_rejects_invalid_date_range(db_session: Session):
+    actor = User(username="jobs-date-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        list_jobs(
+            user_id=None,
+            department_id=None,
+            printer_id=None,
+            date_from=datetime(2026, 6, 11, tzinfo=timezone.utc),
+            date_to=datetime(2026, 6, 10, tzinfo=timezone.utc),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert exc.value.status_code == 400
+
+
 def test_same_user_and_printer_names_can_exist_in_different_organizations(db_session: Session):
     other_org = Organization(name="Cliente C", slug="cliente-c", is_active=True)
     db_session.add(other_org)
@@ -1657,3 +1676,20 @@ def test_audit_log_filters_by_date_and_exports_csv(db_session: Session):
     assert audit.log_metadata["filters"]["date_from"] == "2026-02-01T00:00:00+00:00"
     assert audit.log_metadata["filters"]["date_to"] == "2026-02-28T23:59:00+00:00"
     assert audit.log_metadata["filters"]["limit"] == 100
+
+
+def test_audit_log_rejects_invalid_date_range_without_export_audit(db_session: Session):
+    admin = User(username="audit-date-admin", full_name="Audit Date", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.commit()
+    date_from = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    date_to = datetime(2026, 2, 1, tzinfo=timezone.utc)
+
+    with pytest.raises(HTTPException) as list_exc:
+        list_audit_logs(action=None, entity=None, date_from=date_from, date_to=date_to, limit=100, db=db_session, actor=admin)
+    assert list_exc.value.status_code == 400
+
+    with pytest.raises(HTTPException) as export_exc:
+        export_audit_logs(action=None, entity=None, date_from=date_from, date_to=date_to, limit=100, db=db_session, actor=admin)
+    assert export_exc.value.status_code == 400
+    assert db_session.query(AuditLog).filter(AuditLog.action == "audit_logs_exported").count() == 0

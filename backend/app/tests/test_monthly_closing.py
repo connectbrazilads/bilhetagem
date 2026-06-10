@@ -364,6 +364,24 @@ def test_report_export_rejects_zero_filter_ids_without_audit(db_session: Session
     assert db_session.query(AuditLog).filter(AuditLog.action == "report_exported").count() == 0
 
 
+def test_report_export_rejects_invalid_date_range_without_audit(db_session: Session):
+    actor = User(username="report-date-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        export_report(
+            format="xlsx",
+            date_from=datetime(2026, 6, 11, tzinfo=timezone.utc),
+            date_to=datetime(2026, 6, 10, tzinfo=timezone.utc),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert exc.value.status_code == 400
+    assert db_session.query(AuditLog).filter(AuditLog.action == "report_exported").count() == 0
+
+
 def test_report_export_pdf_uses_commercial_renderer_and_audit(db_session: Session):
     _seed_job_data(db_session)
     actor = User(username="report-general-pdf-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)

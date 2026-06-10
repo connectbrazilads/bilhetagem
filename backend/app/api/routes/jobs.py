@@ -45,6 +45,11 @@ def _validate_job_filters(
         raise HTTPException(status_code=404, detail="Impressora do filtro nao encontrada")
 
 
+def _validate_date_range(date_from: datetime | None, date_to: datetime | None) -> None:
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=400, detail="Periodo invalido: data inicial maior que data final")
+
+
 @router.get("", response_model=list[PrintJobRead])
 def list_jobs(
     user_id: int | None = Query(default=None),
@@ -62,6 +67,7 @@ def list_jobs(
         department_id=department_id,
         printer_id=printer_id,
     )
+    _validate_date_range(date_from, date_to)
     query = (
         db.query(PrintJob)
         .join(User, User.id == PrintJob.user_id)

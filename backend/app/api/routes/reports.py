@@ -188,6 +188,11 @@ def _validate_report_filters(
         raise HTTPException(status_code=404, detail="Impressora do filtro nao encontrada")
 
 
+def _validate_date_range(date_from: datetime | None, date_to: datetime | None) -> None:
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=400, detail="Periodo invalido: data inicial maior que data final")
+
+
 @router.get("/monthly-closings/{closing_id}/export")
 def export_monthly_closing(
     closing_id: int,
@@ -239,6 +244,7 @@ def export_report(
         department_id=department_id,
         printer_id=printer_id,
     )
+    _validate_date_range(date_from, date_to)
     query = (
         db.query(PrintJob)
         .join(User, User.id == PrintJob.user_id)
