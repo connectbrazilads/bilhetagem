@@ -71,8 +71,12 @@ function emptyPrinterForm(costs = FALLBACK_PRINTER_COSTS): PrinterForm {
   };
 }
 
-function costText(value: number | null | undefined, fallback: string) {
-  return value !== null && value !== undefined ? value.toFixed(2) : fallback;
+function costMoney(value: number | null | undefined, fallback: string) {
+  return money(value !== null && value !== undefined ? value : Number(fallback));
+}
+
+function money(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 export default function PrintersPage() {
@@ -565,8 +569,8 @@ export default function PrintersPage() {
                 </td>
                 <td className="p-3">
                   <div className="font-medium text-foreground">
-                    R$ {costText(printer.cost_mono, defaultCosts.mono)}{" "}
-                    <span className="text-xs text-muted-foreground">/ R$ {costText(printer.cost_color, defaultCosts.color)}</span>
+                    {costMoney(printer.cost_mono, defaultCosts.mono)}{" "}
+                    <span className="text-xs text-muted-foreground">/ {costMoney(printer.cost_color, defaultCosts.color)}</span>
                   </div>
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold mt-1 ${printer.is_color ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-gray-100 text-gray-700 border border-gray-200"}`}>
                     {printer.is_color ? "Suporta Colorido" : "Apenas P&B"}
@@ -768,7 +772,7 @@ export default function PrintersPage() {
               <div className="flex items-center justify-between text-sm border-t pt-3">
                 <span className="text-muted-foreground">Custo P&B / Cor:</span>
                 <span className="font-semibold">
-                  R$ {selectedPrinter.cost_mono.toFixed(2)} / R$ {selectedPrinter.cost_color.toFixed(2)}
+                  {money(selectedPrinter.cost_mono)} / {money(selectedPrinter.cost_color)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
