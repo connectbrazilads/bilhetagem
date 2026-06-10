@@ -184,6 +184,14 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert same_closing.snapshot["organization"] == {"id": 1, "name": "Cliente Fechamento", "slug": "cliente-fechamento"}
 
 
+def test_monthly_closing_rejects_invalid_period(db_session: Session):
+    with pytest.raises(ValueError, match="Mes do fechamento deve estar entre 1 e 12"):
+        create_monthly_closing(db_session, organization_id=1, year=2026, month=13)
+
+    with pytest.raises(ValueError, match="Ano do fechamento deve estar entre 2000 e 2100"):
+        create_monthly_closing(db_session, organization_id=1, year=1999, month=5)
+
+
 def test_user_with_print_history_cannot_be_deleted(db_session: Session):
     user, _ = _seed_job_data(db_session)
     admin = User(username="delete-history-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)

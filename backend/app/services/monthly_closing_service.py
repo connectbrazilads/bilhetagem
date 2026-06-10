@@ -12,7 +12,15 @@ from app.models.printer import Printer
 from app.models.user import User
 
 
+def validate_period(year: int, month: int) -> None:
+    if year < 2000 or year > 2100:
+        raise ValueError("Ano do fechamento deve estar entre 2000 e 2100")
+    if month < 1 or month > 12:
+        raise ValueError("Mes do fechamento deve estar entre 1 e 12")
+
+
 def period_bounds(year: int, month: int) -> tuple[datetime, datetime]:
+    validate_period(year, month)
     start = datetime(year, month, 1, tzinfo=timezone.utc)
     if month == 12:
         end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
