@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 import pytest
 
-from app.api.routes.jobs import cancel_job, release_job
+from app.api.routes.jobs import cancel_job, get_agent_actions, release_job
 from app.models.audit_log import AuditLog
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
@@ -173,6 +173,33 @@ def test_manager_can_release_pending_job_for_same_organization(db_session):
     assert audit.log_metadata["actor_role"] == "manager"
     assert audit.log_metadata["printer"] == "KONICA_RELEASE"
     assert audit.log_metadata["pages"] == 10
+
+
+def test_agent_actions_match_local_queue_name_when_physical_printer_name_differs(db_session):
+    agent = User(username="agent-actions", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    user = User(username="job-owner-actions", full_name="Job Owner", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA MINOLTA C368SeriesPS", is_color=True)
+    db_session.add_all([agent, user, printer])
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        external_job_id="42",
+        document_name="Contrato.pdf",
+        queue_name="Financeiro Konica",
+        pages=2,
+        is_color=True,
+        cost=0.50,
+        status=JobStatus.pending_release,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    actions = get_agent_actions("Financeiro Konica:42", db=db_session, current_user=agent)
+
+    assert actions == {"Financeiro Konica:42": "hold"}
 
 
 def test_manager_can_cancel_pending_job_for_same_organization(db_session):

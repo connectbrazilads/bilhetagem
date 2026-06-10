@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -117,8 +118,8 @@ def get_agent_actions(
             .filter(
                 PrintJob.organization_id == current_user.organization_id,
                 Printer.organization_id == current_user.organization_id,
-                Printer.name == printer_name,
                 PrintJob.external_job_id == ext_id,
+                or_(PrintJob.queue_name == printer_name, Printer.name == printer_name),
             )
             .order_by(PrintJob.id.desc())
             .first()
