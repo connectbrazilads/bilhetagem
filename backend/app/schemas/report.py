@@ -3,12 +3,26 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class OperationalHealth(BaseModel):
+    agents_total: int = 0
+    agents_online: int = 0
+    agents_offline: int = 0
+    agents_with_alerts: int = 0
+    printers_total: int = 0
+    printers_monitored: int = 0
+    printers_unmonitored: int = 0
+    low_toner_printers: int = 0
+    unbound_queues: int = 0
+    usb_queues: int = 0
+    duplicate_queue_aliases: int = 0
+
+
 class DashboardMetrics(BaseModel):
     prints_today: int
     prints_month: int
     pages_today: int
     pages_month: int
-    operational_health: dict | None = None
+    operational_health: OperationalHealth | None = None
     top_users: list[dict]
     top_printers: list[dict]
     department_usage: list[dict]

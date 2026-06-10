@@ -42,6 +42,7 @@ from app.api.routes.jobs import get_pdf_page_count
 from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
 from app.schemas.organization import OrganizationCreate, OrganizationUpdate
+from app.schemas.report import DashboardMetrics
 
 
 def test_seed_rejects_default_or_placeholder_passwords():
@@ -611,6 +612,9 @@ def test_organization_scope_isolates_core_views(db_session: Session):
         "usb_queues": 1,
         "duplicate_queue_aliases": 1,
     }
+    validated_metrics = DashboardMetrics.model_validate(metrics)
+    assert validated_metrics.operational_health is not None
+    assert validated_metrics.operational_health.duplicate_queue_aliases == 1
     assert metrics["department_usage"] == [
         {"department": "Financeiro", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
     ]
