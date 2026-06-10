@@ -782,6 +782,7 @@ def test_agent_heartbeat_reuses_alias_by_normalized_queue_name(db_session: Sessi
     assert len(second.aliases) == 1
     assert db_session.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id).count() == 1
     alias = db_session.query(PrinterAlias).one()
+    assert alias.queue_name == "konica   financeiro"
     assert alias.normalized_queue_name == "konica financeiro"
     assert "duplicate_queue_aliases" not in {alert.code for alert in second.health_alerts}
 

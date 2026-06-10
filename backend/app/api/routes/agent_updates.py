@@ -1035,6 +1035,9 @@ def agent_heartbeat(
             db.add(alias)
             db.flush()
             existing_aliases[queue_name] = alias
+        elif alias.queue_name != queue_name:
+            alias.queue_name = queue_name
+            existing_aliases[queue_name] = alias
         if normalized_queue_name:
             existing_aliases_by_normalized[normalized_queue_name] = alias
         alias.normalized_queue_name = normalized_queue_name
