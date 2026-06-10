@@ -380,8 +380,10 @@ def test_deployment_organizations_are_scoped_for_download_commands(db_session: S
     past_due_org = Organization(name="Cliente Atrasado Download", slug="cliente-atrasado-download", is_active=True, billing_status="past_due")
     platform_admin = User(username="platform-download-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     tenant_admin = User(username="tenant-download-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization=other_org)
+    tenant_agent = User(username="agent-cliente-download", full_name="Agent", role=UserRole.agent, is_active=True, organization=other_org)
+    past_due_agent = User(username="agent-atrasado", full_name="Agent", role=UserRole.agent, is_active=True, organization=past_due_org)
     suspended_admin = User(username="tenant-suspended-download-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization=suspended_org)
-    db_session.add_all([other_org, third_org, suspended_org, past_due_org, platform_admin, tenant_admin, suspended_admin])
+    db_session.add_all([other_org, third_org, suspended_org, past_due_org, platform_admin, tenant_admin, tenant_agent, past_due_agent, suspended_admin])
     db_session.commit()
 
     platform_options = list_agent_deployment_organizations(db=db_session, actor=platform_admin)
@@ -393,7 +395,10 @@ def test_deployment_organizations_are_scoped_for_download_commands(db_session: S
     assert "cliente-inativo-download" not in platform_slugs
     assert "cliente-suspenso-download" not in platform_slugs
     assert next(organization for organization in platform_options if organization.slug == "cliente-atrasado-download").billing_status == "past_due"
+    assert next(organization for organization in platform_options if organization.slug == "cliente-download").agent_username == "agent-cliente-download"
+    assert next(organization for organization in platform_options if organization.slug == "cliente-atrasado-download").agent_username == "agent-atrasado"
     assert [organization.slug for organization in tenant_options] == ["cliente-download"]
+    assert tenant_options[0].agent_username == "agent-cliente-download"
     assert suspended_tenant_options == []
 
 

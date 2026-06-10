@@ -34,6 +34,7 @@ type OrganizationOption = {
   slug: string;
   is_active: boolean;
   billing_status: "trial" | "active" | "past_due" | "suspended";
+  agent_username: string | null;
 };
 
 const UNSAFE_AGENT_PASSWORDS = new Set([
@@ -157,11 +158,17 @@ export default function DownloadsPage() {
       setOrganizations(orgs);
       const currentSlug = localStorage.getItem("organization_slug") || "default";
       setDeployOrg((current) => {
-        if (orgs.length === 0 || orgs.some((organization) => organization.slug === current)) return current;
+        if (orgs.length === 0) return current;
+        const currentOrganization = orgs.find((organization) => organization.slug === current);
+        if (currentOrganization) {
+          if (currentOrganization.agent_username) setDeployUser(currentOrganization.agent_username);
+          return current;
+        }
         const preferred =
           orgs.find((organization) => organization.slug === currentSlug && organization.is_active) ??
           orgs.find((organization) => organization.is_active) ??
           orgs[0];
+        if (preferred.agent_username) setDeployUser(preferred.agent_username);
         return preferred.slug;
       });
     } catch {
@@ -368,7 +375,14 @@ export default function DownloadsPage() {
                 <select
                   className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
                   value={deployOrg}
-                  onChange={(event) => setDeployOrg(event.target.value)}
+                  onChange={(event) => {
+                    const slug = event.target.value;
+                    setDeployOrg(slug);
+                    const organization = organizations.find((item) => item.slug === slug);
+                    if (organization?.agent_username) {
+                      setDeployUser(organization.agent_username);
+                    }
+                  }}
                 >
                   {organizations.map((organization) => (
                     <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
@@ -382,7 +396,11 @@ export default function DownloadsPage() {
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
               Usuario agent
-              <Input value={deployUser} onChange={(event) => setDeployUser(event.target.value)} />
+              <Input
+                value={deployUser}
+                onChange={(event) => setDeployUser(event.target.value)}
+                title={selectedOrganization?.agent_username ? `Usuario tecnico cadastrado: ${selectedOrganization.agent_username}` : undefined}
+              />
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
               <span className="flex items-center justify-between gap-2">

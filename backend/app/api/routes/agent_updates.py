@@ -793,6 +793,27 @@ def _new_queue_action(
     )
 
 
+def _deployment_organization_read(db: Session, organization: Organization) -> AgentDeploymentOrganizationRead:
+    agent_user = (
+        db.query(User)
+        .filter(
+            User.organization_id == organization.id,
+            User.role == UserRole.agent,
+            User.is_active.is_(True),
+        )
+        .order_by(User.id)
+        .first()
+    )
+    return AgentDeploymentOrganizationRead(
+        id=organization.id,
+        name=organization.name,
+        slug=organization.slug,
+        is_active=organization.is_active,
+        billing_status=organization.billing_status,
+        agent_username=agent_user.username if agent_user else None,
+    )
+
+
 @router.get("/version", response_model=AgentVersionRead)
 def agent_version(
     current_version: str | None = Query(default=None),
@@ -832,15 +853,16 @@ def list_agent_releases(_: User = Depends(require_roles(UserRole.admin, UserRole
 def list_agent_deployment_organizations(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
-) -> list[Organization]:
+) -> list[AgentDeploymentOrganizationRead]:
     if _can_manage_all_organizations(actor):
-        return (
+        organizations = (
             db.query(Organization)
             .filter(Organization.is_active.is_(True), Organization.billing_status != "suspended")
             .order_by(Organization.name)
             .all()
         )
-    return [actor.organization] if organization_allows_access(actor.organization) else []
+        return [_deployment_organization_read(db, organization) for organization in organizations]
+    return [_deployment_organization_read(db, actor.organization)] if organization_allows_access(actor.organization) else []
 
 
 @router.get("/releases/{version}/download")
