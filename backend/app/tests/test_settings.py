@@ -380,6 +380,60 @@ def test_saving_settings_with_safe_release_already_disabled_does_not_flush_pendi
     assert db_session.query(AuditLog).filter(AuditLog.action == "pending_jobs_auto_released").count() == 0
 
 
+def test_general_settings_auto_release_audit_uses_admin_actor(db_session: Session):
+    actor = User(username="followme-admin", full_name="FollowMe Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="followme-actor-user", full_name="FollowMe Actor User", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA FOLLOWME ACTOR", is_color=True)
+    db_session.add_all([actor, user, printer])
+    db_session.flush()
+    db_session.add_all(
+        [
+            Quota(
+                organization_id=1,
+                user_id=user.id,
+                year=2026,
+                month=6,
+                monthly_limit=100,
+                used_pages=0,
+                monthly_balance=50.0,
+                used_balance=0.0,
+            ),
+            PrintJob(
+                organization_id=1,
+                user_id=user.id,
+                printer_id=printer.id,
+                pages=2,
+                is_color=False,
+                cost=0.10,
+                status=JobStatus.pending_release,
+                submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    update_general_settings(
+        payload=GeneralSettings(
+            default_monthly_quota=500,
+            default_printer_cost_mono=0.05,
+            default_printer_cost_color=0.25,
+            auto_create_users=True,
+            blocking_enabled=True,
+            show_balance=True,
+            safe_release_enabled=False,
+            web_print_enabled=True,
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    auto_release_audit = db_session.query(AuditLog).filter(AuditLog.action == "pending_jobs_auto_released").one()
+    settings_audit = db_session.query(AuditLog).filter(AuditLog.action == "settings_updated").one()
+    assert auto_release_audit.actor_user_id == actor.id
+    assert settings_audit.actor_user_id == actor.id
+    assert auto_release_audit.log_metadata["jobs"] == 1
+
+
 def test_blocking_disabled_behavior(db_session: Session):
     # Create user, printer, and quota with 0 remaining pages
     user = User(username="poor_user", full_name="Poor User", role=UserRole.user)

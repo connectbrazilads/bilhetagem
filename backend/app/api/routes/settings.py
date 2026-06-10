@@ -50,7 +50,7 @@ def update_general_settings(
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> GeneralSettings:
     before = get_system_settings_dict(db, actor.organization_id)
-    updated = update_system_settings(db, payload.model_dump(), actor.organization_id)
+    updated = update_system_settings(db, payload.model_dump(), actor.organization_id, actor_user_id=actor.id)
     changes = _changed_values(before, updated)
     if changes:
         write_audit(

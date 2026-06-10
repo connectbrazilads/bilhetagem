@@ -76,7 +76,12 @@ def get_system_settings_dict(db: Session, organization_id: int | None = None) ->
     }
 
 
-def update_system_settings(db: Session, updates: dict[str, Any], organization_id: int | None = None) -> dict[str, Any]:
+def update_system_settings(
+    db: Session,
+    updates: dict[str, Any],
+    organization_id: int | None = None,
+    actor_user_id: int | None = None,
+) -> dict[str, Any]:
     organization_id = _resolve_organization_id(db, organization_id)
     before = get_system_settings_dict(db, organization_id)
     disabling_safe_release = updates.get("safe_release_enabled") is False and before["safe_release_enabled"] is True
@@ -94,7 +99,7 @@ def update_system_settings(db: Session, updates: dict[str, Any], organization_id
         else:
             setting.value = str_val
     if disabling_safe_release:
-        release_pending_jobs(db, organization_id)
+        release_pending_jobs(db, organization_id, actor_user_id=actor_user_id)
     db.commit()
     return get_system_settings_dict(db, organization_id)
 
@@ -124,7 +129,7 @@ def update_monthly_report_email_settings(db: Session, updates: dict[str, Any], o
     return get_monthly_report_email_settings(db, organization_id)
 
 
-def release_pending_jobs(db: Session, organization_id: int) -> None:
+def release_pending_jobs(db: Session, organization_id: int, actor_user_id: int | None = None) -> None:
     pending_jobs = (
         db.query(PrintJob)
         .filter(PrintJob.organization_id == organization_id, PrintJob.status == JobStatus.pending_release)
@@ -147,6 +152,7 @@ def release_pending_jobs(db: Session, organization_id: int) -> None:
             db,
             action="pending_jobs_auto_released",
             entity="print_jobs",
+            actor_user_id=actor_user_id,
             organization_id=organization_id,
             metadata={
                 "jobs": released_jobs,
