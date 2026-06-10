@@ -105,6 +105,9 @@ export default function AuditPage() {
       total: logs.length,
       actors: actors.size,
       entities: new Set(logs.map((log) => log.entity)).size,
+      critical: logs.filter((log) => isCriticalAuditAction(log.action)).length,
+      queueActions: logs.filter((log) => log.action.startsWith("agent_queue_action_")).length,
+      exports: logs.filter((log) => log.action.endsWith("_exported")).length,
     };
   }, [logs]);
 
@@ -127,10 +130,13 @@ export default function AuditPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-3">
+      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <Summary label="Eventos" value={summary.total} />
         <Summary label="Atores" value={summary.actors} />
         <Summary label="Entidades" value={summary.entities} />
+        <Summary label="Criticos" value={summary.critical} tone={summary.critical > 0 ? "warn" : "neutral"} />
+        <Summary label="Acoes remotas" value={summary.queueActions} tone={summary.queueActions > 0 ? "info" : "neutral"} />
+        <Summary label="Exportacoes" value={summary.exports} tone={summary.exports > 0 ? "info" : "neutral"} />
       </div>
 
       <Surface className="mb-4 p-4">
@@ -214,12 +220,18 @@ export default function AuditPage() {
   );
 }
 
-function Summary({ label, value }: { label: string; value: number }) {
+function Summary({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "neutral" | "warn" | "info" }) {
+  const toneClass =
+    tone === "warn"
+      ? "bg-amber-100 text-amber-700"
+      : tone === "info"
+      ? "bg-blue-100 text-blue-700"
+      : "bg-primary/10 text-primary";
   return (
     <Surface className="p-5">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-muted-foreground">{label}</span>
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <div className={`flex h-9 w-9 items-center justify-center rounded-md ${toneClass}`}>
           <History className="h-4 w-4" />
         </div>
       </div>
@@ -231,7 +243,16 @@ function Summary({ label, value }: { label: string; value: number }) {
 function formatMetadata(metadata: Record<string, unknown>) {
   const entries = Object.entries(metadata);
   if (!entries.length) return "-";
-  return entries.map(([key, value]) => `${key}: ${formatMetadataValue(value)}`).join(" | ");
+  const parts: string[] = [];
+  if (isPlainRecord(metadata.changes)) {
+    parts.push(formatChanges(metadata.changes));
+  }
+  parts.push(
+    ...entries
+      .filter(([key]) => key !== "changes")
+      .map(([key, value]) => `${humanizeKey(key)}: ${formatMetadataValue(value)}`)
+  );
+  return parts.filter(Boolean).join(" | ");
 }
 
 function formatMetadataValue(value: unknown) {
@@ -240,6 +261,38 @@ function formatMetadataValue(value: unknown) {
     return JSON.stringify(value);
   }
   return String(value);
+}
+
+function formatChanges(changes: Record<string, unknown>) {
+  return Object.entries(changes)
+    .map(([key, value]) => {
+      if (isPlainRecord(value) && ("before" in value || "after" in value)) {
+        return `${humanizeKey(key)}: ${formatMetadataValue(value.before)} -> ${formatMetadataValue(value.after)}`;
+      }
+      return `${humanizeKey(key)}: ${formatMetadataValue(value)}`;
+    })
+    .join(" | ");
+}
+
+function humanizeKey(value: string) {
+  return value.replaceAll("_", " ");
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCriticalAuditAction(action: string) {
+  return (
+    action.startsWith("organization_") ||
+    action.startsWith("settings_") ||
+    action.startsWith("monthly_report_email_settings_") ||
+    action.startsWith("ldap_") ||
+    action.startsWith("policy_") ||
+    action.startsWith("quota_") ||
+    action.startsWith("user_") ||
+    action.startsWith("printer_")
+  );
 }
 
 function readError(err: { message?: string }) {
