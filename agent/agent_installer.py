@@ -85,6 +85,12 @@ def pick_arg_or_config(arg_value, existing: dict, template: dict, key: str, defa
     return pick_config_value(existing, template, key, default)
 
 
+def pick_arg_or_existing(arg_value, existing: dict, key: str, default="", *, allow_empty_arg: bool = False):
+    if arg_value is not None and (allow_empty_arg or str(arg_value).strip()):
+        return arg_value
+    return existing.get(key, default)
+
+
 def as_bool(value) -> bool:
     if isinstance(value, bool):
         return value
@@ -93,10 +99,10 @@ def as_bool(value) -> bool:
 
 def build_config(existing: dict, template: dict, args: argparse.Namespace) -> dict:
     if args.silent:
-        api_url = pick_arg_or_config(args.api_url, existing, template, "PRINTBILLING_API_URL", "")
-        username = pick_arg_or_config(args.username, existing, template, "PRINTBILLING_AGENT_USER", "agent")
-        password = pick_arg_or_config(args.password, existing, template, "PRINTBILLING_AGENT_PASSWORD", "")
-        organization_slug = pick_arg_or_config(args.organization, existing, template, "PRINTBILLING_ORGANIZATION_SLUG", "default")
+        api_url = pick_arg_or_existing(args.api_url, existing, "PRINTBILLING_API_URL", "")
+        username = pick_arg_or_existing(args.username, existing, "PRINTBILLING_AGENT_USER", "")
+        password = pick_arg_or_existing(args.password, existing, "PRINTBILLING_AGENT_PASSWORD", "")
+        organization_slug = pick_arg_or_existing(args.organization, existing, "PRINTBILLING_ORGANIZATION_SLUG", "")
         default_username = pick_arg_or_config(
             args.default_username,
             existing,
@@ -105,8 +111,8 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             "",
             allow_empty_arg=True,
         )
-        if not api_url or not username or not password:
-            raise RuntimeError("Modo silencioso requer --api-url, --username e --password.")
+        if not api_url or not username or not password or not organization_slug:
+            raise RuntimeError("Modo silencioso requer --api-url, --username, --password e --organization em instalacoes novas.")
     else:
         print()
         print("Configuracao do Agent")

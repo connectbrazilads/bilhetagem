@@ -7,7 +7,7 @@ O agente deve ser instalado no servidor de impressao Windows ou em uma estacao q
 - `PRINTBILLING_API_URL`: URL da API, por exemplo `https://billing.empresa.local`
 - `PRINTBILLING_AGENT_USER`: usuario tecnico cadastrado na API com perfil `agent`
 - `PRINTBILLING_AGENT_PASSWORD`: senha do usuario tecnico
-- `PRINTBILLING_ORGANIZATION_SLUG`: slug da empresa no SaaS, por padrao `default`
+- `PRINTBILLING_ORGANIZATION_SLUG`: slug da empresa no SaaS; informe explicitamente em instalacoes novas
 - `PRINTBILLING_CANCEL_BLOCKED`: `true` para cancelar trabalhos bloqueados
 - `PRINTBILLING_POLL_INTERVAL`: intervalo de varredura em segundos
 - `PRINTBILLING_AUTO_UPDATE`: `true` para permitir auto-update do agent
@@ -52,6 +52,7 @@ Para remover:
 .\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "SENHA_FORTE_DO_AGENT" --organization default --default-username ""
 ```
 
+Na instalacao silenciosa nova, informe `--api-url`, `--username`, `--password` e `--organization`.
 Na reinstalacao silenciosa, parametros omitidos reutilizam o `config.json` existente. Para remover um usuario padrao antigo do PC, envie explicitamente `--default-username ""`.
 
 ## Auto-update
