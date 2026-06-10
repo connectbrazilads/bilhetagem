@@ -27,3 +27,8 @@ def db_session() -> Session:
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def isolated_web_print_upload_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.api.routes.jobs.settings.web_print_upload_dir", str(tmp_path / "uploads"))

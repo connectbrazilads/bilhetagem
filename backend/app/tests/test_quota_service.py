@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import HTTPException
@@ -503,6 +504,22 @@ def test_web_print_sanitizes_uploaded_filename(db_session):
 
     job = db_session.get(PrintJob, decision.job_id)
     assert job.document_name == "Contrato Final.pdf"
+
+
+def test_web_print_saves_pdf_in_configured_upload_dir(db_session, tmp_path, monkeypatch):
+    upload_dir = tmp_path / "custom-web-print"
+    monkeypatch.setattr("app.api.routes.jobs.settings.web_print_upload_dir", str(upload_dir))
+    user = User(username="webprint-dir-user", full_name="WebPrint Dir", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_WEBPRINT_DIR", is_color=False)
+    db_session.add_all([user, printer])
+    db_session.commit()
+
+    upload = SimpleNamespace(filename="Arquivo.pdf", file=BytesIO(b"%PDF-1.4\n1 0 obj\n<< /Type /Page >>\nendobj"))
+
+    decision = web_print_endpoint(file=upload, printer_id=printer.id, is_color=False, db=db_session, current_user=user)
+
+    assert (upload_dir / f"webprint_{decision.job_id}.pdf").exists()
+    assert not (Path("uploads") / f"webprint_{decision.job_id}.pdf").exists()
 
 
 def test_regular_user_cannot_release_another_users_pending_job(db_session):

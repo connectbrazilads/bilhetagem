@@ -343,6 +343,10 @@ def _web_print_size_error() -> HTTPException:
     return HTTPException(status_code=413, detail=f"PDF excede o limite de {settings.web_print_max_upload_mb} MB")
 
 
+def _web_print_upload_dir() -> Path:
+    return Path(settings.web_print_upload_dir)
+
+
 def _read_web_print_content(file: UploadFile) -> bytes:
     max_bytes = _web_print_max_upload_bytes()
     total = 0
@@ -386,7 +390,7 @@ def web_print_endpoint(
     page_count = get_pdf_page_count(file_content)
     
     # 3. Create temp file inside uploads folder to preserve data
-    uploads_dir = Path("uploads")
+    uploads_dir = _web_print_upload_dir()
     uploads_dir.mkdir(parents=True, exist_ok=True)
     
     # Register the print job using the service
@@ -484,7 +488,7 @@ def download_web_print_file(
     if job.status not in (JobStatus.released, JobStatus.authorized):
         raise HTTPException(status_code=400, detail="Web Print ainda nao foi liberado para download")
 
-    file_path = Path("uploads") / f"webprint_{job.id}.pdf"
+    file_path = _web_print_upload_dir() / f"webprint_{job.id}.pdf"
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Arquivo correspondente não encontrado")
         

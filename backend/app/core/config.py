@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     auto_create_printers: bool = True
     safe_release_enabled: bool = True
     web_print_max_upload_mb: int = Field(default=50, ge=1, le=512)
+    web_print_upload_dir: str = "uploads"
     snmp_community: str = "public"
     snmp_timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
     snmp_retries: int = Field(default=1, ge=0, le=5)
