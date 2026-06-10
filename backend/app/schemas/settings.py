@@ -35,3 +35,7 @@ class MonthlyReportEmailSettings(BaseModel):
 
 class OperationalSettings(BaseModel):
     safe_release_enabled: bool = Field(default=True)
+
+
+class AgentRuntimeSettings(BaseModel):
+    safe_release_enabled: bool = Field(default=True)

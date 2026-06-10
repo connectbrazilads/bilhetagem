@@ -14,6 +14,7 @@ from app.services.settings_service import update_system_settings
 from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
 from app.api.routes.settings import (
+    get_agent_runtime_settings,
     get_general_settings,
     get_ldap_settings_endpoint,
     get_operational_settings,
@@ -225,6 +226,27 @@ def test_manager_can_read_operational_settings(db_session: Session):
     settings = get_operational_settings(db=db_session, actor=manager)
 
     assert settings.safe_release_enabled is False
+
+
+def test_agent_runtime_settings_returns_minimal_capture_flags(db_session: Session):
+    agent = User(username="agent-runtime-settings", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    db_session.add(agent)
+    db_session.commit()
+    update_system_settings(
+        db_session,
+        {
+            "default_monthly_quota": 200,
+            "default_printer_cost_mono": 0.09,
+            "blocking_enabled": False,
+            "safe_release_enabled": False,
+        },
+        agent.organization_id,
+    )
+
+    settings = get_agent_runtime_settings(db=db_session, actor=agent)
+
+    assert settings.safe_release_enabled is False
+    assert settings.model_dump() == {"safe_release_enabled": False}
 
 
 def test_auto_created_printer_uses_organization_default_costs(db_session: Session):

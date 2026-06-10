@@ -171,20 +171,26 @@ class BillingApiClient:
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
     def get_settings(self) -> dict:
+        response = self._get_settings_response("/settings/agent")
+        if response.status_code == 404:
+            response = self._get_settings_response("/settings")
+        response.raise_for_status()
+        return response.json()
+
+    def _get_settings_response(self, path: str):
         response = self.session.get(
-            f"{self.config.api_base_url}/settings",
+            f"{self.config.api_base_url}{path}",
             headers={**self._headers()},
             timeout=10,
         )
         if response.status_code == 401:
             self._token = None
             response = self.session.get(
-                f"{self.config.api_base_url}/settings",
+                f"{self.config.api_base_url}{path}",
                 headers={**self._headers()},
                 timeout=10,
             )
-        response.raise_for_status()
-        return response.json()
+        return response
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
     def update_printer_status(self, printer_id: int, status: dict, agent_uid: str | None = None) -> dict:
