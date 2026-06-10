@@ -884,8 +884,28 @@ def poll_queue_actions(
         .all()
     )
     for action in actions:
+        previous_status = action.status.value if hasattr(action.status, "value") else str(action.status)
+        previous_dispatched_at = action.dispatched_at
+        is_redispatch = action.status == AgentQueueActionStatus.running
         action.status = AgentQueueActionStatus.running
         action.dispatched_at = now
+        write_audit(
+            db,
+            action="agent_queue_action_dispatched",
+            entity="agent_queue_actions",
+            entity_id=action.id,
+            actor_user_id=actor.id,
+            metadata={
+                "agent_id": agent.id,
+                "agent_uid": agent.agent_uid,
+                "action_type": action.action_type.value,
+                "queue_name": action.queue_name,
+                "redispatch": is_redispatch,
+                "previous_status": previous_status,
+                "previous_dispatched_at": previous_dispatched_at.isoformat() if previous_dispatched_at else None,
+            },
+            organization_id=actor.organization_id,
+        )
     db.commit()
     for action in actions:
         db.refresh(action)

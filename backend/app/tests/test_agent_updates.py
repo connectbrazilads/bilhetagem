@@ -565,6 +565,16 @@ def test_poll_queue_actions_redispatches_stale_running_actions(db_session: Sessi
     assert redispatched[0].dispatched_at is not None
     assert old_dispatched_at is not None
     assert redispatched[0].dispatched_at > old_dispatched_at
+    audits = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "agent_queue_action_dispatched", AuditLog.entity_id == action.id)
+        .order_by(AuditLog.id)
+        .all()
+    )
+    assert [audit.log_metadata["redispatch"] for audit in audits] == [False, True]
+    assert audits[0].log_metadata["previous_status"] == "pending"
+    assert audits[1].log_metadata["previous_status"] == "running"
+    assert audits[1].log_metadata["previous_dispatched_at"] is not None
 
 
 def test_remote_queue_action_lifecycle(db_session: Session):
