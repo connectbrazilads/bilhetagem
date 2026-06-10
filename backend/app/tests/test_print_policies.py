@@ -2,7 +2,7 @@ from datetime import datetime, time, timezone
 
 from sqlalchemy.orm import Session
 
-from app.api.routes.policies import reorder_policies, update_policy
+from app.api.routes.policies import create_policy, delete_policy, reorder_policies, update_policy
 from app.models.audit_log import AuditLog
 from app.models.department import Department
 from app.models.print_agent import PrintAgent
@@ -12,7 +12,7 @@ from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate
-from app.schemas.policy import PrintPolicyReorder, PrintPolicyUpdate
+from app.schemas.policy import PrintPolicyCreate, PrintPolicyReorder, PrintPolicyUpdate
 from app.services.policy_service import simulate_print_policy
 from app.services.print_job_service import register_print_job
 
@@ -416,6 +416,41 @@ def test_reorder_policies_updates_priorities_and_audits(db_session: Session):
     audit = db_session.query(AuditLog).filter(AuditLog.action == "policy_reordered").one()
     assert audit.log_metadata["old_order"][0]["id"] == policies[0].id
     assert audit.log_metadata["new_order"][0] == {"id": policies[2].id, "priority": 10}
+
+
+def test_create_and_delete_policy_audit_snapshots(db_session: Session):
+    actor = _admin(db_session)
+    department = Department(organization_id=1, name="Financeiro")
+    db_session.add(department)
+    db_session.commit()
+
+    created = create_policy(
+        PrintPolicyCreate(
+            name="Bloquear colorido financeiro",
+            description="Regra comercial",
+            priority=15,
+            is_active=True,
+            rule_type=PolicyRuleType.color,
+            action=PolicyAction.block,
+            department_id=department.id,
+            message="Colorido bloqueado",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    create_audit = db_session.query(AuditLog).filter(AuditLog.action == "policy_created", AuditLog.entity_id == created.id).one()
+    assert create_audit.log_metadata["snapshot"]["name"] == "Bloquear colorido financeiro"
+    assert create_audit.log_metadata["snapshot"]["department_id"] == department.id
+    assert create_audit.log_metadata["snapshot"]["rule_type"] == "color"
+    assert create_audit.log_metadata["snapshot"]["action"] == "block"
+    assert create_audit.log_metadata["snapshot"]["message"] == "Colorido bloqueado"
+
+    result = delete_policy(created.id, db=db_session, actor=actor)
+
+    assert result == {"status": "deleted"}
+    delete_audit = db_session.query(AuditLog).filter(AuditLog.action == "policy_deleted", AuditLog.entity_id == created.id).one()
+    assert delete_audit.log_metadata["snapshot"] == create_audit.log_metadata["snapshot"]
 
 
 def test_update_policy_active_status_audits_changes(db_session: Session):

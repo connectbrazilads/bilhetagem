@@ -124,7 +124,14 @@ def create_policy(
     db.add(policy)
     try:
         db.flush()
-        write_audit(db, action="policy_created", entity="print_policies", entity_id=policy.id, actor_user_id=actor.id)
+        write_audit(
+            db,
+            action="policy_created",
+            entity="print_policies",
+            entity_id=policy.id,
+            actor_user_id=actor.id,
+            metadata={"snapshot": _policy_snapshot(policy)},
+        )
         db.commit()
         db.refresh(policy)
         return policy
@@ -250,7 +257,14 @@ def delete_policy(
     policy = db.query(PrintPolicy).filter(PrintPolicy.organization_id == actor.organization_id, PrintPolicy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="Politica nao encontrada")
-    write_audit(db, action="policy_deleted", entity="print_policies", entity_id=policy.id, actor_user_id=actor.id)
+    write_audit(
+        db,
+        action="policy_deleted",
+        entity="print_policies",
+        entity_id=policy.id,
+        actor_user_id=actor.id,
+        metadata={"snapshot": _policy_snapshot(policy)},
+    )
     db.delete(policy)
     db.commit()
     return {"status": "deleted"}
