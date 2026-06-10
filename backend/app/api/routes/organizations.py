@@ -2,13 +2,14 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.organization import Organization
 from app.models.print_agent import PrintAgent
-from app.models.print_job import PrintJob
+from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationUpdate
@@ -33,8 +34,21 @@ def _agent_is_online(agent: PrintAgent, now: datetime) -> bool:
 
 def _organization_read(db: Session, organization: Organization) -> OrganizationRead:
     now = datetime.now(timezone.utc)
+    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization.id).all()
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
+    pages_month, cost_month = (
+        db.query(
+            func.coalesce(func.sum(PrintJob.pages), 0),
+            func.coalesce(func.sum(PrintJob.cost), 0.0),
+        )
+        .filter(
+            PrintJob.organization_id == organization.id,
+            PrintJob.submitted_at >= month_start,
+            PrintJob.status.in_([JobStatus.authorized, JobStatus.released]),
+        )
+        .one()
+    )
     return OrganizationRead(
         id=organization.id,
         name=organization.name,
@@ -47,6 +61,8 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         online_agents_count=online_agents,
         offline_agents_count=len(agents) - online_agents,
         jobs_count=db.query(PrintJob).filter(PrintJob.organization_id == organization.id).count(),
+        pages_month=int(pages_month or 0),
+        cost_month=float(cost_month or 0.0),
     )
 
 

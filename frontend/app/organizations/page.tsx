@@ -19,6 +19,8 @@ type OrganizationRow = {
   online_agents_count: number;
   offline_agents_count: number;
   jobs_count: number;
+  pages_month: number;
+  cost_month: number;
 };
 
 const emptyForm = { name: "", slug: "", is_active: true };
@@ -46,6 +48,8 @@ export default function OrganizationsPage() {
       inactive: organizations.filter((organization) => !organization.is_active).length,
       jobs: organizations.reduce((total, organization) => total + organization.jobs_count, 0),
       onlineAgents: organizations.reduce((total, organization) => total + organization.online_agents_count, 0),
+      pagesMonth: organizations.reduce((total, organization) => total + organization.pages_month, 0),
+      costMonth: organizations.reduce((total, organization) => total + organization.cost_month, 0),
     };
   }, [organizations]);
 
@@ -91,12 +95,13 @@ export default function OrganizationsPage() {
         <p className="mt-1 text-sm text-muted-foreground">Gerencie clientes e o isolamento de dados do ambiente SaaS.</p>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-5">
+      <div className="mb-4 grid gap-4 md:grid-cols-6">
         <Summary label="Empresas" value={summary.total} icon={Building2} />
         <Summary label="Ativas" value={summary.active} icon={Power} />
         <Summary label="Inativas" value={summary.inactive} icon={Power} />
         <Summary label="Agents online" value={summary.onlineAgents} icon={Power} />
-        <Summary label="Jobs registrados" value={summary.jobs} icon={Power} />
+        <Summary label="Páginas mês" value={summary.pagesMonth} icon={Power} />
+        <Summary label="Custo mês" value={money(summary.costMonth)} icon={Power} />
       </div>
 
       <Surface as="form" className="mb-4 grid gap-3 p-4 lg:grid-cols-[1fr_220px_auto]" onSubmit={submit}>
@@ -171,6 +176,10 @@ export default function OrganizationsPage() {
                         <MetricPill label="Online" value={organization.online_agents_count} tone="success" />
                         <MetricPill label="Offline" value={organization.offline_agents_count} tone={organization.offline_agents_count > 0 ? "danger" : "muted"} />
                         <MetricPill label="Jobs" value={organization.jobs_count} />
+                        <MetricPill label="Pág. mês" value={organization.pages_month} />
+                        <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                          {money(organization.cost_month)} mês
+                        </span>
                       </div>
                     </td>
                     <td className="p-4 text-muted-foreground">{new Date(organization.created_at).toLocaleDateString("pt-BR")}</td>
@@ -195,6 +204,10 @@ export default function OrganizationsPage() {
   );
 }
 
+function money(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 function MetricPill({ label, value, tone = "muted" }: { label: string; value: number; tone?: "muted" | "success" | "danger" }) {
   const toneClass =
     tone === "success"
@@ -209,7 +222,7 @@ function MetricPill({ label, value, tone = "muted" }: { label: string; value: nu
   );
 }
 
-function Summary({ label, value, icon: Icon }: { label: string; value: number; icon: typeof Building2 }) {
+function Summary({ label, value, icon: Icon }: { label: string; value: number | string; icon: typeof Building2 }) {
   return (
     <Surface className="p-5">
       <div className="flex items-center justify-between">
@@ -218,7 +231,7 @@ function Summary({ label, value, icon: Icon }: { label: string; value: number; i
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-3 text-3xl font-semibold">{value.toLocaleString("pt-BR")}</div>
+      <div className="mt-3 text-3xl font-semibold">{typeof value === "number" ? value.toLocaleString("pt-BR") : value}</div>
     </Surface>
   );
 }

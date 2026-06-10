@@ -442,6 +442,17 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
                 submitted_at=datetime.now(timezone.utc),
             ),
             PrintJob(
+                organization_id=1,
+                user_id=default_user.id,
+                printer_id=default_printer.id,
+                agent_id=default_agent.id,
+                pages=99,
+                is_color=False,
+                cost=9.90,
+                status=JobStatus.blocked,
+                submitted_at=datetime.now(timezone.utc),
+            ),
+            PrintJob(
                 organization_id=other_org.id,
                 user_id=other_user.id,
                 printer_id=other_printer.id,
@@ -464,13 +475,17 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
     assert default_row.printers_count >= 1
     assert default_row.agents_count >= 1
     assert default_row.online_agents_count >= 1
-    assert default_row.jobs_count == 1
+    assert default_row.jobs_count == 2
+    assert default_row.pages_month == 1
+    assert default_row.cost_month == 0.05
     assert other_row.users_count == 1
     assert other_row.printers_count == 1
     assert other_row.agents_count == 1
     assert other_row.online_agents_count == 0
     assert other_row.offline_agents_count == 1
     assert other_row.jobs_count == 1
+    assert other_row.pages_month == 2
+    assert other_row.cost_month == 0.10
 
 
 def test_department_admin_crud_is_scoped_and_protects_in_use_departments(db_session: Session):
