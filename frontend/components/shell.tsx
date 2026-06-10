@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { BarChart3, Building2, Download, Gauge, History, LogOut, MonitorCog, Printer, Settings, ShieldCheck, Users, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui";
+import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -22,6 +23,15 @@ const navItems = [
   { href: "/settings", label: "Configuracoes", icon: Settings }
 ];
 
+type AuthContext = {
+  username: string;
+  full_name: string;
+  role: string;
+  organization_id: number;
+  organization_slug: string;
+  organization_name: string;
+};
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -32,6 +42,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setOrganizationSlug(localStorage.getItem("organization_slug") || "");
     setOrganizationName(localStorage.getItem("organization_name") || "");
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    let active = true;
+    apiFetch<AuthContext>("/auth/me", token)
+      .then((context) => {
+        if (!active) return;
+        setOrganizationSlug(context.organization_slug);
+        setOrganizationName(context.organization_name);
+        localStorage.setItem("organization_slug", context.organization_slug);
+        localStorage.setItem("organization_name", context.organization_name);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
 
   function logout() {

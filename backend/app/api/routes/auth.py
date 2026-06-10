@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.deps import get_current_user
 from app.core.security import create_access_token, verify_password
 from app.models.organization import Organization
 from app.models.user import User, UserRole
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import AuthContextResponse, LoginRequest, TokenResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -39,4 +40,16 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         organization_id=user.organization_id,
         organization_slug=user.organization.slug if user.organization else None,
         organization_name=user.organization.name if user.organization else None,
+    )
+
+
+@router.get("/me", response_model=AuthContextResponse)
+def current_auth_context(current_user: User = Depends(get_current_user)) -> AuthContextResponse:
+    return AuthContextResponse(
+        username=current_user.username,
+        full_name=current_user.full_name,
+        role=current_user.role.value,
+        organization_id=current_user.organization_id,
+        organization_slug=current_user.organization.slug,
+        organization_name=current_user.organization.name,
     )

@@ -15,7 +15,7 @@ from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
-from app.api.routes.auth import login
+from app.api.routes.auth import current_auth_context, login
 from app.api.routes.audit_logs import export_audit_logs, list_audit_log_facets, list_audit_logs
 from app.api.routes.organizations import create_organization, list_organizations, update_organization
 from app.api.routes.reports import export_report
@@ -516,6 +516,22 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
             db=db_session,
         )
     assert exc.value.status_code == 400
+
+
+def test_auth_context_returns_current_organization(db_session: Session):
+    organization = Organization(name="Cliente Contexto", slug="cliente-contexto", is_active=True)
+    user = User(username="context-admin", full_name="Context Admin", role=UserRole.admin, is_active=True, organization=organization)
+    db_session.add_all([organization, user])
+    db_session.commit()
+
+    context = current_auth_context(current_user=user)
+
+    assert context.username == "context-admin"
+    assert context.full_name == "Context Admin"
+    assert context.role == "admin"
+    assert context.organization_id == organization.id
+    assert context.organization_slug == "cliente-contexto"
+    assert context.organization_name == "Cliente Contexto"
 
 
 def test_agent_login_requires_explicit_organization_slug(db_session: Session):
