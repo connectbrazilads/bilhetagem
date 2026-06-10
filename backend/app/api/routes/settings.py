@@ -5,6 +5,7 @@ from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.user import User, UserRole
 from app.schemas.settings import AgentRuntimeSettings, LDAPSettings, LDAPSettingsRead, GeneralSettings, MonthlyReportEmailSettings, OperationalSettings
+from app.services.email_service import validate_recipients
 from app.services.ldap_service import test_ldap_connection, sync_ldap_users
 from app.services.settings_service import (
     get_ldap_settings,
@@ -89,6 +90,10 @@ def update_monthly_report_email_settings_endpoint(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> MonthlyReportEmailSettings:
+    try:
+        validate_recipients(payload.recipients)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     before = get_monthly_report_email_settings(db, actor.organization_id)
     updated = update_monthly_report_email_settings(db, payload.model_dump(), actor.organization_id)
     changes = _changed_values(before, updated)

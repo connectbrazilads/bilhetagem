@@ -684,6 +684,24 @@ def test_send_monthly_closing_email_with_attachments(db_session: Session, monkey
     assert [part.get_filename() for part in sent_messages[0].iter_attachments()] == result["attachments"]
 
 
+def test_send_monthly_closing_email_rejects_invalid_recipients_before_smtp(db_session: Session, monkeypatch):
+    _seed_job_data(db_session)
+    closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
+    smtp_calls = []
+
+    class DummySMTP:
+        def __init__(self, *args, **kwargs):
+            smtp_calls.append((args, kwargs))
+
+    monkeypatch.setattr("app.services.email_service.settings.smtp_host", "smtp.example.com")
+    monkeypatch.setattr("app.services.email_service.smtplib.SMTP", DummySMTP)
+
+    with pytest.raises(ValueError, match="Destinatario invalido"):
+        send_monthly_closing_email(db_session, closing, recipients="financeiro@example.com,sem-email")
+
+    assert smtp_calls == []
+
+
 def test_due_monthly_report_email_sends_previous_month_once(db_session: Session, monkeypatch):
     _seed_job_data(db_session)
     sent_messages = []

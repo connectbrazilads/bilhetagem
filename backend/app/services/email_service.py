@@ -1,4 +1,5 @@
 import smtplib
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from email.message import EmailMessage
@@ -16,6 +17,8 @@ from app.services.report_export_service import (
 )
 from app.services.settings_service import get_monthly_report_email_settings, update_system_settings
 
+EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
+
 
 @dataclass(frozen=True)
 class EmailAttachment:
@@ -30,6 +33,14 @@ def parse_recipients(raw: str | None) -> list[str]:
         return []
     normalized = raw.replace(";", ",").replace("\n", ",")
     return [item.strip() for item in normalized.split(",") if item.strip()]
+
+
+def validate_recipients(raw: str | None) -> list[str]:
+    recipients = parse_recipients(raw)
+    invalid = [recipient for recipient in recipients if not EMAIL_RE.fullmatch(recipient)]
+    if invalid:
+        raise ValueError(f"Destinatario invalido: {', '.join(invalid[:3])}")
+    return recipients
 
 
 def build_monthly_closing_attachments(closing: MonthlyClosing, include_pdf: bool, include_xlsx: bool) -> list[EmailAttachment]:
@@ -91,7 +102,7 @@ def send_monthly_closing_email(
     include_xlsx: bool | None = None,
 ) -> dict:
     email_settings = get_monthly_report_email_settings(db, closing.organization_id)
-    resolved_recipients = parse_recipients(recipients if recipients is not None else email_settings["recipients"])
+    resolved_recipients = validate_recipients(recipients if recipients is not None else email_settings["recipients"])
     resolved_pdf = email_settings["include_pdf"] if include_pdf is None else include_pdf
     resolved_xlsx = email_settings["include_xlsx"] if include_xlsx is None else include_xlsx
     attachments = build_monthly_closing_attachments(closing, resolved_pdf, resolved_xlsx)
@@ -128,7 +139,7 @@ def send_due_monthly_report_email(db: Session, organization_id: int, now: dateti
     email_settings = get_monthly_report_email_settings(db, organization_id)
     if not email_settings["enabled"]:
         return {"sent": False, "reason": "Envio mensal desativado"}
-    if not parse_recipients(email_settings["recipients"]):
+    if not validate_recipients(email_settings["recipients"]):
         return {"sent": False, "reason": "Nenhum destinatario configurado"}
 
     current_date = (now or datetime.now(timezone.utc)).date()
