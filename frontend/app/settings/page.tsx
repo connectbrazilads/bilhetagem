@@ -108,6 +108,16 @@ export default function SettingsPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (webPrintEnabled) return;
+    setFileToPrint(null);
+    setIsColorPrint(false);
+    setWebPrintStatus(null);
+    setWebPrintLoading(false);
+    const fileInput = document.getElementById("settings-web-print-file") as HTMLInputElement | null;
+    if (fileInput) fileInput.value = "";
+  }, [webPrintEnabled]);
+
   const saveGeneralSettings = async () => {
     setLoading(true);
     setStatusMsg(null);
@@ -303,7 +313,6 @@ export default function SettingsPage() {
             <ToggleRow id="blockingEnabled" checked={blockingEnabled} onChange={setBlockingEnabled} label="Habilitar bloqueio por cota ou saldo insuficiente" />
             <ToggleRow id="showBalance" checked={showBalance} onChange={setShowBalance} label="Exibir saldo mensal nas telas" />
             <ToggleRow id="safeRelease" checked={safeReleaseEnabled} onChange={setSafeReleaseEnabled} label="Habilitar liberacao segura Follow-Me" />
-            <ToggleRow id="webPrintEnabled" checked={webPrintEnabled} onChange={setWebPrintEnabled} label="Habilitar modulo Web Print" />
           </div>
         </Surface>
 
@@ -396,7 +405,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <h2 className="text-lg font-semibold">Modulo Web Print</h2>
-              <p className="text-xs text-muted-foreground">Envio manual de PDF pelo navegador, para uso eventual.</p>
+              <p className="text-xs text-muted-foreground">Envio eventual de PDF pelo navegador, separado da captura normal do agent.</p>
             </div>
           </div>
           <ToggleRow id="webPrintEnabledInline" checked={webPrintEnabled} onChange={setWebPrintEnabled} label="Ativo" />

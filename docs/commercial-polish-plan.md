@@ -55,6 +55,7 @@ Entregaveis:
 - Alterar JWT para carregar `organization_id`.
 - Filtrar todas as consultas por empresa.
 - Separar configuracoes por empresa: bloqueio, Follow-Me, Web Print, LDAP, custos padrao e criacao automatica.
+- Centralizar Web Print como modulo opcional em Configuracoes, fora do dashboard e sem controle duplicado nas regras gerais.
 - Criar tela administrativa de empresas.
 - Exibir indicadores operacionais por empresa: usuarios, impressoras, agents online/offline, jobs, paginas e custo mensal faturavel.
 - Auditar alteracoes de empresa com antes/depois, especialmente ativacao e desativacao.
