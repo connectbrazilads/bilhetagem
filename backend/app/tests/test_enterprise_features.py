@@ -25,8 +25,8 @@ from app.api.routes.jobs import list_jobs
 from app.api.routes.departments import create_department, delete_department, list_departments, update_department
 from app.api.routes.printers import list_printers
 from app.api.routes.users import create_user_endpoint, delete_user_endpoint, list_users, update_user_endpoint
-from app.core.security import hash_password
-from app.core.deps import require_roles
+from app.core.security import create_access_token, hash_password
+from app.core.deps import get_current_user, require_roles
 from app.schemas.department import DepartmentCreate, DepartmentUpdate
 from app.schemas.auth import LoginRequest
 from app.schemas.user import UserCreate, UserUpdate
@@ -84,6 +84,25 @@ def test_agent_role_can_use_agent_endpoints_but_not_admin_dependencies():
     with pytest.raises(HTTPException) as human_exc:
         require_roles(UserRole.admin, UserRole.manager, UserRole.user)(agent_user)
     assert human_exc.value.status_code == 403
+
+
+def test_authenticated_routes_reject_tokens_without_organization_context(db_session: Session):
+    user = User(username="token-scope", full_name="Token Scope", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(user)
+    db_session.commit()
+
+    valid_token = create_access_token(user.username, {"role": user.role.value, "organization_id": user.organization_id})
+    legacy_token = create_access_token(user.username, {"role": user.role.value})
+    invalid_org_token = create_access_token(user.username, {"role": user.role.value, "organization_id": "abc"})
+
+    assert get_current_user(valid_token, db_session).id == user.id
+    with pytest.raises(HTTPException) as legacy_exc:
+        get_current_user(legacy_token, db_session)
+    assert legacy_exc.value.status_code == 401
+
+    with pytest.raises(HTTPException) as invalid_exc:
+        get_current_user(invalid_org_token, db_session)
+    assert invalid_exc.value.status_code == 401
 
 
 def test_snmp_poll_uses_real_status_payload(db_session: Session, monkeypatch):

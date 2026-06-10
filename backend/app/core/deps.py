@@ -23,15 +23,21 @@ def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Annotate
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         username = payload.get("sub")
         organization_id = payload.get("organization_id")
-        if username is None:
+        if username is None or organization_id is None:
             raise credentials_exception
-    except JWTError as exc:
+        organization_id = int(organization_id)
+    except (JWTError, TypeError, ValueError) as exc:
         raise credentials_exception from exc
 
-    query = db.query(User).filter(User.username == username, User.is_active.is_(True))
-    if organization_id is not None:
-        query = query.filter(User.organization_id == int(organization_id))
-    user = query.first()
+    user = (
+        db.query(User)
+        .filter(
+            User.username == username,
+            User.organization_id == organization_id,
+            User.is_active.is_(True),
+        )
+        .first()
+    )
     if user is None or not user.organization or not user.organization.is_active:
         raise credentials_exception
     return user
