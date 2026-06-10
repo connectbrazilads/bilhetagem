@@ -36,6 +36,15 @@ type OrganizationOption = {
   billing_status: "trial" | "active" | "past_due" | "suspended";
 };
 
+const UNSAFE_AGENT_PASSWORDS = new Set([
+  "",
+  "agent",
+  "agent12345",
+  "admin12345",
+  "change-me-agent-password",
+  "change-me-admin-password",
+]);
+
 function formatBytes(value: number) {
   if (value > 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
   if (value > 1024) return `${(value / 1024).toFixed(1)} KB`;
@@ -79,6 +88,10 @@ function billingStatusSuffix(status: OrganizationOption["billing_status"]) {
 function maskSecret(command: string, secret: string) {
   if (!command || !secret) return command;
   return command.replaceAll(secret, "********");
+}
+
+function isUnsafeAgentPassword(value: string) {
+  return UNSAFE_AGENT_PASSWORDS.has(value.trim().toLowerCase());
 }
 
 export default function DownloadsPage() {
@@ -189,8 +202,11 @@ export default function DownloadsPage() {
   const msiFile = latest?.files.find((file) => file.kind === "msi" || file.filename.toLowerCase().endsWith(".msi"));
   const selectedOrganization = organizations.find((organization) => organization.slug === deployOrg);
   const selectedOrganizationActive = organizations.length === 0 || selectedOrganization?.is_active === true;
-  const commandReady = Boolean(deployOrg.trim() && deployUser.trim() && deployPassword.trim() && selectedOrganizationActive);
-  const commandMissingMessage = selectedOrganizationActive
+  const unsafePassword = isUnsafeAgentPassword(deployPassword);
+  const commandReady = Boolean(deployOrg.trim() && deployUser.trim() && deployPassword.trim() && selectedOrganizationActive && !unsafePassword);
+  const commandMissingMessage = unsafePassword
+    ? "Use uma senha exclusiva para esta empresa; senhas padrao ou placeholders sao bloqueadas."
+    : selectedOrganizationActive
     ? "Informe empresa, usuario e senha do agent para gerar o comando."
     : "Empresa inativa: reative a empresa antes de gerar comando de instalacao.";
   const cancelBlockedArg = cancelBlocked ? "true" : "false";
