@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, FileArchive, RefreshCw, ShieldCheck } from "lucide-react";
+import { Check, Copy, Download, FileArchive, RefreshCw, ShieldCheck, TerminalSquare } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
-import { Button, Surface } from "@/components/ui";
+import { Button, Input, Surface } from "@/components/ui";
 import { API_URL, apiFetch } from "@/lib/api";
 
 type ReleaseFile = {
@@ -46,6 +46,11 @@ function signatureLabel(status: string | null) {
 export default function DownloadsPage() {
   const [releases, setReleases] = useState<AgentRelease[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deployOrg, setDeployOrg] = useState("default");
+  const [deployUser, setDeployUser] = useState("agent");
+  const [deployPassword, setDeployPassword] = useState("agent12345");
+  const [defaultUsername, setDefaultUsername] = useState("");
+  const [copiedCommand, setCopiedCommand] = useState<"exe" | "msi" | null>(null);
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -62,6 +67,7 @@ export default function DownloadsPage() {
   }
 
   useEffect(() => {
+    setDeployOrg(localStorage.getItem("organization_slug") || "default");
     load();
   }, []);
 
@@ -80,6 +86,22 @@ export default function DownloadsPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function copyCommand(kind: "exe" | "msi", command: string) {
+    await navigator.clipboard.writeText(command);
+    setCopiedCommand(kind);
+    window.setTimeout(() => setCopiedCommand(null), 1800);
+  }
+
+  const latest = releases[0];
+  const installerFile = latest?.files.find((file) => file.kind === "installer" || file.filename.toLowerCase().endsWith("installer.exe"));
+  const msiFile = latest?.files.find((file) => file.kind === "msi" || file.filename.toLowerCase().endsWith(".msi"));
+  const exeCommand = installerFile
+    ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}"`
+    : "";
+  const msiCommand = msiFile
+    ? `msiexec /i "${msiFile.filename}" APIURL="${API_URL}" AGENTUSER="${deployUser}" AGENTPASSWORD="${deployPassword}" ORGANIZATION="${deployOrg}" DEFAULTUSERNAME="${defaultUsername}" /qn`
+    : "";
+
   return (
     <ProtectedPage>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -92,6 +114,56 @@ export default function DownloadsPage() {
           Atualizar
         </Button>
       </div>
+
+      <Surface className="mb-6 p-4">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <TerminalSquare className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold">Instalacao silenciosa</h2>
+            <p className="text-xs text-muted-foreground">Comandos prontos para implantar o agent em PCs da empresa selecionada.</p>
+          </div>
+        </div>
+        <div className="mb-4 grid gap-3 md:grid-cols-4">
+          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+            API
+            <Input value={API_URL} readOnly />
+          </label>
+          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+            Empresa
+            <Input value={deployOrg} onChange={(event) => setDeployOrg(event.target.value)} />
+          </label>
+          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+            Usuario agent
+            <Input value={deployUser} onChange={(event) => setDeployUser(event.target.value)} />
+          </label>
+          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+            Senha agent
+            <Input type="password" value={deployPassword} onChange={(event) => setDeployPassword(event.target.value)} />
+          </label>
+        </div>
+        <label className="mb-4 grid max-w-md gap-1.5 text-xs font-semibold text-muted-foreground">
+          Usuario padrao do PC
+          <Input placeholder="Opcional" value={defaultUsername} onChange={(event) => setDefaultUsername(event.target.value)} />
+        </label>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <CommandBox
+            title="EXE"
+            command={exeCommand}
+            disabled={!installerFile}
+            copied={copiedCommand === "exe"}
+            onCopy={() => copyCommand("exe", exeCommand)}
+          />
+          <CommandBox
+            title="MSI"
+            command={msiCommand}
+            disabled={!msiFile}
+            copied={copiedCommand === "msi"}
+            onCopy={() => copyCommand("msi", msiCommand)}
+          />
+        </div>
+      </Surface>
 
       <Surface className="overflow-hidden">
         {releases.length === 0 ? (
@@ -158,5 +230,22 @@ export default function DownloadsPage() {
         )}
       </Surface>
     </ProtectedPage>
+  );
+}
+
+function CommandBox({ title, command, disabled, copied, onCopy }: { title: string; command: string; disabled: boolean; copied: boolean; onCopy: () => void }) {
+  return (
+    <div className="rounded-md border bg-muted/20 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-xs font-bold uppercase text-muted-foreground">{title}</div>
+        <Button variant="outline" className="h-8 px-2 text-xs" onClick={onCopy} disabled={disabled || !command}>
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? "Copiado" : "Copiar"}
+        </Button>
+      </div>
+      <pre className="min-h-[72px] overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 font-mono text-xs text-slate-100">
+        {disabled ? `Nenhum arquivo ${title} publicado no manifest.` : command}
+      </pre>
+    </div>
   );
 }
