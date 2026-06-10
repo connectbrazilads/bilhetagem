@@ -110,10 +110,10 @@ Valide os hashes e o status de assinatura antes de publicar:
 
 Essa validacao tambem confere se o `SHA256SUMS.txt` da versao bate com o manifest publicado.
 
-Para uma release comercial com instalador MSI obrigatorio:
+Para uma release comercial com instalador EXE e MSI obrigatorios:
 
 ```powershell
-.\verify_release.ps1 -RequireMsi
+.\verify_release.ps1 -RequireInstaller -RequireMsi
 ```
 
 Quando o certificado real ja estiver configurado, valide exigindo assinatura:

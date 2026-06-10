@@ -2,7 +2,8 @@ param(
     [string]$ReleaseRoot = "",
     [string]$Version = "",
     [switch]$RequireSignature,
-    [switch]$RequireMsi
+    [switch]$RequireMsi,
+    [switch]$RequireInstaller
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +34,10 @@ foreach ($release in $versions) {
         $expectedSums[$file.filename] = ([string]$file.sha256).ToLowerInvariant()
     }
     $hasMsi = @($release.files | Where-Object { $_.kind -eq "msi" -or ([string]$_.filename).ToLowerInvariant().EndsWith(".msi") }).Count -gt 0
+    $hasInstaller = @($release.files | Where-Object { $_.kind -eq "installer" -or ([string]$_.filename).ToLowerInvariant().EndsWith("installer.exe") }).Count -gt 0
+    if ($RequireInstaller -and -not $hasInstaller) {
+        $failures.Add("Instalador EXE ausente na versao: $($release.version)")
+    }
     if ($RequireMsi -and -not $hasMsi) {
         $failures.Add("MSI ausente na versao: $($release.version)")
     }

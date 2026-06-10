@@ -4,7 +4,8 @@ param(
     [switch]$SkipFrontend,
     [switch]$VerifyAgentRelease,
     [switch]$RequireAgentSignature,
-    [switch]$RequireAgentMsi
+    [switch]$RequireAgentMsi,
+    [switch]$RequireAgentInstaller
 )
 
 $ErrorActionPreference = "Stop"
@@ -120,6 +121,7 @@ if ($VerifyAgentRelease) {
         $releaseArgs = @{}
         if ($RequireAgentSignature) { $releaseArgs.RequireSignature = $true }
         if ($RequireAgentMsi) { $releaseArgs.RequireMsi = $true }
+        if ($RequireAgentInstaller) { $releaseArgs.RequireInstaller = $true }
         & $verifyScript @releaseArgs
     }
 }
