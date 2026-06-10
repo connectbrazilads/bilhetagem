@@ -22,11 +22,16 @@ No diretorio `agent`:
 
 Para gerar MSI, instale WiX Toolset no host de build. Sem WiX, o script gera EXE/instalador e avisa que o MSI foi ignorado.
 
+```powershell
+winget install --id WiXToolset.WiXCLI -e
+wix eula accept wix7
+```
+
 ## Assinatura
 
 O script assina automaticamente quando encontra `signtool.exe` e uma das configuracoes abaixo.
 
-Por thumbprint no repositório de certificados do Windows:
+Por thumbprint no repositorio de certificados do Windows:
 
 ```powershell
 $env:PRINTBILLING_CERT_THUMBPRINT="THUMBPRINT_DO_CERTIFICADO"

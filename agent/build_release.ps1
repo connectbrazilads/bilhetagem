@@ -28,7 +28,21 @@ function Find-CommandPath([string[]]$Names) {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue
         if ($cmd) { return $cmd.Source }
     }
+    $knownPaths = @(
+        (Join-Path $env:ProgramFiles "WiX Toolset v7.0\bin\wix.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "WiX Toolset v7.0\bin\wix.exe")
+    )
+    foreach ($path in $knownPaths) {
+        if ($Names -contains (Split-Path -Leaf $path) -and (Test-Path $path)) { return $path }
+    }
     return $null
+}
+
+function Invoke-CheckedCommand([string]$FilePath, [string[]]$Arguments) {
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Comando falhou ($LASTEXITCODE): $FilePath $($Arguments -join ' ')"
+    }
 }
 
 function Invoke-CodeSign([string]$Path) {
@@ -82,7 +96,8 @@ function Build-Msi([string]$InstallerExe, [string]$OutDir, [string]$ReleaseVersi
     $msi = Join-Path $OutDir "PrintBillingAgent-$ReleaseVersion.msi"
     $msiVersion = Normalize-MsiVersion $ReleaseVersion
     if ($wix) {
-        & $wix build $wxs -d InstallerExe="$InstallerExe" -d Version="$msiVersion" -o $msi
+        Invoke-CheckedCommand $wix @("build", $wxs, "-d", "InstallerExe=$InstallerExe", "-d", "Version=$msiVersion", "-o", $msi)
+        if (-not (Test-Path $msi)) { throw "WiX finalizou sem gerar MSI: $msi" }
         return $msi
     }
 
@@ -90,8 +105,9 @@ function Build-Msi([string]$InstallerExe, [string]$OutDir, [string]$ReleaseVersi
     $light = Find-CommandPath @("light.exe")
     if ($candle -and $light) {
         $obj = Join-Path $OutDir "PrintBillingAgent.wixobj"
-        & $candle -dInstallerExe="$InstallerExe" -dVersion="$msiVersion" -out $obj $wxs
-        & $light -out $msi $obj
+        Invoke-CheckedCommand $candle @("-dInstallerExe=$InstallerExe", "-dVersion=$msiVersion", "-out", $obj, $wxs)
+        Invoke-CheckedCommand $light @("-out", $msi, $obj)
+        if (-not (Test-Path $msi)) { throw "WiX finalizou sem gerar MSI: $msi" }
         return $msi
     }
 
@@ -107,13 +123,13 @@ New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 $pyinstaller = Join-Path $Root ".venv\Scripts\pyinstaller.exe"
 if (-not (Test-Path $pyinstaller)) { throw "PyInstaller nao encontrado em $pyinstaller" }
 
-& $pyinstaller --clean --noconfirm --workpath "build_release_agent" --distpath "dist_release_agent" "PrintBillingAgent.spec"
+Invoke-CheckedCommand $pyinstaller @("--clean", "--noconfirm", "--workpath", "build_release_agent", "--distpath", "dist_release_agent", "PrintBillingAgent.spec")
 
 New-Item -ItemType Directory -Force -Path "installer_payload" | Out-Null
 Copy-Item "dist_release_agent\PrintBillingAgent.exe" "installer_payload\PrintBillingAgent.exe" -Force
 Copy-Item "config.json.example" "installer_payload\config.json.example" -Force
 
-& $pyinstaller --clean --noconfirm --onefile --name "PrintBillingAgentInstaller" --add-binary "installer_payload\PrintBillingAgent.exe;." --add-data "installer_payload\config.json.example;." "agent_installer.py"
+Invoke-CheckedCommand $pyinstaller @("--clean", "--noconfirm", "--onefile", "--name", "PrintBillingAgentInstaller", "--add-binary", "installer_payload\PrintBillingAgent.exe;.", "--add-data", "installer_payload\config.json.example;.", "agent_installer.py")
 
 $agentExe = Join-Path $releaseDir "PrintBillingAgent.exe"
 $installerExe = Join-Path $releaseDir "PrintBillingAgentInstaller.exe"

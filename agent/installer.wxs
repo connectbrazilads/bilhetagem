@@ -1,7 +1,11 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="PrintBilling Agent" Language="1046" Version="$(var.Version)" Manufacturer="PrintBilling" UpgradeCode="F81241B7-655A-4B33-8EC2-23FE3C1C7E51">
-    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="PrintBilling Agent"
+    Language="1046"
+    Version="$(var.Version)"
+    Manufacturer="PrintBilling"
+    UpgradeCode="F81241B7-655A-4B33-8EC2-23FE3C1C7E51"
+    Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="Uma versao mais nova do PrintBilling Agent ja esta instalada." />
     <MediaTemplate EmbedCab="yes" />
 
@@ -11,20 +15,18 @@
     <Property Id="ORGANIZATION" Secure="yes" Value="default" />
     <Property Id="DEFAULTUSERNAME" Secure="yes" />
 
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFilesFolder">
-        <Directory Id="INSTALLFOLDER" Name="PrintBillingAgentBootstrap">
-          <Component Id="BootstrapMarker" Guid="B3B00A6C-58C3-4DD1-9FE7-AFA0E528A0B5">
-            <RegistryValue Root="HKLM" Key="Software\PrintBillingAgent" Name="MsiBootstrapInstalled" Type="integer" Value="1" KeyPath="yes" />
-          </Component>
-        </Directory>
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="PrintBillingAgentBootstrap">
+        <Component Id="BootstrapMarker" Guid="B3B00A6C-58C3-4DD1-9FE7-AFA0E528A0B5">
+          <RegistryValue Root="HKLM" Key="Software\PrintBillingAgent" Name="MsiBootstrapInstalled" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
       </Directory>
-    </Directory>
+    </StandardDirectory>
 
     <Binary Id="AgentInstallerExe" SourceFile="$(var.InstallerExe)" />
     <CustomAction
       Id="RunAgentInstaller"
-      BinaryKey="AgentInstallerExe"
+      BinaryRef="AgentInstallerExe"
       ExeCommand="--silent --api-url &quot;[APIURL]&quot; --username &quot;[AGENTUSER]&quot; --password &quot;[AGENTPASSWORD]&quot; --organization &quot;[ORGANIZATION]&quot; --default-username &quot;[DEFAULTUSERNAME]&quot;"
       Execute="deferred"
       Return="check"
@@ -35,7 +37,7 @@
     </Feature>
 
     <InstallExecuteSequence>
-      <Custom Action="RunAgentInstaller" After="InstallFiles">NOT Installed</Custom>
+      <Custom Action="RunAgentInstaller" After="InstallFiles" Condition="NOT Installed" />
     </InstallExecuteSequence>
-  </Product>
+  </Package>
 </Wix>

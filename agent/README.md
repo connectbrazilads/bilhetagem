@@ -84,6 +84,13 @@ Para publicar na VPS, copie a pasta da versao e o `manifest.json` para o diretor
 `AGENT_DOWNLOAD_DIR`, e ajuste `AGENT_LATEST_VERSION` para a versao publicada.
 O manifest inclui `signature_status` e `signer_subject`, exibidos na tela **Downloads**.
 
+Para gerar MSI no host de build, instale o WiX CLI:
+
+```powershell
+winget install --id WiXToolset.WiXCLI -e
+wix eula accept wix7
+```
+
 Valide os hashes e o status de assinatura antes de publicar:
 
 ```powershell
