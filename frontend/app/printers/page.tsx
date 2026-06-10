@@ -25,7 +25,12 @@ type PrinterRow = {
     id: number;
     queue_name: string;
     computer_name: string | null;
+    driver_name: string | null;
     connection_type: string | null;
+    ip_address: string | null;
+    serial_number: string | null;
+    device_id: string | null;
+    fingerprint: string | null;
     port_name: string | null;
   }[];
 };
@@ -200,6 +205,29 @@ export default function PrintersPage() {
     if (level <= 10) return "text-red-600";
     if (level <= 30) return "text-amber-500";
     return "text-green-600";
+  }
+
+  function connectionLabel(type?: string | null) {
+    if (type === "usb") return "USB";
+    if (type === "network") return "Rede";
+    if (type === "shared") return "Compartilhada";
+    if (type === "local") return "Local";
+    return "Desconhecida";
+  }
+
+  function connectionClass(type?: string | null) {
+    if (type === "usb") return "border-amber-200 bg-amber-50 text-amber-700";
+    if (type === "network") return "border-blue-200 bg-blue-50 text-blue-700";
+    if (type === "shared") return "border-violet-200 bg-violet-50 text-violet-700";
+    return "border-slate-200 bg-slate-100 text-slate-700";
+  }
+
+  function connectionSummary(printer: PrinterRow) {
+    const aliases = printer.aliases ?? [];
+    if (printer.ip_address) return "Rede/SNMP";
+    if (aliases.some((alias) => alias.connection_type === "usb")) return "USB sem SNMP";
+    if (aliases.length > 0) return "Fila local";
+    return "Sem monitoramento";
   }
 
   return (
@@ -381,8 +409,13 @@ export default function PrintersPage() {
                     </div>
                   )}
                   {(printer.aliases?.length ?? 0) > 0 && (
-                    <div className="mt-1 text-[10px] text-muted-foreground">
-                      {printer.aliases?.length} fila(s) vinculada(s)
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      <span className="text-[10px] text-muted-foreground">
+                        {printer.aliases?.length} fila(s)
+                      </span>
+                      <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${connectionClass(printer.aliases?.[0]?.connection_type)}`}>
+                        {connectionSummary(printer)}
+                      </span>
                     </div>
                   )}
                 </td>
@@ -402,7 +435,7 @@ export default function PrintersPage() {
                       )}
                     </div>
                   ) : (
-                    <span className="text-muted-foreground text-xs italic">Sem Monitoramento</span>
+                    <span className="text-muted-foreground text-xs italic">{connectionSummary(printer)}</span>
                   )}
                 </td>
                 <td className="p-3">
@@ -627,6 +660,35 @@ export default function PrintersPage() {
                   {selectedPrinter.is_color ? "Suporta Colorido" : "Apenas P&B"}
                 </span>
               </div>
+
+              {(selectedPrinter.aliases?.length ?? 0) > 0 ? (
+                <div className="border-t pt-3">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filas detectadas</div>
+                  <div className="grid gap-2">
+                    {selectedPrinter.aliases?.map((alias) => (
+                      <div key={alias.id} className="rounded-lg border bg-muted/20 p-3 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-semibold text-foreground">{alias.queue_name}</span>
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 font-semibold ${connectionClass(alias.connection_type)}`}>
+                            {connectionLabel(alias.connection_type)}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-muted-foreground">
+                          {alias.computer_name || "-"} {alias.port_name ? `| Porta: ${alias.port_name}` : ""}
+                        </div>
+                        {alias.connection_type === "usb" ? (
+                          <div className="mt-1 text-amber-700">USB: bilhetagem ativa, telemetria SNMP indisponivel sem IP de rede.</div>
+                        ) : null}
+                        {alias.device_id ? (
+                          <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground" title={alias.device_id}>
+                            Device ID: {alias.device_id}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {/* Footer */}

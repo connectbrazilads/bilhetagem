@@ -22,6 +22,7 @@ class PrinterAliasRead(BaseModel):
     connection_type: str | None
     ip_address: str | None
     serial_number: str | None
+    device_id: str | None
     fingerprint: str | None
     last_seen_at: datetime | None
 
