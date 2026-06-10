@@ -387,6 +387,63 @@ def test_merge_printer_moves_jobs_and_aliases(db_session: Session):
     assert moved_alias.printer_id == target.id
 
 
+def test_merge_printer_collapses_duplicate_aliases_by_normalized_queue_name(db_session: Session):
+    actor = User(username="admin-merge-normalized", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="diego-merge-normalized", full_name="Diego", role=UserRole.user, is_active=True, organization_id=1)
+    target = Printer(organization_id=1, name="KONICA FINANCEIRO", ip_address="192.168.1.125", is_color=True)
+    source = Printer(organization_id=1, name="KONICA DUPLICADA", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-merge-normalized", computer_name="PC-FIN")
+    db_session.add_all([actor, user, target, source, agent])
+    db_session.flush()
+
+    target_alias = PrinterAlias(
+        organization_id=1,
+        printer_id=target.id,
+        agent_id=agent.id,
+        queue_name="KONICA Financeiro",
+        normalized_queue_name="konica financeiro",
+        computer_name="PC-FIN",
+    )
+    source_alias = PrinterAlias(
+        organization_id=1,
+        printer_id=source.id,
+        agent_id=agent.id,
+        queue_name="  konica   financeiro ",
+        normalized_queue_name="konica financeiro",
+        computer_name="PC-FIN",
+    )
+    db_session.add_all([target_alias, source_alias])
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=source.id,
+        printer_alias_id=source_alias.id,
+        agent_id=agent.id,
+        document_name="Contrato.pdf",
+        computer_name="PC-FIN",
+        queue_name=source_alias.queue_name,
+        pages=3,
+        is_color=True,
+        cost=0.75,
+        status=JobStatus.authorized,
+        submitted_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    merge_printer_endpoint(source.id, target.id, db_session, actor)
+
+    moved_job = db_session.query(PrintJob).filter(PrintJob.id == job.id).one()
+    aliases = db_session.query(PrinterAlias).filter(PrinterAlias.printer_id == target.id).all()
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "printer_merged").one()
+    assert db_session.query(Printer).filter(Printer.id == source.id).first() is None
+    assert moved_job.printer_id == target.id
+    assert moved_job.printer_alias_id == target_alias.id
+    assert [alias.id for alias in aliases] == [target_alias.id]
+    assert audit.log_metadata["merged_aliases"] == 1
+
+
 def test_binding_alias_moves_historical_jobs_to_physical_printer(db_session: Session):
     actor = User(username="admin-bind", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     user = User(username="diego-bind", full_name="Diego", role=UserRole.user, is_active=True, organization_id=1)

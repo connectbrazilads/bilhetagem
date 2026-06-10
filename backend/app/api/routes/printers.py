@@ -23,6 +23,20 @@ def _changed_values(before: dict, after: dict) -> dict:
     }
 
 
+def _normalize_alias_name(value: str | None) -> str | None:
+    if not value:
+        return None
+    return " ".join(value.strip().lower().split()) or None
+
+
+def _same_alias_identity(left: PrinterAlias, right: PrinterAlias) -> bool:
+    if left.queue_name == right.queue_name:
+        return True
+    left_normalized = left.normalized_queue_name or _normalize_alias_name(left.queue_name)
+    right_normalized = right.normalized_queue_name or _normalize_alias_name(right.queue_name)
+    return bool(left_normalized and left_normalized == right_normalized)
+
+
 @router.get("", response_model=list[PrinterRead])
 def list_printers(
     db: Session = Depends(get_db),
@@ -233,25 +247,28 @@ def merge_printer_endpoint(
         synchronize_session=False,
     )
     moved_aliases = 0
+    merged_aliases = 0
     for alias in db.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.printer_id == source.id).all():
-        duplicate_alias = (
+        target_aliases = (
             db.query(PrinterAlias)
             .filter(
                 PrinterAlias.printer_id == target.id,
                 PrinterAlias.organization_id == actor.organization_id,
                 PrinterAlias.agent_id == alias.agent_id,
-                PrinterAlias.queue_name == alias.queue_name,
             )
-            .first()
+            .all()
         )
+        duplicate_alias = next((candidate for candidate in target_aliases if _same_alias_identity(alias, candidate)), None)
         if duplicate_alias:
             db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.printer_alias_id == alias.id).update(
                 {PrintJob.printer_alias_id: duplicate_alias.id},
                 synchronize_session=False,
             )
             db.delete(alias)
+            merged_aliases += 1
             continue
         alias.printer_id = target.id
+        alias.normalized_queue_name = alias.normalized_queue_name or _normalize_alias_name(alias.queue_name)
         moved_aliases += 1
 
     if not target.ip_address and source.ip_address:
@@ -273,6 +290,7 @@ def merge_printer_endpoint(
             "target_printer": target.name,
             "moved_jobs": moved_jobs,
             "moved_aliases": moved_aliases,
+            "merged_aliases": merged_aliases,
         },
     )
     db.delete(source)
