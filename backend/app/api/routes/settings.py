@@ -4,9 +4,14 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.user import User, UserRole
-from app.schemas.settings import LDAPSettings, GeneralSettings
+from app.schemas.settings import LDAPSettings, GeneralSettings, MonthlyReportEmailSettings
 from app.services.ldap_service import test_ldap_connection, sync_ldap_users
-from app.services.settings_service import get_system_settings_dict, update_system_settings
+from app.services.settings_service import (
+    get_monthly_report_email_settings,
+    get_system_settings_dict,
+    update_monthly_report_email_settings,
+    update_system_settings,
+)
 from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -28,6 +33,25 @@ def update_general_settings(
 ) -> GeneralSettings:
     updated = update_system_settings(db, payload.model_dump(), actor.organization_id)
     return GeneralSettings(**updated)
+
+
+@router.get("/monthly-report-email", response_model=MonthlyReportEmailSettings)
+def get_monthly_report_email_settings_endpoint(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> MonthlyReportEmailSettings:
+    return MonthlyReportEmailSettings(**get_monthly_report_email_settings(db, actor.organization_id))
+
+
+@router.put("/monthly-report-email", response_model=MonthlyReportEmailSettings)
+def update_monthly_report_email_settings_endpoint(
+    payload: MonthlyReportEmailSettings,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> MonthlyReportEmailSettings:
+    updated = update_monthly_report_email_settings(db, payload.model_dump(), actor.organization_id)
+    return MonthlyReportEmailSettings(**updated)
+
 
 @router.post("/ldap/test")
 def test_ldap_endpoint(

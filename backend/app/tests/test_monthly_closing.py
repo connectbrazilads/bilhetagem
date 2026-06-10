@@ -3,9 +3,12 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.api.routes.reports import export_monthly_closing
+from app.api.routes.settings import get_monthly_report_email_settings_endpoint, update_monthly_report_email_settings_endpoint
 from app.models.department import Department
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
+from app.schemas.settings import MonthlyReportEmailSettings
+from app.services.email_service import send_due_monthly_report_email, send_monthly_closing_email
 from app.models.user import User, UserRole
 from app.services.monthly_closing_service import create_monthly_closing
 
@@ -99,3 +102,118 @@ def test_monthly_closing_export_xlsx(db_session: Session):
 
     assert response.media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert response.body.startswith(b"PK")
+
+
+def test_monthly_report_email_settings_api(db_session: Session):
+    actor = User(username="email-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    initial = get_monthly_report_email_settings_endpoint(db=db_session, actor=actor)
+    assert initial.enabled is False
+    assert initial.day_of_month == 1
+
+    updated = update_monthly_report_email_settings_endpoint(
+        payload=MonthlyReportEmailSettings(
+            enabled=True,
+            recipients="financeiro@example.com; gestao@example.com",
+            day_of_month=5,
+            include_pdf=True,
+            include_xlsx=False,
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert updated.enabled is True
+    assert updated.recipients == "financeiro@example.com; gestao@example.com"
+    assert updated.day_of_month == 5
+    assert updated.include_xlsx is False
+
+
+def test_send_monthly_closing_email_with_attachments(db_session: Session, monkeypatch):
+    _seed_job_data(db_session)
+    closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
+    sent_messages = []
+
+    class DummySMTP:
+        def __init__(self, host, port, timeout):
+            self.host = host
+            self.port = port
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def starttls(self):
+            return None
+
+        def login(self, username, password):
+            return None
+
+        def send_message(self, message):
+            sent_messages.append(message)
+
+    monkeypatch.setattr("app.services.email_service.settings.smtp_host", "smtp.example.com")
+    monkeypatch.setattr("app.services.email_service.smtplib.SMTP", DummySMTP)
+
+    result = send_monthly_closing_email(
+        db_session,
+        closing,
+        recipients="financeiro@example.com,gestao@example.com",
+    )
+
+    assert result["sent"] is True
+    assert result["recipients"] == ["financeiro@example.com", "gestao@example.com"]
+    assert result["attachments"] == ["fechamento-2026-05.pdf", "fechamento-2026-05.xlsx"]
+    assert len(sent_messages) == 1
+    assert sent_messages[0]["To"] == "financeiro@example.com, gestao@example.com"
+    assert [part.get_filename() for part in sent_messages[0].iter_attachments()] == result["attachments"]
+
+
+def test_due_monthly_report_email_sends_previous_month_once(db_session: Session, monkeypatch):
+    _seed_job_data(db_session)
+    sent_messages = []
+
+    class DummySMTP:
+        def __init__(self, host, port, timeout):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def starttls(self):
+            return None
+
+        def send_message(self, message):
+            sent_messages.append(message)
+
+    monkeypatch.setattr("app.services.email_service.settings.smtp_host", "smtp.example.com")
+    monkeypatch.setattr("app.services.email_service.smtplib.SMTP", DummySMTP)
+    update_monthly_report_email_settings_endpoint(
+        payload=MonthlyReportEmailSettings(
+            enabled=True,
+            recipients="financeiro@example.com",
+            day_of_month=1,
+            include_pdf=True,
+            include_xlsx=False,
+        ),
+        db=db_session,
+        actor=User(username="email-due-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1),
+    )
+
+    first = send_due_monthly_report_email(db_session, organization_id=1, now=datetime(2026, 6, 10, tzinfo=timezone.utc))
+    second = send_due_monthly_report_email(db_session, organization_id=1, now=datetime(2026, 6, 10, tzinfo=timezone.utc))
+
+    assert first["sent"] is True
+    assert first["period"] == "2026-05"
+    assert first["attachments"] == ["fechamento-2026-05.pdf"]
+    assert second["sent"] is False
+    assert second["reason"] == "Fechamento mensal ja enviado"
+    assert len(sent_messages) == 1

@@ -24,6 +24,22 @@
 5. Implantar agente via GPO, Intune, SCCM ou ferramenta RMM.
 6. Revisar politicas de retencao de documentos e metadados de impressao.
 
+## SMTP e fechamento mensal
+
+Configure no ambiente do backend:
+
+```text
+SMTP_HOST=smtp.empresa.com
+SMTP_PORT=587
+SMTP_USERNAME=usuario
+SMTP_PASSWORD=senha
+SMTP_FROM_EMAIL=relatorios@empresa.com
+SMTP_USE_TLS=true
+```
+
+No painel, configure os destinatarios em **Configuracoes > Relatorios mensais**.
+Para automacao, chame `POST /reports/monthly-closings/email-due` diariamente por cron, worker ou ferramenta externa autenticada como admin.
+
 ## Operacao
 
 - Rotacionar senhas do usuario tecnico do agente.

@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     agent_download_dir: str = "agent_downloads"
     agent_download_filename: str = "PrintBillingAgent.exe"
     agent_release_manifest_filename: str = "manifest.json"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = "no-reply@printbilling.local"
+    smtp_use_tls: bool = True
 
     @field_validator("cors_origins", mode="before")
     @classmethod

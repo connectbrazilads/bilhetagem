@@ -37,3 +37,23 @@ class MonthlyClosingRead(BaseModel):
     generated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class MonthlyClosingEmailRequest(BaseModel):
+    recipients: str | None = Field(default=None, max_length=255)
+    include_pdf: bool | None = None
+    include_xlsx: bool | None = None
+
+
+class MonthlyClosingEmailRead(BaseModel):
+    sent: bool
+    recipients: list[str]
+    attachments: list[str]
+
+
+class MonthlyClosingDueEmailRead(BaseModel):
+    sent: bool
+    reason: str | None = None
+    period: str | None = None
+    recipients: list[str] = Field(default_factory=list)
+    attachments: list[str] = Field(default_factory=list)

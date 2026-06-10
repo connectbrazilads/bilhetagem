@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AlertCircle, CheckCircle, RefreshCw, Save, Server, UploadCloud } from "lucide-react";
+import { AlertCircle, CheckCircle, Mail, RefreshCw, Save, Server, UploadCloud } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -14,6 +14,14 @@ type PrinterInfo = {
   is_active: boolean;
 };
 
+type MonthlyReportEmailSettings = {
+  enabled: boolean;
+  recipients: string;
+  day_of_month: number;
+  include_pdf: boolean;
+  include_xlsx: boolean;
+};
+
 export default function SettingsPage() {
   const [defaultQuota, setDefaultQuota] = useState(500);
   const [apiUrl, setApiUrl] = useState("http://localhost:8000");
@@ -21,6 +29,11 @@ export default function SettingsPage() {
   const [blockingEnabled, setBlockingEnabled] = useState(true);
   const [showBalance, setShowBalance] = useState(true);
   const [safeReleaseEnabled, setSafeReleaseEnabled] = useState(true);
+  const [monthlyEmailEnabled, setMonthlyEmailEnabled] = useState(false);
+  const [monthlyEmailRecipients, setMonthlyEmailRecipients] = useState("");
+  const [monthlyEmailDay, setMonthlyEmailDay] = useState(1);
+  const [monthlyEmailPdf, setMonthlyEmailPdf] = useState(true);
+  const [monthlyEmailXlsx, setMonthlyEmailXlsx] = useState(true);
 
   const [ldapServer, setLdapServer] = useState("ldap://localhost:389");
   const [ldapBindDn, setLdapBindDn] = useState("cn=admin,dc=example,dc=com");
@@ -65,6 +78,16 @@ export default function SettingsPage() {
           }
         })
         .catch(() => setPrinters([]));
+
+      apiFetch<MonthlyReportEmailSettings>("/settings/monthly-report-email", token)
+        .then((data) => {
+          setMonthlyEmailEnabled(data.enabled);
+          setMonthlyEmailRecipients(data.recipients);
+          setMonthlyEmailDay(data.day_of_month);
+          setMonthlyEmailPdf(data.include_pdf);
+          setMonthlyEmailXlsx(data.include_xlsx);
+        })
+        .catch((err) => console.error("Erro ao buscar envio mensal:", err));
     }
 
     if (typeof window !== "undefined") {
@@ -104,6 +127,16 @@ export default function SettingsPage() {
           blocking_enabled: blockingEnabled,
           show_balance: showBalance,
           safe_release_enabled: safeReleaseEnabled,
+        }),
+      });
+      await apiFetch("/settings/monthly-report-email", token, {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: monthlyEmailEnabled,
+          recipients: monthlyEmailRecipients,
+          day_of_month: monthlyEmailDay,
+          include_pdf: monthlyEmailPdf,
+          include_xlsx: monthlyEmailXlsx,
         }),
       });
       setStatusMsg({ text: "Configuracoes salvas com sucesso.", type: "success" });
@@ -266,6 +299,46 @@ export default function SettingsPage() {
             <ToggleRow id="blockingEnabled" checked={blockingEnabled} onChange={setBlockingEnabled} label="Habilitar bloqueio por cota ou saldo insuficiente" />
             <ToggleRow id="showBalance" checked={showBalance} onChange={setShowBalance} label="Exibir saldo mensal nas telas" />
             <ToggleRow id="safeRelease" checked={safeReleaseEnabled} onChange={setSafeReleaseEnabled} label="Habilitar liberacao segura Follow-Me" />
+          </div>
+        </Surface>
+
+        <Surface className="p-5">
+          <div className="mb-5 flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <Mail className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Relatorios mensais</h2>
+              <p className="text-xs text-muted-foreground">Envio automatico do fechamento comercial por e-mail.</p>
+            </div>
+          </div>
+          <div className="grid gap-4">
+            <ToggleRow id="monthlyEmailEnabled" checked={monthlyEmailEnabled} onChange={setMonthlyEmailEnabled} label="Enviar fechamento mensal por e-mail" />
+            <label className="text-sm font-medium">
+              Destinatarios
+              <Input
+                className="mt-1.5"
+                placeholder="financeiro@empresa.com, gestor@empresa.com"
+                value={monthlyEmailRecipients}
+                onChange={(event) => setMonthlyEmailRecipients(event.target.value)}
+                maxLength={255}
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Dia do envio
+              <Input
+                className="mt-1.5"
+                type="number"
+                min={1}
+                max={28}
+                value={monthlyEmailDay}
+                onChange={(event) => setMonthlyEmailDay(Math.min(28, Math.max(1, parseInt(event.target.value) || 1)))}
+              />
+            </label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <ToggleRow id="monthlyEmailPdf" checked={monthlyEmailPdf} onChange={setMonthlyEmailPdf} label="Anexar PDF" />
+              <ToggleRow id="monthlyEmailXlsx" checked={monthlyEmailXlsx} onChange={setMonthlyEmailXlsx} label="Anexar Excel" />
+            </div>
           </div>
         </Surface>
 

@@ -13,3 +13,11 @@ class GeneralSettings(BaseModel):
     blocking_enabled: bool = Field(default=True)
     show_balance: bool = Field(default=True)
     safe_release_enabled: bool = Field(default=True)
+
+
+class MonthlyReportEmailSettings(BaseModel):
+    enabled: bool = Field(default=False)
+    recipients: str = Field(default="", max_length=255)
+    day_of_month: int = Field(default=1, ge=1, le=28)
+    include_pdf: bool = Field(default=True)
+    include_xlsx: bool = Field(default=True)

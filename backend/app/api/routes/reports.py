@@ -12,8 +12,17 @@ from app.core.deps import require_roles
 from app.models.monthly_closing import MonthlyClosing
 from app.models.print_job import PrintJob
 from app.models.user import User, UserRole
-from app.schemas.report import DashboardMetrics, MonthlyClosingCreate, MonthlyClosingRead
+from app.schemas.report import (
+    DashboardMetrics,
+    MonthlyClosingCreate,
+    MonthlyClosingDueEmailRead,
+    MonthlyClosingEmailRead,
+    MonthlyClosingEmailRequest,
+    MonthlyClosingRead,
+)
+from app.services.email_service import send_due_monthly_report_email, send_monthly_closing_email
 from app.services.monthly_closing_service import create_monthly_closing
+from app.services.report_export_service import monthly_closing_filename_base, render_monthly_closing_pdf, render_monthly_closing_xlsx
 from app.services.report_service import dashboard_metrics
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -49,6 +58,17 @@ def generate_monthly_closing(
     return create_monthly_closing(db, actor.organization_id, payload.year, payload.month)
 
 
+@router.post("/monthly-closings/email-due", response_model=MonthlyClosingDueEmailRead)
+def send_due_monthly_closing_email_endpoint(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    try:
+        return send_due_monthly_report_email(db, actor.organization_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.get("/monthly-closings/{closing_id}", response_model=MonthlyClosingRead)
 def get_monthly_closing(
     closing_id: int,
@@ -59,6 +79,27 @@ def get_monthly_closing(
     if not closing:
         raise HTTPException(status_code=404, detail="Fechamento nao encontrado")
     return closing
+
+
+@router.post("/monthly-closings/{closing_id}/email", response_model=MonthlyClosingEmailRead)
+def send_monthly_closing_email_endpoint(
+    closing_id: int,
+    payload: MonthlyClosingEmailRequest | None = None,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    closing = _closing_or_404(db, actor.organization_id, closing_id)
+    payload = payload or MonthlyClosingEmailRequest()
+    try:
+        return send_monthly_closing_email(
+            db,
+            closing,
+            recipients=payload.recipients,
+            include_pdf=payload.include_pdf,
+            include_xlsx=payload.include_xlsx,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 def _closing_or_404(db: Session, organization_id: int, closing_id: int) -> MonthlyClosing:
@@ -76,53 +117,17 @@ def export_monthly_closing(
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> Response:
     closing = _closing_or_404(db, actor.organization_id, closing_id)
-    filename_base = f"fechamento-{closing.year}-{closing.month:02d}"
-    snapshot = closing.snapshot
+    filename_base = monthly_closing_filename_base(closing)
 
     if format == "pdf":
-        buffer = BytesIO()
-        pdf = canvas.Canvas(buffer, pagesize=A4)
-        pdf.setTitle("Fechamento Mensal")
-        pdf.drawString(40, 800, f"Fechamento Mensal - {closing.month:02d}/{closing.year}")
-        pdf.drawString(40, 780, f"Paginas: {closing.total_pages} | Custo: R$ {closing.total_cost:.2f} | Bloqueadas/salvas: {closing.blocked_pages}")
-        y = 750
-        pdf.drawString(40, y, "Por impressora")
-        y -= 18
-        for row in snapshot.get("by_printer", [])[:20]:
-            pdf.drawString(40, y, f"{row['name']} | {row['pages']} pag. | P&B {row['mono_pages']} | Cor {row['color_pages']} | R$ {row['cost']:.2f}")
-            y -= 16
-            if y < 80:
-                pdf.showPage()
-                y = 800
-        pdf.save()
         return Response(
-            content=buffer.getvalue(),
+            content=render_monthly_closing_pdf(closing),
             media_type="application/pdf",
             headers={"Content-Disposition": f"attachment; filename={filename_base}.pdf"},
         )
 
-    workbook = Workbook()
-    summary = workbook.active
-    summary.title = "Resumo"
-    summary.append(["Periodo", f"{closing.month:02d}/{closing.year}"])
-    summary.append(["Trabalhos", closing.total_jobs])
-    summary.append(["Trabalhos cobraveis", closing.billable_jobs])
-    summary.append(["Paginas", closing.total_pages])
-    summary.append(["P&B", closing.mono_pages])
-    summary.append(["Coloridas", closing.color_pages])
-    summary.append(["Bloqueadas/Salvas", closing.blocked_pages])
-    summary.append(["Custo", closing.total_cost])
-
-    for sheet_name, key in (("Usuarios", "by_user"), ("Departamentos", "by_department"), ("Impressoras", "by_printer"), ("Tipo", "by_type")):
-        sheet = workbook.create_sheet(sheet_name)
-        sheet.append(["Nome", "Trabalhos", "Paginas", "P&B", "Coloridas", "Custo"])
-        for row in snapshot.get(key, []):
-            sheet.append([row["name"], row["jobs"], row["pages"], row["mono_pages"], row["color_pages"], row["cost"]])
-
-    buffer = BytesIO()
-    workbook.save(buffer)
     return Response(
-        content=buffer.getvalue(),
+        content=render_monthly_closing_xlsx(closing),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename_base}.xlsx"},
     )
