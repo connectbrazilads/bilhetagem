@@ -82,6 +82,7 @@ Entregaveis:
 
 - Gerar instalador unico com configuracao inicial.
 - Suportar instalacao silenciosa com parametros: API URL, chave da empresa, nome do cliente e modo de log.
+- Gerar comandos silenciosos no painel usando a lista real de empresas para evitar slug incorreto.
 - Criar endpoint `/agent/version`.
 - Criar endpoint para baixar versao nova do agent.
 - Agent comparar versao local com versao publicada.

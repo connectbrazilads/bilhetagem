@@ -25,6 +25,13 @@ type AgentRelease = {
   files: ReleaseFile[];
 };
 
+type OrganizationOption = {
+  id: number;
+  name: string;
+  slug: string;
+  is_active: boolean;
+};
+
 function formatBytes(value: number) {
   if (value > 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
   if (value > 1024) return `${(value / 1024).toFixed(1)} KB`;
@@ -45,6 +52,7 @@ function signatureLabel(status: string | null) {
 
 export default function DownloadsPage() {
   const [releases, setReleases] = useState<AgentRelease[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [deployOrg, setDeployOrg] = useState("default");
   const [deployUser, setDeployUser] = useState("agent");
@@ -59,6 +67,13 @@ export default function DownloadsPage() {
     try {
       const data = await apiFetch<AgentRelease[]>("/agent/releases", token);
       setReleases(data);
+      const orgs = await apiFetch<OrganizationOption[]>("/organizations", token).catch(() => []);
+      setOrganizations(orgs);
+      const currentSlug = localStorage.getItem("organization_slug") || "default";
+      if (orgs.length > 0 && !orgs.some((organization) => organization.slug === deployOrg)) {
+        const preferred = orgs.find((organization) => organization.slug === currentSlug) ?? orgs[0];
+        setDeployOrg(preferred.slug);
+      }
     } catch {
       setReleases([]);
     } finally {
@@ -132,7 +147,21 @@ export default function DownloadsPage() {
           </label>
           <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
             Empresa
-            <Input value={deployOrg} onChange={(event) => setDeployOrg(event.target.value)} />
+            {organizations.length > 0 ? (
+              <select
+                className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+                value={deployOrg}
+                onChange={(event) => setDeployOrg(event.target.value)}
+              >
+                {organizations.map((organization) => (
+                  <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
+                    {organization.name} ({organization.slug}){organization.is_active ? "" : " - inativa"}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Input value={deployOrg} onChange={(event) => setDeployOrg(event.target.value)} />
+            )}
           </label>
           <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
             Usuario agent
