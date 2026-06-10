@@ -840,6 +840,28 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     ]
 
 
+def test_job_listing_rejects_filters_from_other_organization(db_session: Session):
+    other_org = Organization(name="Cliente Jobs B", slug="cliente-jobs-b", is_active=True)
+    actor = User(username="jobs-scope-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    other_department = Department(organization=other_org, name="Financeiro")
+    other_user = User(username="jobs-scope-user", full_name="Outro Usuario", role=UserRole.user, is_active=True, organization=other_org, department=other_department)
+    other_printer = Printer(organization=other_org, name="KONICA OUTRA JOBS", is_color=True)
+    db_session.add_all([other_org, actor, other_department, other_user, other_printer])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as user_exc:
+        list_jobs(user_id=other_user.id, department_id=None, printer_id=None, date_from=None, date_to=None, db=db_session, actor=actor)
+    assert user_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as department_exc:
+        list_jobs(user_id=None, department_id=other_department.id, printer_id=None, date_from=None, date_to=None, db=db_session, actor=actor)
+    assert department_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as printer_exc:
+        list_jobs(user_id=None, department_id=None, printer_id=other_printer.id, date_from=None, date_to=None, db=db_session, actor=actor)
+    assert printer_exc.value.status_code == 404
+
+
 def test_same_user_and_printer_names_can_exist_in_different_organizations(db_session: Session):
     other_org = Organization(name="Cliente C", slug="cliente-c", is_active=True)
     db_session.add(other_org)
