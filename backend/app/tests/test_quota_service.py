@@ -463,13 +463,14 @@ def test_web_print_rejects_uploads_above_configured_limit(db_session, monkeypatc
     db_session.add_all([user, printer])
     db_session.commit()
     monkeypatch.setattr("app.api.routes.jobs.settings.web_print_max_upload_mb", 1)
-    content = b"%PDF-1.4\n" + (b"0" * (1024 * 1024 + 1))
+    content = b"%PDF-1.4\n" + (b"0" * (3 * 1024 * 1024))
     upload = SimpleNamespace(filename="grande.pdf", file=BytesIO(content))
 
     with pytest.raises(HTTPException) as exc:
         web_print_endpoint(file=upload, printer_id=printer.id, is_color=False, db=db_session, current_user=user)
 
     assert exc.value.status_code == 413
+    assert upload.file.tell() < len(content)
     assert db_session.query(PrintJob).filter(PrintJob.printer_id == printer.id).count() == 0
 
 

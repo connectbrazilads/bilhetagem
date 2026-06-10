@@ -24,6 +24,7 @@ from app.services.print_job_service import register_print_job
 from app.services.settings_service import get_system_settings_dict
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+WEB_PRINT_READ_CHUNK_BYTES = 1024 * 1024
 
 
 def _can_operate_job(actor: User, job: PrintJob) -> bool:
@@ -330,10 +331,32 @@ def _ensure_pdf_content(file_content: bytes) -> None:
         raise HTTPException(status_code=400, detail="Arquivo PDF invalido")
 
 
-def _ensure_web_print_size(file_content: bytes) -> None:
-    max_bytes = settings.web_print_max_upload_mb * 1024 * 1024
-    if len(file_content) > max_bytes:
-        raise HTTPException(status_code=413, detail=f"PDF excede o limite de {settings.web_print_max_upload_mb} MB")
+def _web_print_max_upload_bytes() -> int:
+    return settings.web_print_max_upload_mb * 1024 * 1024
+
+
+def _web_print_size_error() -> HTTPException:
+    return HTTPException(status_code=413, detail=f"PDF excede o limite de {settings.web_print_max_upload_mb} MB")
+
+
+def _read_web_print_content(file: UploadFile) -> bytes:
+    max_bytes = _web_print_max_upload_bytes()
+    total = 0
+    chunks: list[bytes] = []
+    try:
+        while True:
+            chunk = file.file.read(WEB_PRINT_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise _web_print_size_error()
+            chunks.append(chunk)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Erro ao ler arquivo enviado") from exc
+    return b"".join(chunks)
 
 
 @router.post("/web-print", response_model=PrintJobDecision)
@@ -351,14 +374,10 @@ def web_print_endpoint(
     if not printer:
         raise HTTPException(status_code=404, detail="Impressora não encontrada")
         
-    # 2. Read PDF contents to temp location and parse page count
-    try:
-        file_content = file.file.read()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Erro ao ler arquivo enviado") from exc
+    # 2. Read PDF contents with size guard and parse page count
+    file_content = _read_web_print_content(file)
 
     document_name = _clean_web_print_filename(file.filename)
-    _ensure_web_print_size(file_content)
     _ensure_pdf_content(file_content)
     page_count = get_pdf_page_count(file_content)
     
