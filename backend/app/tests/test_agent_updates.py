@@ -1229,6 +1229,18 @@ def test_remote_queue_action_lifecycle(db_session: Session):
     )
 
     assert action.status == AgentQueueActionStatus.pending
+    created_audit = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "agent_queue_action_created", AuditLog.entity_id == action.id)
+        .one()
+    )
+    assert created_audit.log_metadata["agent_id"] == agent.id
+    assert created_audit.log_metadata["agent_uid"] == "agent-queue-1"
+    assert created_audit.log_metadata["computer_name"] == "PC-QUEUE"
+    assert created_audit.log_metadata["printer_id"] == printer.id
+    assert created_audit.log_metadata["driver_name"] == "KONICA Driver"
+    assert created_audit.log_metadata["ip_address"] == "192.168.1.125"
+    assert created_audit.log_metadata["bulk"] is False
 
     pending = poll_queue_actions(agent_uid="agent-queue-1", db=db_session, actor=actor)
 
@@ -1713,7 +1725,14 @@ def test_bulk_queue_action_applies_to_all_agents_in_organization(db_session: Ses
     assert {action.queue_name for action in actions} == {"KONICA_PADRAO"}
     assert {action.printer_id for action in actions} == {printer.id}
     assert poll_queue_actions(agent_uid="bulk-agent-other", db=db_session, actor=actor_other) == []
-    assert len(db_session.query(AuditLog).filter(AuditLog.action == "agent_queue_action_created").all()) == 2
+    audits = db_session.query(AuditLog).filter(AuditLog.action == "agent_queue_action_created").order_by(AuditLog.id).all()
+    assert len(audits) == 2
+    assert {audit.log_metadata["agent_uid"] for audit in audits} == {"bulk-agent-1", "bulk-agent-2"}
+    assert {audit.log_metadata["computer_name"] for audit in audits} == {"PC-1", "PC-2"}
+    assert {audit.log_metadata["printer_id"] for audit in audits} == {printer.id}
+    assert {audit.log_metadata["driver_name"] for audit in audits} == {"KONICA Driver"}
+    assert {audit.log_metadata["ip_address"] for audit in audits} == {"192.168.1.126"}
+    assert {audit.log_metadata["bulk"] for audit in audits} == {True}
 
 
 def test_bulk_queue_action_can_target_selected_agents(db_session: Session):
