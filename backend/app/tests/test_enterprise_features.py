@@ -1446,6 +1446,31 @@ def test_audit_log_listing_is_scoped_by_organization(db_session: Session):
     assert [log.entity_id for log in filtered] == [10]
 
 
+def test_audit_log_actor_name_does_not_cross_organizations(db_session: Session):
+    other_org = Organization(name="Cliente Audit Ator", slug="cliente-audit-ator", is_active=True)
+    admin = User(username="audit-main-admin", full_name="Audit Main", role=UserRole.admin, is_active=True, organization_id=1)
+    other_admin = User(username="audit-leaked-admin", full_name="Audit Other", role=UserRole.admin, is_active=True, organization=other_org)
+    db_session.add_all([other_org, admin, other_admin])
+    db_session.flush()
+
+    write_audit(
+        db_session,
+        action="maintenance_imported",
+        entity="audit_logs",
+        entity_id=123,
+        actor_user_id=other_admin.id,
+        organization_id=admin.organization_id,
+        metadata={"source": "manual"},
+    )
+    db_session.commit()
+
+    logs = list_audit_logs(action=None, entity=None, date_from=None, date_to=None, limit=100, db=db_session, actor=admin)
+
+    assert [log.entity_id for log in logs] == [123]
+    assert logs[0].actor_user_id == other_admin.id
+    assert logs[0].actor_username is None
+
+
 def test_audit_log_facets_are_scoped_by_organization(db_session: Session):
     other_org = Organization(name="Cliente Facets", slug="cliente-facets", is_active=True)
     admin = User(username="audit-facets", full_name="Audit Facets", role=UserRole.admin, is_active=True, organization_id=1)

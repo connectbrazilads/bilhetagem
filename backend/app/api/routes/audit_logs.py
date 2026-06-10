@@ -4,6 +4,7 @@ import io
 import json
 
 from fastapi import APIRouter, Depends, Query, Response
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -27,7 +28,7 @@ def _audit_query(
 ):
     query = (
         db.query(AuditLog, User.username)
-        .outerjoin(User, User.id == AuditLog.actor_user_id)
+        .outerjoin(User, and_(User.id == AuditLog.actor_user_id, User.organization_id == AuditLog.organization_id))
         .filter(AuditLog.organization_id == actor.organization_id)
     )
     if action:
