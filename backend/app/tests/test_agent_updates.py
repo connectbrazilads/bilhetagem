@@ -474,6 +474,30 @@ def test_agent_heartbeat_stores_recent_logs(db_session: Session):
     assert detail.recent_logs[0].source == "diagnostic"
 
 
+def test_agent_error_logs_create_operational_alert(db_session: Session):
+    actor = User(username="agent-error-log-alert", full_name="Agent Error Log", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-error-log-alert",
+            computer_name="PC-ERROR-LOG",
+            logs=[
+                {"level": "error", "message": "Falha ao consultar fila local", "source": "spool"},
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+    listed_agent = next(agent for agent in list_agents(db=db_session, actor=actor) if agent.id == response.id)
+
+    assert "last_error" not in {alert.code for alert in response.health_alerts}
+    assert any(alert.code == "recent_error_logs" and "Falha ao consultar fila local" in alert.message for alert in response.health_alerts)
+    assert any(alert.code == "recent_error_logs" for alert in listed_agent.health_alerts)
+
+
 def test_agent_logs_are_pruned_per_agent(db_session: Session):
     actor = User(username="agent-prune", full_name="Agent Prune", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add(actor)

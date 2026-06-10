@@ -42,6 +42,7 @@ from app.services.organization_service import DEFAULT_ORGANIZATION_SLUG
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
+RECENT_AGENT_LOG_ALERT_WINDOW = timedelta(minutes=15)
 
 
 def _version_tuple(version: str) -> tuple[int, ...]:
@@ -351,7 +352,32 @@ def _store_agent_logs(db: Session, agent: PrintAgent, payload: AgentHeartbeatPay
         db.query(AgentLog).filter(AgentLog.id.in_(stale_ids)).delete(synchronize_session=False)
 
 
-def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealthAlertRead]:
+def _recent_error_log_alert(db: Session, agent: PrintAgent) -> AgentHealthAlertRead | None:
+    since = datetime.now(timezone.utc) - RECENT_AGENT_LOG_ALERT_WINDOW
+    logs = (
+        db.query(AgentLog)
+        .filter(
+            AgentLog.organization_id == agent.organization_id,
+            AgentLog.agent_id == agent.id,
+            AgentLog.received_at >= since,
+            AgentLog.level.in_(["error", "critical"]),
+        )
+        .order_by(AgentLog.received_at.desc(), AgentLog.id.desc())
+        .limit(20)
+        .all()
+    )
+    if not logs:
+        return None
+    latest = logs[0]
+    severity = "error" if any(log.level == "critical" for log in logs) else "warning"
+    return AgentHealthAlertRead(
+        code="recent_error_logs",
+        severity=severity,
+        message=f"{len(logs)} log(s) de erro nos ultimos 15 min: {latest.message[:140]}",
+    )
+
+
+def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None = None) -> list[AgentHealthAlertRead]:
     alerts: list[AgentHealthAlertRead] = []
     aliases = list(agent.aliases)
     present_aliases = [alias for alias in aliases if _alias_is_present(agent, alias)]
@@ -363,6 +389,10 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealth
         alerts.append(AgentHealthAlertRead(code="offline", severity="error", message="Agent offline ou sem contato recente"))
     if agent.last_error:
         alerts.append(AgentHealthAlertRead(code="last_error", severity="warning", message=agent.last_error))
+    if db is not None:
+        recent_error_alert = _recent_error_log_alert(db, agent)
+        if recent_error_alert:
+            alerts.append(recent_error_alert)
     if agent.event_log_enabled is False:
         alerts.append(AgentHealthAlertRead(code="event_log_disabled", severity="warning", message="Event Log de impressao desativado no agent"))
     if agent.last_seen_at and not present_aliases:
@@ -457,7 +487,7 @@ def _agent_to_read(agent: PrintAgent, include_jobs: bool = False, db: Session | 
         created_at=agent.created_at,
         is_online=is_online,
         status=status_text,
-        health_alerts=_agent_health_alerts(agent, is_online),
+        health_alerts=_agent_health_alerts(agent, is_online, db),
         aliases=[_alias_to_read(agent, alias) for alias in agent.aliases],
         recent_jobs=_recent_jobs(db, agent) if include_jobs and db is not None else [],
         queue_actions=queue_actions,
@@ -762,7 +792,7 @@ def agent_heartbeat(
     )
     if not agent:
         raise HTTPException(status_code=404, detail="Agent nao encontrado")
-    return _agent_to_read(agent)
+    return _agent_to_read(agent, db=db)
 
 
 @router.get("/agents", response_model=list[PrintAgentRead])
@@ -777,7 +807,7 @@ def list_agents(
         .order_by(PrintAgent.last_seen_at.desc().nullslast(), PrintAgent.computer_name, PrintAgent.id)
         .all()
     )
-    return [_agent_to_read(agent) for agent in agents]
+    return [_agent_to_read(agent, db=db) for agent in agents]
 
 
 @router.get("/agents/{agent_id}", response_model=PrintAgentRead)
