@@ -879,6 +879,8 @@ def finish_queue_action(
     )
     if not action:
         raise HTTPException(status_code=404, detail="Acao nao encontrada")
+    if action.status != AgentQueueActionStatus.running:
+        raise HTTPException(status_code=409, detail="Acao remota nao esta em execucao")
     if actor.role == UserRole.agent:
         if not payload.agent_uid:
             raise HTTPException(status_code=403, detail="agent_uid obrigatorio para confirmar acao remota")

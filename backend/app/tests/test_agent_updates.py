@@ -547,6 +547,62 @@ def test_remote_queue_action_lifecycle(db_session: Session):
     assert result_audit.log_metadata["printer_id"] == printer.id
 
 
+def test_queue_action_result_requires_running_status(db_session: Session):
+    actor = User(username="queue-state-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA STATE", ip_address="192.168.1.129", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-queue-state", computer_name="PC-STATE"),
+        request=_request("10.0.0.33"),
+        db=db_session,
+        actor=actor,
+    )
+    action = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA_STATE",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.129",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    with pytest.raises(HTTPException) as pending_exc:
+        finish_queue_action(
+            action_id=action.id,
+            payload=AgentQueueActionResult(status=AgentQueueActionStatus.succeeded, result_message="antes do despacho"),
+            db=db_session,
+            actor=actor,
+        )
+    assert pending_exc.value.status_code == 409
+    db_session.rollback()
+
+    poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor)
+    finish_queue_action(
+        action_id=action.id,
+        payload=AgentQueueActionResult(status=AgentQueueActionStatus.succeeded, result_message="concluida"),
+        db=db_session,
+        actor=actor,
+    )
+
+    with pytest.raises(HTTPException) as completed_exc:
+        finish_queue_action(
+            action_id=action.id,
+            payload=AgentQueueActionResult(status=AgentQueueActionStatus.failed, result_message="sobrescrever"),
+            db=db_session,
+            actor=actor,
+        )
+    assert completed_exc.value.status_code == 409
+    db_session.rollback()
+    persisted = db_session.get(type(action), action.id)
+    assert persisted.status == AgentQueueActionStatus.succeeded
+    assert persisted.result_message == "concluida"
+
+
 def test_restore_queue_action_rebinds_physical_printer(db_session: Session):
     actor = User(username="queue-restore-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="KONICA RESTAURAR", ip_address="192.168.1.126", is_color=True)
