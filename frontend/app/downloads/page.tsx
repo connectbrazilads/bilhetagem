@@ -104,6 +104,10 @@ function isUnsafeAgentPassword(value: string) {
   return UNSAFE_AGENT_PASSWORDS.has(value.trim().toLowerCase());
 }
 
+function isValidOrganizationSlug(value: string) {
+  return /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(value.trim().toLowerCase());
+}
+
 export default function DownloadsPage() {
   const [releases, setReleases] = useState<AgentRelease[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
@@ -220,10 +224,13 @@ export default function DownloadsPage() {
   ].filter(Boolean);
   const selectedOrganization = organizations.find((organization) => organization.slug === deployOrg);
   const selectedOrganizationActive = organizations.length === 0 || selectedOrganization?.is_active === true;
+  const validOrganizationSlug = isValidOrganizationSlug(deployOrg);
   const unsafePassword = isUnsafeAgentPassword(deployPassword);
-  const commandReady = Boolean(deployOrg.trim() && deployUser.trim() && deployPassword.trim() && selectedOrganizationActive && !unsafePassword);
+  const commandReady = Boolean(deployOrg.trim() && validOrganizationSlug && deployUser.trim() && deployPassword.trim() && selectedOrganizationActive && !unsafePassword);
   const commandMissingMessage = unsafePassword
     ? "Use uma senha exclusiva para esta empresa; senhas padrao ou placeholders sao bloqueadas."
+    : !validOrganizationSlug
+    ? "Slug da empresa invalido. Use apenas letras, numeros e hifens, sem espacos."
     : selectedOrganizationActive
     ? "Informe empresa, usuario e senha do agent para gerar o comando."
     : "Empresa inativa: reative a empresa antes de gerar comando de instalacao.";
