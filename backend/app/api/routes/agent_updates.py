@@ -415,6 +415,14 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool, db: Session | None 
     latest_version = _published_agent_version()
     if _is_newer(latest_version, agent.version):
         alerts.append(AgentHealthAlertRead(code="outdated_version", severity="info", message=f"Agent abaixo da versao publicada {latest_version}"))
+        if agent.auto_update_enabled is False:
+            alerts.append(
+                AgentHealthAlertRead(
+                    code="auto_update_disabled",
+                    severity="warning",
+                    message="Auto-update desativado neste agent; atualize manualmente ou reinstale com auto-update ativo",
+                )
+            )
 
     return alerts
 

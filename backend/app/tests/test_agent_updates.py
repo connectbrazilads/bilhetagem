@@ -449,6 +449,29 @@ def test_agent_health_alerts_report_operational_issues(db_session: Session, monk
     assert "offline" not in alert_codes
 
 
+def test_outdated_agent_with_disabled_auto_update_is_actionable(db_session: Session, monkeypatch):
+    monkeypatch.setattr(settings, "agent_latest_version", "0.3.0")
+    actor = User(username="agent-update-disabled", full_name="Agent Update Disabled", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-update-disabled",
+            version="0.2.0",
+            auto_update_enabled=False,
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    alerts = {alert.code: alert for alert in response.health_alerts}
+    assert "outdated_version" in alerts
+    assert alerts["auto_update_disabled"].severity == "warning"
+    assert "Auto-update desativado" in alerts["auto_update_disabled"].message
+
+
 def test_agent_heartbeat_stores_recent_logs(db_session: Session):
     actor = User(username="agent-logs", full_name="Agent Logs", role=UserRole.admin, is_active=True, organization_id=1)
     db_session.add(actor)
