@@ -3,7 +3,8 @@ param(
     [switch]$SkipAgent,
     [switch]$SkipFrontend,
     [switch]$VerifyAgentRelease,
-    [switch]$RequireAgentSignature
+    [switch]$RequireAgentSignature,
+    [switch]$RequireAgentMsi
 )
 
 $ErrorActionPreference = "Stop"
@@ -116,11 +117,10 @@ if (-not $SkipFrontend) {
 if ($VerifyAgentRelease) {
     Invoke-Step "Agent release artifacts" {
         $verifyScript = Join-Path $Root "agent\verify_release.ps1"
-        if ($RequireAgentSignature) {
-            & $verifyScript -RequireSignature
-        } else {
-            & $verifyScript
-        }
+        $releaseArgs = @{}
+        if ($RequireAgentSignature) { $releaseArgs.RequireSignature = $true }
+        if ($RequireAgentMsi) { $releaseArgs.RequireMsi = $true }
+        & $verifyScript @releaseArgs
     }
 }
 

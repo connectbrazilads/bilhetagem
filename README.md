@@ -51,6 +51,12 @@ Para validar tambem os artefatos versionados do agent:
 .\\verify.ps1 -VerifyAgentRelease
 ```
 
+Para uma release comercial com MSI obrigatorio:
+
+```powershell
+.\\verify.ps1 -VerifyAgentRelease -RequireAgentMsi
+```
+
 Quando o certificado real estiver configurado, use `-RequireAgentSignature` para exigir assinatura valida.
 
 ## Endpoints principais

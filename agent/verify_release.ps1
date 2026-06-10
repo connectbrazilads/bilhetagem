@@ -1,7 +1,8 @@
 param(
     [string]$ReleaseRoot = "",
     [string]$Version = "",
-    [switch]$RequireSignature
+    [switch]$RequireSignature,
+    [switch]$RequireMsi
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +31,10 @@ foreach ($release in $versions) {
     $expectedSums = @{}
     foreach ($file in @($release.files)) {
         $expectedSums[$file.filename] = ([string]$file.sha256).ToLowerInvariant()
+    }
+    $hasMsi = @($release.files | Where-Object { $_.kind -eq "msi" -or ([string]$_.filename).ToLowerInvariant().EndsWith(".msi") }).Count -gt 0
+    if ($RequireMsi -and -not $hasMsi) {
+        $failures.Add("MSI ausente na versao: $($release.version)")
     }
 
     if (-not (Test-Path $sumsPath)) {
