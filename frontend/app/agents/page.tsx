@@ -5,7 +5,7 @@ import { Activity, AlertTriangle, CheckCircle2, Clock3, Cpu, FileText, MonitorCo
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getCurrentRole } from "@/lib/api";
 
 type AgentQueue = {
   id: number;
@@ -179,9 +179,15 @@ function presentConnectionTypes(agent: AgentRow) {
   return Array.from(new Set(agent.aliases.filter((alias) => alias.is_present).map((alias) => alias.connection_type || null)));
 }
 
+function printerName(printers: PrinterOption[], printerId: number | null) {
+  if (!printerId) return "Sem vinculo";
+  return printers.find((printer) => printer.id === printerId)?.name || `#${printerId}`;
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [printers, setPrinters] = useState<PrinterOption[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<AgentRow | null>(null);
   const [agentSearch, setAgentSearch] = useState("");
   const [agentStatusFilter, setAgentStatusFilter] = useState("all");
@@ -231,7 +237,7 @@ export default function AgentsPage() {
   }
 
   async function createQueueAction(actionType: QueueActionType, queue?: AgentQueue) {
-    if (!selectedAgent) return;
+    if (!selectedAgent || !isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setActionMessage(null);
@@ -266,6 +272,7 @@ export default function AgentsPage() {
   }
 
   async function bindAlias(aliasId: number, printerId: string) {
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setActionMessage(null);
@@ -285,6 +292,7 @@ export default function AgentsPage() {
   }
 
   async function createBulkQueueAction() {
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setBulkMessage(null);
@@ -313,6 +321,8 @@ export default function AgentsPage() {
   }
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    setIsAdmin(token ? getCurrentRole(token) === "admin" : false);
     load();
     const interval = setInterval(load, 15000);
     return () => clearInterval(interval);
@@ -359,6 +369,7 @@ export default function AgentsPage() {
     });
   }, [agentSearch, agentStatusFilter, agents]);
   const canApplyBulkQueue =
+    isAdmin &&
     Boolean(bulkForm.queue_name && bulkForm.printer_id && bulkForm.driver_name && (bulkForm.ip_address || bulkForm.port_name)) &&
     (bulkScope === "all" ? agents.length > 0 : selectedBulkAgentIds.length > 0);
 
@@ -451,100 +462,102 @@ export default function AgentsPage() {
         </div>
       </Surface>
 
-      <Surface className="mb-6 p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <TerminalSquare className="h-4 w-4 text-primary" />
-          <div>
-            <h2 className="text-sm font-bold">Aplicar fila gerenciada</h2>
-            <p className="text-xs text-muted-foreground">Cria a mesma fila padronizada em PCs selecionados ou em todos os agents da empresa.</p>
+      {isAdmin ? (
+        <Surface className="mb-6 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <TerminalSquare className="h-4 w-4 text-primary" />
+            <div>
+              <h2 className="text-sm font-bold">Aplicar fila gerenciada</h2>
+              <p className="text-xs text-muted-foreground">Cria a mesma fila padronizada em PCs selecionados ou em todos os agents da empresa.</p>
+            </div>
           </div>
-        </div>
-        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-xs font-semibold uppercase text-muted-foreground">Escopo</span>
-          <button
-            type="button"
-            className={`rounded-md border px-3 py-1.5 ${bulkScope === "all" ? "border-primary bg-primary/10 text-primary" : "bg-white text-muted-foreground"}`}
-            onClick={() => setBulkScope("all")}
-          >
-            Empresa inteira
-          </button>
-          <button
-            type="button"
-            className={`rounded-md border px-3 py-1.5 ${bulkScope === "selected" ? "border-primary bg-primary/10 text-primary" : "bg-white text-muted-foreground"}`}
-            onClick={() => setBulkScope("selected")}
-          >
-            PCs selecionados
-          </button>
-          {bulkScope === "selected" ? <span className="text-xs text-muted-foreground">{selectedBulkAgentIds.length} selecionado(s)</span> : null}
-        </div>
-        {bulkScope === "selected" ? (
-          <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {filteredAgents.map((agent) => {
-              const checked = selectedBulkAgentIds.includes(agent.id);
-              return (
-                <label key={agent.id} className="flex cursor-pointer items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(event) => {
-                      setSelectedBulkAgentIds((ids) =>
-                        event.target.checked ? [...ids, agent.id] : ids.filter((id) => id !== agent.id),
-                      );
-                    }}
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold">{agent.computer_name || agent.agent_uid}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{agent.os_user || "-"} - {agent.status}</span>
-                  </span>
-                </label>
-              );
-            })}
-            {filteredAgents.length === 0 ? <div className="text-xs text-muted-foreground">Nenhum agent disponivel para selecao.</div> : null}
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-xs font-semibold uppercase text-muted-foreground">Escopo</span>
+            <button
+              type="button"
+              className={`rounded-md border px-3 py-1.5 ${bulkScope === "all" ? "border-primary bg-primary/10 text-primary" : "bg-white text-muted-foreground"}`}
+              onClick={() => setBulkScope("all")}
+            >
+              Empresa inteira
+            </button>
+            <button
+              type="button"
+              className={`rounded-md border px-3 py-1.5 ${bulkScope === "selected" ? "border-primary bg-primary/10 text-primary" : "bg-white text-muted-foreground"}`}
+              onClick={() => setBulkScope("selected")}
+            >
+              PCs selecionados
+            </button>
+            {bulkScope === "selected" ? <span className="text-xs text-muted-foreground">{selectedBulkAgentIds.length} selecionado(s)</span> : null}
           </div>
-        ) : null}
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_140px_140px_auto]">
-          <Input
-            placeholder="Nome padrao da fila"
-            value={bulkForm.queue_name}
-            onChange={(event) => setBulkForm({ ...bulkForm, queue_name: event.target.value })}
-          />
-          <select
-            className="h-9 rounded-md border bg-white px-3 text-sm"
-            value={bulkForm.printer_id}
-            onChange={(event) => {
-              const printer = printers.find((item) => item.id.toString() === event.target.value);
-              setBulkForm({
-                ...bulkForm,
-                printer_id: event.target.value,
-                ip_address: bulkForm.ip_address || printer?.ip_address || "",
-              });
-            }}
-          >
-            <option value="">Impressora fisica</option>
-            {printers.map((printer) => (
-              <option key={printer.id} value={printer.id}>
-                {printer.name}
-              </option>
-            ))}
-          </select>
-          <Input
-            placeholder="Driver ja instalado"
-            value={bulkForm.driver_name}
-            onChange={(event) => setBulkForm({ ...bulkForm, driver_name: event.target.value })}
-          />
-          <Input placeholder="IP" value={bulkForm.ip_address} onChange={(event) => setBulkForm({ ...bulkForm, ip_address: event.target.value })} />
-          <Input placeholder="Porta" value={bulkForm.port_name} onChange={(event) => setBulkForm({ ...bulkForm, port_name: event.target.value })} />
-          <Button
-            type="button"
-            onClick={createBulkQueueAction}
-            disabled={!canApplyBulkQueue}
-          >
-            <Plus className="h-4 w-4" />
-            Aplicar
-          </Button>
-        </div>
-        {bulkMessage ? <div className="mt-2 text-xs text-muted-foreground">{bulkMessage}</div> : null}
-      </Surface>
+          {bulkScope === "selected" ? (
+            <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {filteredAgents.map((agent) => {
+                const checked = selectedBulkAgentIds.includes(agent.id);
+                return (
+                  <label key={agent.id} className="flex cursor-pointer items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) => {
+                        setSelectedBulkAgentIds((ids) =>
+                          event.target.checked ? [...ids, agent.id] : ids.filter((id) => id !== agent.id),
+                        );
+                      }}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{agent.computer_name || agent.agent_uid}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{agent.os_user || "-"} - {agent.status}</span>
+                    </span>
+                  </label>
+                );
+              })}
+              {filteredAgents.length === 0 ? <div className="text-xs text-muted-foreground">Nenhum agent disponivel para selecao.</div> : null}
+            </div>
+          ) : null}
+          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_140px_140px_auto]">
+            <Input
+              placeholder="Nome padrao da fila"
+              value={bulkForm.queue_name}
+              onChange={(event) => setBulkForm({ ...bulkForm, queue_name: event.target.value })}
+            />
+            <select
+              className="h-9 rounded-md border bg-white px-3 text-sm"
+              value={bulkForm.printer_id}
+              onChange={(event) => {
+                const printer = printers.find((item) => item.id.toString() === event.target.value);
+                setBulkForm({
+                  ...bulkForm,
+                  printer_id: event.target.value,
+                  ip_address: bulkForm.ip_address || printer?.ip_address || "",
+                });
+              }}
+            >
+              <option value="">Impressora fisica</option>
+              {printers.map((printer) => (
+                <option key={printer.id} value={printer.id}>
+                  {printer.name}
+                </option>
+              ))}
+            </select>
+            <Input
+              placeholder="Driver ja instalado"
+              value={bulkForm.driver_name}
+              onChange={(event) => setBulkForm({ ...bulkForm, driver_name: event.target.value })}
+            />
+            <Input placeholder="IP" value={bulkForm.ip_address} onChange={(event) => setBulkForm({ ...bulkForm, ip_address: event.target.value })} />
+            <Input placeholder="Porta" value={bulkForm.port_name} onChange={(event) => setBulkForm({ ...bulkForm, port_name: event.target.value })} />
+            <Button
+              type="button"
+              onClick={createBulkQueueAction}
+              disabled={!canApplyBulkQueue}
+            >
+              <Plus className="h-4 w-4" />
+              Aplicar
+            </Button>
+          </div>
+          {bulkMessage ? <div className="mt-2 text-xs text-muted-foreground">{bulkMessage}</div> : null}
+        </Surface>
+      ) : null}
 
       <Surface className="overflow-hidden">
         <table className="w-full text-sm">
@@ -682,71 +695,73 @@ export default function AgentsPage() {
                 </div>
               ) : null}
 
-              <div className="rounded-md border bg-muted/20 p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <TerminalSquare className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-bold">Administracao remota de filas</h3>
+              {isAdmin ? (
+                <div className="rounded-md border bg-muted/20 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <TerminalSquare className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-bold">Administracao remota de filas</h3>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_130px_130px_auto_auto]">
+                    <Input
+                      placeholder="Nome da fila"
+                      value={queueForm.queue_name}
+                      onChange={(event) => setQueueForm({ ...queueForm, queue_name: event.target.value })}
+                    />
+                    <select
+                      className="h-9 rounded-md border bg-white px-3 text-sm"
+                      value={queueForm.printer_id}
+                      onChange={(event) => {
+                        const printer = printers.find((item) => item.id.toString() === event.target.value);
+                        setQueueForm({
+                          ...queueForm,
+                          printer_id: event.target.value,
+                          ip_address: queueForm.ip_address || printer?.ip_address || "",
+                        });
+                      }}
+                    >
+                      <option value="">Impressora fisica</option>
+                      {printers.map((printer) => (
+                        <option key={printer.id} value={printer.id}>
+                          {printer.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      placeholder="Driver ja instalado"
+                      value={queueForm.driver_name}
+                      onChange={(event) => setQueueForm({ ...queueForm, driver_name: event.target.value })}
+                    />
+                    <Input
+                      placeholder="IP"
+                      value={queueForm.ip_address}
+                      onChange={(event) => setQueueForm({ ...queueForm, ip_address: event.target.value })}
+                    />
+                    <Input
+                      placeholder="Porta"
+                      value={queueForm.port_name}
+                      onChange={(event) => setQueueForm({ ...queueForm, port_name: event.target.value })}
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => createQueueAction("create_queue")}
+                      disabled={!queueForm.queue_name || !queueForm.printer_id || !queueForm.driver_name || (!queueForm.ip_address && !queueForm.port_name)}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Criar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => createQueueAction("restore_queue")}
+                      disabled={!queueForm.queue_name || !queueForm.printer_id || !queueForm.driver_name || (!queueForm.ip_address && !queueForm.port_name)}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Restaurar
+                    </Button>
+                  </div>
+                  {actionMessage ? <div className="mt-2 text-xs text-muted-foreground">{actionMessage}</div> : null}
                 </div>
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_130px_130px_auto_auto]">
-                  <Input
-                    placeholder="Nome da fila"
-                    value={queueForm.queue_name}
-                    onChange={(event) => setQueueForm({ ...queueForm, queue_name: event.target.value })}
-                  />
-                  <select
-                    className="h-9 rounded-md border bg-white px-3 text-sm"
-                    value={queueForm.printer_id}
-                    onChange={(event) => {
-                      const printer = printers.find((item) => item.id.toString() === event.target.value);
-                      setQueueForm({
-                        ...queueForm,
-                        printer_id: event.target.value,
-                        ip_address: queueForm.ip_address || printer?.ip_address || "",
-                      });
-                    }}
-                  >
-                    <option value="">Impressora fisica</option>
-                    {printers.map((printer) => (
-                      <option key={printer.id} value={printer.id}>
-                        {printer.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Input
-                    placeholder="Driver ja instalado"
-                    value={queueForm.driver_name}
-                    onChange={(event) => setQueueForm({ ...queueForm, driver_name: event.target.value })}
-                  />
-                  <Input
-                    placeholder="IP"
-                    value={queueForm.ip_address}
-                    onChange={(event) => setQueueForm({ ...queueForm, ip_address: event.target.value })}
-                  />
-                  <Input
-                    placeholder="Porta"
-                    value={queueForm.port_name}
-                    onChange={(event) => setQueueForm({ ...queueForm, port_name: event.target.value })}
-                  />
-                  <Button
-                    type="button"
-                    onClick={() => createQueueAction("create_queue")}
-                    disabled={!queueForm.queue_name || !queueForm.printer_id || !queueForm.driver_name || (!queueForm.ip_address && !queueForm.port_name)}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Criar
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => createQueueAction("restore_queue")}
-                    disabled={!queueForm.queue_name || !queueForm.printer_id || !queueForm.driver_name || (!queueForm.ip_address && !queueForm.port_name)}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Restaurar
-                  </Button>
-                </div>
-                {actionMessage ? <div className="mt-2 text-xs text-muted-foreground">{actionMessage}</div> : null}
-              </div>
+              ) : null}
 
               <div>
                 <h3 className="mb-2 text-sm font-bold">Filas locais</h3>
@@ -758,7 +773,7 @@ export default function AgentsPage() {
                         <th className="p-3">Conexao</th>
                         <th className="p-3">IP / Porta</th>
                         <th className="p-3">Vinculo</th>
-                        <th className="p-3 text-right">Acao</th>
+                        {isAdmin ? <th className="p-3 text-right">Acao</th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -795,43 +810,56 @@ export default function AgentsPage() {
                             ) : null}
                           </td>
                           <td className="p-3">
-                            <select
-                              className={`h-8 max-w-[220px] rounded-md border bg-white px-2 text-xs font-semibold outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20 ${
-                                queue.printer_id ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"
-                              }`}
-                              value={queue.printer_id?.toString() || ""}
-                              onChange={(event) => bindAlias(queue.id, event.target.value)}
-                              title="Vincular esta fila a uma impressora fisica"
-                            >
-                              <option value="">Sem vinculo</option>
-                              {printers.map((printer) => (
-                                <option key={printer.id} value={printer.id}>
-                                  {printer.name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                className="h-8 w-8 p-0"
-                                title={canRestoreQueue(queue) ? "Restaurar fila neste PC" : "Restaurar exige impressora, driver e IP/porta"}
-                                disabled={!canRestoreQueue(queue)}
-                                onClick={() => createQueueAction("restore_queue", queue)}
+                            {isAdmin ? (
+                              <select
+                                className={`h-8 max-w-[220px] rounded-md border bg-white px-2 text-xs font-semibold outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20 ${
+                                  queue.printer_id ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"
+                                }`}
+                                value={queue.printer_id?.toString() || ""}
+                                onChange={(event) => bindAlias(queue.id, event.target.value)}
+                                title="Vincular esta fila a uma impressora fisica"
                               >
-                                <RefreshCw className="h-4 w-4 text-primary" />
-                              </Button>
-                              <Button variant="ghost" className="h-8 w-8 p-0" title="Remover fila neste PC" onClick={() => createQueueAction("remove_queue", queue)}>
-                                <Trash2 className="h-4 w-4 text-red-600" />
-                              </Button>
-                            </div>
+                                <option value="">Sem vinculo</option>
+                                {printers.map((printer) => (
+                                  <option key={printer.id} value={printer.id}>
+                                    {printer.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span
+                                className={`inline-flex max-w-[220px] rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                                  queue.printer_id ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"
+                                }`}
+                                title={printerName(printers, queue.printer_id)}
+                              >
+                                <span className="truncate">{printerName(printers, queue.printer_id)}</span>
+                              </span>
+                            )}
                           </td>
+                          {isAdmin ? (
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  title={canRestoreQueue(queue) ? "Restaurar fila neste PC" : "Restaurar exige impressora, driver e IP/porta"}
+                                  disabled={!canRestoreQueue(queue)}
+                                  onClick={() => createQueueAction("restore_queue", queue)}
+                                >
+                                  <RefreshCw className="h-4 w-4 text-primary" />
+                                </Button>
+                                <Button variant="ghost" className="h-8 w-8 p-0" title="Remover fila neste PC" onClick={() => createQueueAction("remove_queue", queue)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              </div>
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                       {selectedAgent.aliases.length === 0 ? (
                         <tr>
-                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={5}>
+                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={isAdmin ? 5 : 4}>
                             Nenhuma fila local detectada.
                           </td>
                         </tr>
