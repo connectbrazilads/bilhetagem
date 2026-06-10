@@ -721,3 +721,29 @@ def test_monthly_report_email_scheduler_processes_active_organizations(db_sessio
     assert audit.organization_id == 1
     assert audit.entity_id == 99
     assert audit.log_metadata["automatic"] is True
+
+
+def test_monthly_report_email_scheduler_audits_failures_per_organization(db_session: Session, monkeypatch):
+    failing_org = Organization(name="Cliente Scheduler Falha", slug="cliente-scheduler-falha", is_active=True)
+    healthy_org = Organization(name="Cliente Scheduler OK", slug="cliente-scheduler-ok", is_active=True)
+    db_session.add_all([failing_org, healthy_org])
+    db_session.commit()
+
+    def fake_send_due(db, organization_id, now=None):
+        if organization_id == failing_org.id:
+            raise RuntimeError("SMTP indisponivel")
+        return {"sent": False, "reason": "Envio mensal desativado"}
+
+    monkeypatch.setattr("app.services.email_scheduler.send_due_monthly_report_email", fake_send_due)
+
+    results = send_due_monthly_reports_once(db_session, now=datetime(2026, 6, 10, tzinfo=timezone.utc))
+
+    failure = next(result for result in results if result["organization_id"] == failing_org.id)
+    assert failure["sent"] is False
+    assert failure["error"] is True
+    assert failure["reason"] == "SMTP indisponivel"
+    assert {result["organization_id"] for result in results} >= {1, failing_org.id, healthy_org.id}
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_due_email_failed").one()
+    assert audit.organization_id == failing_org.id
+    assert audit.actor_user_id is None
+    assert audit.log_metadata == {"automatic": True, "reason": "SMTP indisponivel"}

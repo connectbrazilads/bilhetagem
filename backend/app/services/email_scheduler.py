@@ -47,6 +47,21 @@ def send_due_monthly_reports_once(db: Session, now: datetime | None = None) -> l
         except Exception as exc:
             db.rollback()
             logger.exception("Falha no envio mensal automatico da empresa %s", organization.slug)
+            try:
+                write_audit(
+                    db,
+                    action="monthly_closing_due_email_failed",
+                    entity="monthly_closings",
+                    organization_id=organization.id,
+                    metadata={
+                        "automatic": True,
+                        "reason": str(exc)[:500],
+                    },
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("Falha ao auditar erro de envio mensal da empresa %s", organization.slug)
             results.append(
                 {
                     "organization_id": organization.id,
