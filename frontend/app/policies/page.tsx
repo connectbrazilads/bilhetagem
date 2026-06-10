@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Edit, Plus, ShieldCheck, TestTube2, Trash2 } from "
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getCurrentRole } from "@/lib/api";
 
 type PolicyRuleType = "always" | "max_pages" | "color" | "time_window";
 type PolicyAction = "allow" | "block" | "require_release" | "force_mono";
@@ -116,6 +116,7 @@ export default function PoliciesPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [simulationForm, setSimulationForm] = useState(emptySimulationForm);
   const [simulation, setSimulation] = useState<PolicySimulation | null>(null);
@@ -135,6 +136,8 @@ export default function PoliciesPage() {
   }
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    setIsAdmin(token ? getCurrentRole(token) === "admin" : false);
     load();
   }, []);
 
@@ -192,6 +195,7 @@ export default function PoliciesPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setError(null);
@@ -216,6 +220,7 @@ export default function PoliciesPage() {
   }
 
   function startEdit(policy: PolicyRow) {
+    if (!isAdmin) return;
     setEditingId(policy.id);
     setForm({
       name: policy.name,
@@ -238,6 +243,7 @@ export default function PoliciesPage() {
   }
 
   async function deletePolicy(policy: PolicyRow) {
+    if (!isAdmin) return;
     if (!window.confirm(`Excluir a politica "${policy.name}"?`)) return;
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -293,6 +299,7 @@ export default function PoliciesPage() {
   }
 
   async function reorderPolicy(policyId: number, direction: "up" | "down") {
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     const currentIndex = policies.findIndex((policy) => policy.id === policyId);
@@ -314,6 +321,7 @@ export default function PoliciesPage() {
   }
 
   async function togglePolicyActive(policy: PolicyRow) {
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setError(null);
@@ -380,87 +388,89 @@ export default function PoliciesPage() {
         <Summary label="Bloqueios" value={summary.blockers} />
       </div>
 
-      <Surface as="form" className="mb-4 grid gap-3 p-4" onSubmit={submit}>
-        <div className="grid gap-3 lg:grid-cols-[1fr_120px_170px_170px_130px]">
-          <Input placeholder="Nome da politica" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
-          <Input placeholder="Prioridade" type="number" value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })} required />
-          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.rule_type} onChange={(event) => changeRuleType(event.target.value as PolicyRuleType)}>
-            {Object.entries(ruleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.action} onChange={(event) => setForm({ ...form, action: event.target.value as PolicyAction })}>
-            {Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <label className="flex items-center gap-2 px-2 text-sm font-medium">
-            <input type="checkbox" className="h-4 w-4" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} />
-            Ativa
-          </label>
-        </div>
+      {isAdmin ? (
+        <Surface as="form" className="mb-4 grid gap-3 p-4" onSubmit={submit}>
+          <div className="grid gap-3 lg:grid-cols-[1fr_120px_170px_170px_130px]">
+            <Input placeholder="Nome da politica" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+            <Input placeholder="Prioridade" type="number" value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })} required />
+            <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.rule_type} onChange={(event) => changeRuleType(event.target.value as PolicyRuleType)}>
+              {Object.entries(ruleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.action} onChange={(event) => setForm({ ...form, action: event.target.value as PolicyAction })}>
+              {Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <label className="flex items-center gap-2 px-2 text-sm font-medium">
+              <input type="checkbox" className="h-4 w-4" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} />
+              Ativa
+            </label>
+          </div>
 
-        <div className="grid gap-3 lg:grid-cols-5">
-          <Input
-            placeholder="Max paginas"
-            type="number"
-            value={form.max_pages}
-            onChange={(event) => setForm({ ...form, max_pages: event.target.value })}
-            disabled={form.rule_type !== "max_pages"}
-            required={form.rule_type === "max_pages"}
-          />
-          <Input placeholder="Dias: 0,1,2 ou seg,ter" value={form.days_of_week} onChange={(event) => setForm({ ...form, days_of_week: event.target.value })} />
-          <Input type="time" value={form.start_time} onChange={(event) => setForm({ ...form, start_time: event.target.value })} disabled={form.rule_type !== "time_window"} required={form.rule_type === "time_window"} />
-          <Input type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} disabled={form.rule_type !== "time_window"} required={form.rule_type === "time_window"} />
-          <Input placeholder="Mensagem" value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} />
-        </div>
+          <div className="grid gap-3 lg:grid-cols-5">
+            <Input
+              placeholder="Max paginas"
+              type="number"
+              value={form.max_pages}
+              onChange={(event) => setForm({ ...form, max_pages: event.target.value })}
+              disabled={form.rule_type !== "max_pages"}
+              required={form.rule_type === "max_pages"}
+            />
+            <Input placeholder="Dias: 0,1,2 ou seg,ter" value={form.days_of_week} onChange={(event) => setForm({ ...form, days_of_week: event.target.value })} />
+            <Input type="time" value={form.start_time} onChange={(event) => setForm({ ...form, start_time: event.target.value })} disabled={form.rule_type !== "time_window"} required={form.rule_type === "time_window"} />
+            <Input type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} disabled={form.rule_type !== "time_window"} required={form.rule_type === "time_window"} />
+            <Input placeholder="Mensagem" value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} />
+          </div>
 
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
-          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.user_id} onChange={(event) => setForm({ ...form, user_id: event.target.value })}>
-            <option value="">Todos os usuarios</option>
-            {users.map((user) => <option key={user.id} value={user.id}>{user.username} - {user.full_name}</option>)}
-          </select>
-          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.department_id} onChange={(event) => setForm({ ...form, department_id: event.target.value })}>
-            <option value="">Todos departamentos</option>
-            {departments.map((department) => (
-              <option key={department.id} value={department.id}>
-                {department.name}
-              </option>
-            ))}
-          </select>
-          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.printer_id} onChange={(event) => setForm({ ...form, printer_id: event.target.value })}>
-            <option value="">Todas impressoras</option>
-            {printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
-          </select>
-          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.printer_alias_id} onChange={(event) => setForm({ ...form, printer_alias_id: event.target.value })}>
-            <option value="">Todas filas detectadas</option>
-            {aliases.map((alias) => (
-              <option key={alias.id} value={alias.id}>
-                {alias.queue_name} - {alias.computer_name || alias.printer_name}
-              </option>
-            ))}
-          </select>
-          <Input placeholder="Nome da fila" value={form.queue_name} onChange={(event) => setForm({ ...form, queue_name: event.target.value })} />
-          <div className="flex gap-2">
-            <Button type="submit">
-              <Plus className="h-4 w-4" />
-              {editingId ? "Salvar" : "Criar"}
-            </Button>
-            {editingId ? (
-              <Button type="button" variant="outline" onClick={() => { setEditingId(null); setForm(emptyForm); }}>
-                Cancelar
+          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
+            <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.user_id} onChange={(event) => setForm({ ...form, user_id: event.target.value })}>
+              <option value="">Todos os usuarios</option>
+              {users.map((user) => <option key={user.id} value={user.id}>{user.username} - {user.full_name}</option>)}
+            </select>
+            <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.department_id} onChange={(event) => setForm({ ...form, department_id: event.target.value })}>
+              <option value="">Todos departamentos</option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
+            <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.printer_id} onChange={(event) => setForm({ ...form, printer_id: event.target.value })}>
+              <option value="">Todas impressoras</option>
+              {printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+            </select>
+            <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.printer_alias_id} onChange={(event) => setForm({ ...form, printer_alias_id: event.target.value })}>
+              <option value="">Todas filas detectadas</option>
+              {aliases.map((alias) => (
+                <option key={alias.id} value={alias.id}>
+                  {alias.queue_name} - {alias.computer_name || alias.printer_name}
+                </option>
+              ))}
+            </select>
+            <Input placeholder="Nome da fila" value={form.queue_name} onChange={(event) => setForm({ ...form, queue_name: event.target.value })} />
+            <div className="flex gap-2">
+              <Button type="submit">
+                <Plus className="h-4 w-4" />
+                {editingId ? "Salvar" : "Criar"}
               </Button>
+              {editingId ? (
+                <Button type="button" variant="outline" onClick={() => { setEditingId(null); setForm(emptyForm); }}>
+                  Cancelar
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {selectedUser ? <span className="rounded-full bg-muted px-2 py-1">Usuario: {selectedUser.username}</span> : null}
+            {selectedDepartment ? <span className="rounded-full bg-muted px-2 py-1">Departamento: {selectedDepartment.name}</span> : null}
+            {selectedPrinter ? <span className="rounded-full bg-muted px-2 py-1">Impressora: {selectedPrinter.name}</span> : null}
+            {selectedAlias ? <span className="rounded-full bg-muted px-2 py-1">Fila: {selectedAlias.queue_name}</span> : null}
+            {form.action === "force_mono" ? (
+              <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">
+                Contabiliza como P&B; conversao fisica depende do driver/fila.
+              </span>
             ) : null}
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          {selectedUser ? <span className="rounded-full bg-muted px-2 py-1">Usuario: {selectedUser.username}</span> : null}
-          {selectedDepartment ? <span className="rounded-full bg-muted px-2 py-1">Departamento: {selectedDepartment.name}</span> : null}
-          {selectedPrinter ? <span className="rounded-full bg-muted px-2 py-1">Impressora: {selectedPrinter.name}</span> : null}
-          {selectedAlias ? <span className="rounded-full bg-muted px-2 py-1">Fila: {selectedAlias.queue_name}</span> : null}
-          {form.action === "force_mono" ? (
-            <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">
-              Contabiliza como P&B; conversao fisica depende do driver/fila.
-            </span>
-          ) : null}
-        </div>
-      </Surface>
+        </Surface>
+      ) : null}
 
       {error ? <Surface className="mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</Surface> : null}
 
@@ -570,7 +580,7 @@ export default function PoliciesPage() {
               <th className="p-4">Regra</th>
               <th className="p-4">Acao</th>
               <th className="p-4">Status</th>
-              <th className="p-4 text-right">Acoes</th>
+              {isAdmin ? <th className="p-4 text-right">Acoes</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -585,55 +595,59 @@ export default function PoliciesPage() {
                 <td className="p-4 font-medium">{actionLabels[policy.action]}</td>
                 <td className="p-4">
                   <label
-                    className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                    className={`inline-flex items-center gap-2 rounded-full border px-2 py-0.5 text-xs font-semibold ${
                       policy.is_active ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"
-                    }`}
+                    } ${isAdmin ? "cursor-pointer" : ""}`}
                     title={policy.is_active ? "Desativar politica" : "Ativar politica"}
                   >
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5"
-                      checked={policy.is_active}
-                      onChange={() => togglePolicyActive(policy)}
-                    />
+                    {isAdmin ? (
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5"
+                        checked={policy.is_active}
+                        onChange={() => togglePolicyActive(policy)}
+                      />
+                    ) : null}
                     {policy.is_active ? "Ativa" : "Inativa"}
                   </label>
                 </td>
-                <td className="p-4 text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-8 w-8 p-0"
-                      title="Subir prioridade"
-                      disabled={index === 0}
-                      onClick={() => reorderPolicy(policy.id, "up")}
-                    >
-                      <ArrowUp className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-8 w-8 p-0"
-                      title="Descer prioridade"
-                      disabled={index === policies.length - 1}
-                      onClick={() => reorderPolicy(policy.id, "down")}
-                    >
-                      <ArrowDown className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                    <Button variant="ghost" className="h-8 w-8 p-0" title="Editar" onClick={() => startEdit(policy)}>
-                      <Edit className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                    <Button variant="ghost" className="h-8 w-8 p-0" title="Excluir" onClick={() => deletePolicy(policy)}>
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </div>
-                </td>
+                {isAdmin ? (
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-8 w-8 p-0"
+                        title="Subir prioridade"
+                        disabled={index === 0}
+                        onClick={() => reorderPolicy(policy.id, "up")}
+                      >
+                        <ArrowUp className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-8 w-8 p-0"
+                        title="Descer prioridade"
+                        disabled={index === policies.length - 1}
+                        onClick={() => reorderPolicy(policy.id, "down")}
+                      >
+                        <ArrowDown className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" className="h-8 w-8 p-0" title="Editar" onClick={() => startEdit(policy)}>
+                        <Edit className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" className="h-8 w-8 p-0" title="Excluir" onClick={() => deletePolicy(policy)}>
+                        <Trash2 className="h-4 w-4 text-red-600" />
+                      </Button>
+                    </div>
+                  </td>
+                ) : null}
               </tr>
             ))}
             {policies.length === 0 ? (
               <tr>
-                <td className="p-8 text-center text-sm text-muted-foreground" colSpan={6}>
+                <td className="p-8 text-center text-sm text-muted-foreground" colSpan={isAdmin ? 6 : 5}>
                   Nenhuma politica cadastrada.
                 </td>
               </tr>
