@@ -5,6 +5,14 @@ export type DashboardMetrics = {
   prints_month: number;
   pages_today: number;
   pages_month: number;
+  contract_overview?: {
+    billing_plan: string;
+    billing_status: "trial" | "active" | "past_due" | "suspended";
+    contracted_printer_limit: number;
+    active_printers_count: number;
+    printer_usage_percent: number;
+    printer_limit_status: "unlimited" | "ok" | "warning" | "exceeded";
+  } | null;
   operational_health?: {
     agents_total: number;
     agents_online: number;

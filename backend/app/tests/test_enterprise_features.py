@@ -701,6 +701,10 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
     monkeypatch.setattr(settings, "agent_latest_version", "0.9.0")
 
+    default_org = db_session.query(Organization).filter(Organization.id == 1).one()
+    default_org.billing_plan = "professional"
+    default_org.billing_status = "active"
+    default_org.contracted_printer_limit = 2
     other_org = Organization(name="Cliente B", slug="cliente-b", is_active=True)
     db_session.add(other_org)
     db_session.flush()
@@ -914,6 +918,14 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert jobs[0].department_name == "Financeiro"
     assert jobs[0].cost == 0.15
     assert metrics["pages_month"] == 3
+    assert metrics["contract_overview"] == {
+        "billing_plan": "professional",
+        "billing_status": "active",
+        "contracted_printer_limit": 2,
+        "active_printers_count": 1,
+        "printer_usage_percent": 50.0,
+        "printer_limit_status": "ok",
+    }
     assert metrics["top_users"] == [
         {"username": "Org 1 User", "pages": 3, "cost": 0.15, "cost_per_page": 0.05},
     ]
@@ -934,6 +946,8 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         "duplicate_queue_aliases": 1,
     }
     validated_metrics = DashboardMetrics.model_validate(metrics)
+    assert validated_metrics.contract_overview is not None
+    assert validated_metrics.contract_overview.printer_usage_percent == 50.0
     assert validated_metrics.operational_health is not None
     assert validated_metrics.operational_health.duplicate_queue_aliases == 1
     assert validated_metrics.top_users[0].username == "Org 1 User"

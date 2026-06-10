@@ -17,6 +17,15 @@ class OperationalHealth(BaseModel):
     duplicate_queue_aliases: int = 0
 
 
+class DashboardContractOverview(BaseModel):
+    billing_plan: str = "starter"
+    billing_status: str = "trial"
+    contracted_printer_limit: int = 0
+    active_printers_count: int = 0
+    printer_usage_percent: float = 0.0
+    printer_limit_status: str = "unlimited"
+
+
 class DashboardUserUsage(BaseModel):
     username: str
     pages: int = Field(ge=0)
@@ -57,6 +66,7 @@ class DashboardMetrics(BaseModel):
     prints_month: int
     pages_today: int
     pages_month: int
+    contract_overview: DashboardContractOverview | None = None
     operational_health: OperationalHealth | None = None
     top_users: list[DashboardUserUsage]
     top_printers: list[DashboardPrinterUsage]

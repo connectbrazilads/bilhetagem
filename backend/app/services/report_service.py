@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.department import Department
 from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus
 from app.models.agent_log import AgentLog
+from app.models.organization import Organization
 from app.models.print_agent import PrintAgent
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
@@ -210,6 +211,36 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     }
 
 
+def _printer_limit_status(active_printers: int, limit: int) -> tuple[float, str]:
+    if limit <= 0:
+        return 0.0, "unlimited"
+    usage_percent = round((active_printers / limit) * 100, 1)
+    if active_printers > limit:
+        return usage_percent, "exceeded"
+    if usage_percent >= 80:
+        return usage_percent, "warning"
+    return usage_percent, "ok"
+
+
+def _contract_overview(db: Session, organization_id: int) -> dict:
+    organization = db.get(Organization, organization_id)
+    active_printers = (
+        db.query(Printer)
+        .filter(Printer.organization_id == organization_id, Printer.is_active.is_(True))
+        .count()
+    )
+    contracted_limit = organization.contracted_printer_limit if organization else 0
+    usage_percent, limit_status = _printer_limit_status(active_printers, contracted_limit)
+    return {
+        "billing_plan": organization.billing_plan if organization else "starter",
+        "billing_status": organization.billing_status if organization else "trial",
+        "contracted_printer_limit": contracted_limit,
+        "active_printers_count": active_printers,
+        "printer_usage_percent": usage_percent,
+        "printer_limit_status": limit_status,
+    }
+
+
 def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
     if organization_id is None:
         from app.services.organization_service import get_or_create_default_organization
@@ -350,6 +381,7 @@ def dashboard_metrics(db: Session, organization_id: int | None = None) -> dict:
         "prints_month": prints_month,
         "pages_today": pages_today,
         "pages_month": pages_month,
+        "contract_overview": _contract_overview(db, organization_id),
         "operational_health": _operational_health(db, organization_id, now),
         "top_users": top_users,
         "top_printers": top_printers,

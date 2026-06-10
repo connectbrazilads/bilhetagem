@@ -109,6 +109,28 @@ function policyActionLabel(action?: string | null) {
   return "Politica";
 }
 
+function planLabel(plan?: string) {
+  if (plan === "professional") return "Professional";
+  if (plan === "enterprise") return "Enterprise";
+  return "Starter";
+}
+
+function contractStatusText(contract: DashboardMetrics["contract_overview"]) {
+  if (!contract) return "Sem contrato";
+  const limit = contract.contracted_printer_limit;
+  const printers = contract.active_printers_count.toLocaleString("pt-BR");
+  if (!limit) return `${printers} impressora(s) ativas | Sem limite`;
+  return `${printers}/${limit.toLocaleString("pt-BR")} impressora(s) | ${contract.printer_usage_percent}%`;
+}
+
+function contractTone(contract: DashboardMetrics["contract_overview"]) {
+  if (!contract) return "border-slate-200 bg-slate-50 text-slate-900";
+  if (contract.printer_limit_status === "exceeded" || contract.billing_status === "suspended") return "border-red-100 bg-red-50 text-red-900";
+  if (contract.printer_limit_status === "warning" || contract.billing_status === "past_due") return "border-amber-100 bg-amber-50 text-amber-900";
+  if (contract.billing_status === "trial") return "border-blue-100 bg-blue-50 text-blue-900";
+  return "border-emerald-100 bg-emerald-50 text-emerald-900";
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +215,7 @@ export default function DashboardPage() {
 
   const totalMonth = data?.pages_month ?? 0;
   const health = data?.operational_health;
+  const contract = data?.contract_overview ?? null;
 
   return (
     <ProtectedPage>
@@ -201,15 +224,26 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">Visao operacional de impressoes, consumo e filas.</p>
         </div>
-        <Surface className="flex items-center gap-3 px-4 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
-            <TrendingUp className="h-4 w-4" />
-          </div>
-          <div>
-            <div className="text-xs font-medium text-muted-foreground">Volume mensal</div>
-            <div className="text-sm font-semibold">{totalMonth.toLocaleString("pt-BR")} paginas</div>
-          </div>
-        </Surface>
+        <div className="flex flex-wrap gap-3">
+          <Surface className="flex items-center gap-3 px-4 py-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-medium text-muted-foreground">Volume mensal</div>
+              <div className="text-sm font-semibold">{totalMonth.toLocaleString("pt-BR")} paginas</div>
+            </div>
+          </Surface>
+          <Surface className={`flex items-center gap-3 px-4 py-3 ${contractTone(contract)}`}>
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white/60">
+              <WalletCards className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase opacity-75">Contrato {planLabel(contract?.billing_plan)}</div>
+              <div className="text-sm font-semibold">{contractStatusText(contract)}</div>
+            </div>
+          </Surface>
+        </div>
       </div>
 
       {error ? (
