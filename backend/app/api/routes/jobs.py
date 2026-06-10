@@ -419,6 +419,8 @@ def confirm_web_printed(
         
     # Mark it as printed by renaming the external_job_id
     if job.external_job_id and job.external_job_id.startswith("webprint_") and not job.external_job_id.startswith("webprint_printed_"):
+        if job.status not in (JobStatus.released, JobStatus.authorized):
+            raise HTTPException(status_code=400, detail="Web Print ainda nao foi liberado para impressao")
         job.external_job_id = f"webprint_printed_{job.id}"
         write_audit(
             db,

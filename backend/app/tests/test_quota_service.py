@@ -321,6 +321,36 @@ def test_agent_confirming_web_print_writes_audit(db_session):
     assert audit.log_metadata["is_color"] is True
 
 
+def test_agent_cannot_confirm_pending_web_print_before_release(db_session):
+    agent = User(username="agent-webprint-pending", full_name="Agent", role=UserRole.agent, is_active=True, organization_id=1)
+    user = User(username="webprint-pending-user", full_name="WebPrint Pending", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA_WEBPRINT_PENDING", is_color=True)
+    db_session.add_all([agent, user, printer])
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        external_job_id="webprint_88",
+        document_name="Pendente.pdf",
+        pages=2,
+        is_color=False,
+        cost=0.10,
+        status=JobStatus.pending_release,
+        submitted_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        confirm_web_printed(job.id, db=db_session, current_user=agent)
+
+    db_session.refresh(job)
+    assert exc.value.status_code == 400
+    assert job.external_job_id == "webprint_88"
+    assert db_session.query(AuditLog).filter(AuditLog.action == "web_print_confirmed").count() == 0
+
+
 def test_regular_user_cannot_release_another_users_pending_job(db_session):
     owner = User(username="job-owner", full_name="Job Owner", role=UserRole.user, organization_id=1)
     other_user = User(username="other-user", full_name="Other User", role=UserRole.user, organization_id=1)
