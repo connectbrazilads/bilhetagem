@@ -830,6 +830,66 @@ def test_printer_with_linked_policies_cannot_be_deleted(db_session: Session):
     assert db_session.query(PrintPolicy).filter(PrintPolicy.organization_id == 1).count() == 2
 
 
+def test_printer_with_pending_queue_action_cannot_be_deleted(db_session: Session):
+    actor = User(username="admin-delete-queue-printer", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA COM ACAO", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-delete-queue-printer", computer_name="PC-QUEUE")
+    db_session.add_all([actor, printer, agent])
+    db_session.flush()
+    action = AgentQueueAction(
+        organization_id=1,
+        agent_id=agent.id,
+        printer_id=printer.id,
+        requested_by_user_id=actor.id,
+        action_type=AgentQueueActionType.create_queue,
+        queue_name="KONICA Financeiro",
+        driver_name="KONICA Driver",
+        ip_address="192.168.1.125",
+        status=AgentQueueActionStatus.pending,
+    )
+    db_session.add(action)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        delete_printer_endpoint(printer.id, db=db_session, actor=actor)
+
+    assert exc.value.status_code == 409
+    assert "acoes remotas pendentes" in exc.value.detail
+    assert db_session.get(Printer, printer.id) is not None
+    assert db_session.get(AgentQueueAction, action.id).printer_id == printer.id
+
+
+def test_delete_printer_detaches_completed_queue_actions(db_session: Session):
+    actor = User(username="admin-delete-done-queue-printer", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA ACAO FINALIZADA", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-delete-done-queue-printer", computer_name="PC-QUEUE-DONE")
+    db_session.add_all([actor, printer, agent])
+    db_session.flush()
+    action = AgentQueueAction(
+        organization_id=1,
+        agent_id=agent.id,
+        printer_id=printer.id,
+        requested_by_user_id=actor.id,
+        action_type=AgentQueueActionType.restore_queue,
+        queue_name="KONICA Financeiro",
+        driver_name="KONICA Driver",
+        ip_address="192.168.1.125",
+        status=AgentQueueActionStatus.succeeded,
+        result_message="Fila restaurada",
+    )
+    db_session.add(action)
+    db_session.commit()
+
+    result = delete_printer_endpoint(printer.id, db=db_session, actor=actor)
+    db_session.refresh(action)
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "printer_deleted", AuditLog.entity_id == printer.id).one()
+
+    assert result == {"status": "deleted", "deleted_jobs": 0, "detached_queue_actions": 1}
+    assert action.printer_id is None
+    assert db_session.get(Printer, printer.id) is None
+    assert audit.log_metadata["detached_queue_actions"] == 1
+
+
 def test_binding_alias_moves_historical_jobs_to_physical_printer(db_session: Session):
     actor = User(username="admin-bind", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     user = User(username="diego-bind", full_name="Diego", role=UserRole.user, is_active=True, organization_id=1)

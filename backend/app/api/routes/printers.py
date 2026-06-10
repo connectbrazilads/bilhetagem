@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.deps import require_roles
+from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus
 from app.models.print_agent import PrintAgent
 from app.models.print_job import PrintJob
 from app.models.print_policy import PrintPolicy
@@ -301,6 +302,27 @@ def delete_printer_endpoint(
             detail="Impressora possui politicas vinculadas. Remova, edite ou mescle a impressora para preservar as regras comerciais.",
         )
 
+    active_queue_actions = (
+        db.query(AgentQueueAction)
+        .filter(
+            AgentQueueAction.organization_id == actor.organization_id,
+            AgentQueueAction.printer_id == printer.id,
+            AgentQueueAction.status.in_([AgentQueueActionStatus.pending, AgentQueueActionStatus.running]),
+        )
+        .count()
+    )
+    if active_queue_actions:
+        raise HTTPException(
+            status_code=409,
+            detail="Impressora possui acoes remotas pendentes ou em execucao. Cancele ou aguarde a conclusao antes de excluir.",
+        )
+
+    detached_queue_actions = (
+        db.query(AgentQueueAction)
+        .filter(AgentQueueAction.organization_id == actor.organization_id, AgentQueueAction.printer_id == printer.id)
+        .update({AgentQueueAction.printer_id: None}, synchronize_session=False)
+    )
+
     db.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.printer_id == printer.id).delete(synchronize_session=False)
     write_audit(
         db,
@@ -308,11 +330,11 @@ def delete_printer_endpoint(
         entity="printers",
         entity_id=printer.id,
         actor_user_id=actor.id,
-        metadata={"printer": printer.name, "deleted_jobs": 0},
+        metadata={"printer": printer.name, "deleted_jobs": 0, "detached_queue_actions": detached_queue_actions},
     )
     db.delete(printer)
     db.commit()
-    return {"status": "deleted", "deleted_jobs": 0}
+    return {"status": "deleted", "deleted_jobs": 0, "detached_queue_actions": detached_queue_actions}
 
 
 @router.post("/{source_printer_id}/merge/{target_printer_id}", response_model=PrinterRead)
