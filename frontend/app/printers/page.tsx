@@ -23,6 +23,7 @@ type PrinterRow = {
   page_counter: number | null;
   aliases?: {
     id: number;
+    printer_id: number | null;
     queue_name: string;
     computer_name: string | null;
     driver_name: string | null;
@@ -82,12 +83,18 @@ export default function PrintersPage() {
   const [mergingPrinter, setMergingPrinter] = useState<PrinterRow | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState("");
 
-  async function load() {
+  async function load(): Promise<PrinterRow[]> {
     const token = localStorage.getItem("token");
-    if (!token) return;
-    await apiFetch<PrinterRow[]>("/printers", token)
-      .then(setPrinters)
-      .catch(() => setPrinters([]));
+    if (!token) return [];
+    try {
+      const rows = await apiFetch<PrinterRow[]>("/printers", token);
+      setPrinters(rows);
+      setSelectedPrinter((current) => rows.find((printer) => printer.id === current?.id) ?? current);
+      return rows;
+    } catch {
+      setPrinters([]);
+      return [];
+    }
   }
 
   async function loadSettings() {
@@ -213,6 +220,25 @@ export default function PrintersPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao unir impressoras");
+    }
+  }
+
+  async function bindAlias(aliasId: number, printerId: string) {
+    if (!isAdmin) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setError(null);
+    try {
+      const updatedAlias = await apiFetch<{ printer_id: number | null }>(`/printers/aliases/${aliasId}`, token, {
+        method: "PUT",
+        body: JSON.stringify({ printer_id: printerId ? Number(printerId) : null }),
+      });
+      const rows = await load();
+      if (updatedAlias.printer_id) {
+        setSelectedPrinter(rows.find((printer) => printer.id === updatedAlias.printer_id) ?? null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao vincular fila");
     }
   }
 
@@ -714,6 +740,26 @@ export default function PrintersPage() {
                         <div className="mt-1 text-muted-foreground">
                           {alias.computer_name || "-"} {alias.port_name ? `| Porta: ${alias.port_name}` : ""}
                         </div>
+                        {isAdmin ? (
+                          <label className="mt-2 grid gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Vinculo fisico
+                            <select
+                              value={alias.printer_id?.toString() || ""}
+                              onChange={(event) => bindAlias(alias.id, event.target.value)}
+                              className={`h-8 rounded-md border bg-white px-2 text-xs normal-case tracking-normal outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20 ${
+                                alias.printer_id ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"
+                              }`}
+                              title="Mover esta fila para outra impressora fisica"
+                            >
+                              <option value="">Sem vinculo</option>
+                              {printers.map((printer) => (
+                                <option key={printer.id} value={printer.id}>
+                                  {printer.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
                         {alias.connection_type === "usb" ? (
                           <div className="mt-1 text-amber-700">USB: bilhetagem ativa, telemetria SNMP indisponivel sem IP de rede.</div>
                         ) : null}
