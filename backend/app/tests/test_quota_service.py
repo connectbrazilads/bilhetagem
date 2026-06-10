@@ -3,6 +3,7 @@ from io import BytesIO
 from types import SimpleNamespace
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 import pytest
 
 from app.api.routes.jobs import cancel_job, confirm_web_printed, download_web_print_file, get_agent_actions, release_job, web_print_endpoint
@@ -13,6 +14,22 @@ from app.models.quota import Quota
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate
 from app.services.print_job_service import register_print_job
+
+
+def test_print_job_payload_rejects_blank_required_names():
+    with pytest.raises(ValidationError):
+        PrintJobCreate(username="   ", printer_name="KONICA", pages=1, is_color=False)
+
+    with pytest.raises(ValidationError):
+        PrintJobCreate(username="diego", printer_name="   ", pages=1, is_color=False)
+
+
+def test_print_job_payload_strips_names_and_ignores_blank_queue_name():
+    payload = PrintJobCreate(username="  DIEGO  ", printer_name="  KONICA  ", queue_name="   ", pages=1, is_color=False)
+
+    assert payload.username == "DIEGO"
+    assert payload.printer_name == "KONICA"
+    assert payload.queue_name is None
 
 
 def test_authorizes_and_debits_when_quota_has_balance(db_session, monkeypatch):

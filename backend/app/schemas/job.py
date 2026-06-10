@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.print_job import JobStatus
 
@@ -23,6 +23,22 @@ class PrintJobCreate(BaseModel):
     printer_serial: str | None = Field(default=None, max_length=80)
     printer_device_id: str | None = Field(default=None, max_length=255)
     printer_fingerprint: str | None = Field(default=None, max_length=255)
+
+    @field_validator("username", "printer_name")
+    @classmethod
+    def required_text_must_not_be_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Campo obrigatorio nao pode ficar em branco")
+        return cleaned
+
+    @field_validator("queue_name")
+    @classmethod
+    def optional_queue_name_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class PrintJobDecision(BaseModel):
