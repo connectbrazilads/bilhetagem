@@ -94,7 +94,10 @@ export default function DownloadsPage() {
       setOrganizations(orgs);
       const currentSlug = localStorage.getItem("organization_slug") || "default";
       if (orgs.length > 0 && !orgs.some((organization) => organization.slug === deployOrg)) {
-        const preferred = orgs.find((organization) => organization.slug === currentSlug) ?? orgs[0];
+        const preferred =
+          orgs.find((organization) => organization.slug === currentSlug && organization.is_active) ??
+          orgs.find((organization) => organization.is_active) ??
+          orgs[0];
         setDeployOrg(preferred.slug);
       }
     } catch {
@@ -149,8 +152,12 @@ export default function DownloadsPage() {
   const latest = releases[0];
   const installerFile = latest?.files.find((file) => file.kind === "installer" || file.filename.toLowerCase().endsWith("installer.exe"));
   const msiFile = latest?.files.find((file) => file.kind === "msi" || file.filename.toLowerCase().endsWith(".msi"));
-  const commandReady = Boolean(deployOrg.trim() && deployUser.trim() && deployPassword.trim());
-  const commandMissingMessage = "Informe empresa, usuario e senha do agent para gerar o comando.";
+  const selectedOrganization = organizations.find((organization) => organization.slug === deployOrg);
+  const selectedOrganizationActive = organizations.length === 0 || selectedOrganization?.is_active === true;
+  const commandReady = Boolean(deployOrg.trim() && deployUser.trim() && deployPassword.trim() && selectedOrganizationActive);
+  const commandMissingMessage = selectedOrganizationActive
+    ? "Informe empresa, usuario e senha do agent para gerar o comando."
+    : "Empresa inativa: reative a empresa antes de gerar comando de instalacao.";
   const exeCommand = installerFile && commandReady
     ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}"`
     : "";
