@@ -50,6 +50,19 @@ const emptyForm = {
   agent_password: "",
 };
 
+const UNSAFE_INITIAL_PASSWORDS = new Set([
+  "",
+  "admin",
+  "agent",
+  "admin12345",
+  "agent12345",
+  "change-me-admin-password",
+  "change-me-agent-password",
+  "password",
+  "senha123",
+  "12345678",
+]);
+
 export default function OrganizationsPage() {
   const [organizations, setOrganizations] = useState<OrganizationRow[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -107,6 +120,11 @@ export default function OrganizationsPage() {
           }),
         });
       } else {
+        const passwordError = validateInitialPasswords(form.admin_password, form.agent_password);
+        if (passwordError) {
+          setError(passwordError);
+          return;
+        }
         await apiFetch<OrganizationRow>("/organizations", token, {
           method: "POST",
           body: JSON.stringify({ ...form, contracted_printer_limit: Number(form.contracted_printer_limit) || 0 }),
@@ -141,6 +159,19 @@ export default function OrganizationsPage() {
   function fillPassword(field: "admin_password" | "agent_password") {
     setForm((current) => ({ ...current, [field]: generatePassword() }));
   }
+
+  const adminPasswordWarning =
+    !editing && form.admin_password && isUnsafeInitialPassword(form.admin_password)
+      ? "Senha padrao ou placeholder bloqueado."
+      : null;
+  const agentPasswordWarning =
+    !editing && form.agent_password && isUnsafeInitialPassword(form.agent_password)
+      ? "Senha padrao ou placeholder bloqueado."
+      : null;
+  const sharedPasswordWarning =
+    !editing && form.admin_password && form.agent_password && form.admin_password.trim() === form.agent_password.trim()
+      ? "Admin e agent precisam ter senhas diferentes."
+      : null;
 
   return (
     <ProtectedPage roles={["admin"]}>
@@ -245,6 +276,7 @@ export default function OrganizationsPage() {
                   </Button>
                 </span>
                 <Input type="password" value={form.admin_password} onChange={(event) => setForm({ ...form, admin_password: event.target.value })} required minLength={8} autoComplete="new-password" />
+                {adminPasswordWarning || sharedPasswordWarning ? <span className="text-xs font-medium text-red-700">{adminPasswordWarning || sharedPasswordWarning}</span> : null}
               </label>
               <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
                 Usuario do agent
@@ -259,6 +291,7 @@ export default function OrganizationsPage() {
                   </Button>
                 </span>
                 <Input type="password" value={form.agent_password} onChange={(event) => setForm({ ...form, agent_password: event.target.value })} required minLength={8} autoComplete="new-password" />
+                {agentPasswordWarning || sharedPasswordWarning ? <span className="text-xs font-medium text-red-700">{agentPasswordWarning || sharedPasswordWarning}</span> : null}
               </label>
             </div>
           ) : null}
@@ -399,6 +432,23 @@ function printerLimitClass(status: OrganizationRow["contracted_printer_limit_sta
   if (status === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
   if (status === "exceeded") return "border-red-200 bg-red-50 text-red-700";
   return "bg-muted/40 text-muted-foreground";
+}
+
+function validateInitialPasswords(adminPassword: string, agentPassword: string) {
+  if (isUnsafeInitialPassword(adminPassword)) {
+    return "Use uma senha forte e exclusiva para o admin inicial; senhas padrao ou placeholders sao bloqueadas.";
+  }
+  if (isUnsafeInitialPassword(agentPassword)) {
+    return "Use uma senha forte e exclusiva para o agent; senhas padrao ou placeholders sao bloqueadas.";
+  }
+  if (adminPassword.trim() === agentPassword.trim()) {
+    return "Use senhas diferentes para admin e agent.";
+  }
+  return null;
+}
+
+function isUnsafeInitialPassword(value: string) {
+  return UNSAFE_INITIAL_PASSWORDS.has(value.trim().toLowerCase());
 }
 
 function generatePassword(length = 18) {
