@@ -30,11 +30,11 @@ class PrintBillingService(win32serviceutil.ServiceFramework):
         win32event.SetEvent(self.stop_event)
 
     def SvcDoRun(self) -> None:
-        from config import get_app_dir
+        from config import config, get_app_dir
         log_file = get_app_dir() / "agent.log"
         logging.basicConfig(
             filename=str(log_file),
-            level=logging.INFO,
+            level=getattr(logging, config.log_level, logging.INFO),
             format="%(asctime)s [%(levelname)s] %(message)s"
         )
         logging.info(f"{SERVICE_NAME} iniciado")

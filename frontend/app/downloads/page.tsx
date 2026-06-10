@@ -91,6 +91,7 @@ export default function DownloadsPage() {
   const [deployPassword, setDeployPassword] = useState("");
   const [defaultUsername, setDefaultUsername] = useState("");
   const [spoolServer, setSpoolServer] = useState("");
+  const [logLevel, setLogLevel] = useState("INFO");
   const [cancelBlocked, setCancelBlocked] = useState(true);
   const [usePrintEventLog, setUsePrintEventLog] = useState(true);
   const [autoUpdate, setAutoUpdate] = useState(true);
@@ -196,10 +197,10 @@ export default function DownloadsPage() {
   const usePrintEventLogArg = usePrintEventLog ? "true" : "false";
   const autoUpdateArg = autoUpdate ? "true" : "false";
   const exeCommand = installerFile && commandReady
-    ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}" --spool-server "${spoolServer}" --cancel-blocked "${cancelBlockedArg}" --use-print-event-log "${usePrintEventLogArg}" --auto-update "${autoUpdateArg}"`
+    ? `.\\${installerFile.filename} --silent --api-url "${API_URL}" --username "${deployUser}" --password "${deployPassword}" --organization "${deployOrg}" --default-username "${defaultUsername}" --spool-server "${spoolServer}" --log-level "${logLevel}" --cancel-blocked "${cancelBlockedArg}" --use-print-event-log "${usePrintEventLogArg}" --auto-update "${autoUpdateArg}"`
     : "";
   const msiCommand = msiFile && commandReady
-    ? `msiexec /i "${msiFile.filename}" APIURL="${API_URL}" AGENTUSER="${deployUser}" AGENTPASSWORD="${deployPassword}" ORGANIZATION="${deployOrg}" DEFAULTUSERNAME="${defaultUsername}" SPOOLSERVER="${spoolServer}" CANCELBLOCKED="${cancelBlockedArg}" USEPRINTEVENTLOG="${usePrintEventLogArg}" AUTOUPDATE="${autoUpdateArg}" /qn`
+    ? `msiexec /i "${msiFile.filename}" APIURL="${API_URL}" AGENTUSER="${deployUser}" AGENTPASSWORD="${deployPassword}" ORGANIZATION="${deployOrg}" DEFAULTUSERNAME="${defaultUsername}" SPOOLSERVER="${spoolServer}" LOGLEVEL="${logLevel}" CANCELBLOCKED="${cancelBlockedArg}" USEPRINTEVENTLOG="${usePrintEventLogArg}" AUTOUPDATE="${autoUpdateArg}" /qn`
     : "";
 
   return (
@@ -258,7 +259,7 @@ export default function DownloadsPage() {
               <Input type="password" value={deployPassword} onChange={(event) => setDeployPassword(event.target.value)} />
             </label>
           </div>
-          <div className="mb-4 grid gap-3 md:grid-cols-2">
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
               Usuario padrao do PC
               <Input placeholder="Opcional" value={defaultUsername} onChange={(event) => setDefaultUsername(event.target.value)} />
@@ -266,6 +267,20 @@ export default function DownloadsPage() {
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
               Servidor de impressao
               <Input placeholder="Opcional: \\SRV-PRINT01" value={spoolServer} onChange={(event) => setSpoolServer(event.target.value)} />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Modo de log
+              <select
+                className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+                value={logLevel}
+                onChange={(event) => setLogLevel(event.target.value)}
+              >
+                <option value="INFO">INFO</option>
+                <option value="DEBUG">DEBUG</option>
+                <option value="WARNING">WARNING</option>
+                <option value="ERROR">ERROR</option>
+                <option value="CRITICAL">CRITICAL</option>
+              </select>
             </label>
           </div>
           <div className="mb-4 grid gap-2 md:grid-cols-3">

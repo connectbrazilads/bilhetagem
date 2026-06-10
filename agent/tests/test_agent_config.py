@@ -23,6 +23,7 @@ CONFIG_KEYS = [
     "PRINTBILLING_HEARTBEAT_INTERVAL",
     "PRINTBILLING_QUEUE_ACTION_INTERVAL",
     "PRINTBILLING_SPOOL_SERVER",
+    "PRINTBILLING_LOG_LEVEL",
 ]
 
 
@@ -51,6 +52,7 @@ def test_agent_config_falls_back_when_file_values_are_invalid(monkeypatch):
             "PRINTBILLING_QUEUE_ACTION_INTERVAL": "1",
             "PRINTBILLING_DEFAULT_USERNAME": " DIEGO_LCD ",
             "PRINTBILLING_SPOOL_SERVER": " ",
+            "PRINTBILLING_LOG_LEVEL": "verbose",
         },
     )
 
@@ -70,6 +72,7 @@ def test_agent_config_falls_back_when_file_values_are_invalid(monkeypatch):
     assert config.queue_action_interval_seconds == 30
     assert config.default_username == "DIEGO_LCD"
     assert config.spool_server is None
+    assert config.log_level == "INFO"
 
 
 def test_agent_config_environment_overrides_file_config(monkeypatch):
@@ -86,9 +89,11 @@ def test_agent_config_environment_overrides_file_config(monkeypatch):
     monkeypatch.setenv("PRINTBILLING_API_URL", " https://env.example.com/ ")
     monkeypatch.setenv("PRINTBILLING_POLL_INTERVAL", "9")
     monkeypatch.setenv("PRINTBILLING_USE_PRINT_EVENT_LOG", "false")
+    monkeypatch.setenv("PRINTBILLING_LOG_LEVEL", "debug")
 
     config = agent_config.AgentConfig()
 
     assert config.api_base_url == "https://env.example.com"
     assert config.poll_interval_seconds == 9
     assert config.use_print_event_log is False
+    assert config.log_level == "DEBUG"

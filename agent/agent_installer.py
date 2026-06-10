@@ -137,6 +137,15 @@ def as_config_float(value, default: float, *, min_value: float | None = None) ->
     return parsed
 
 
+def as_log_level(value, default: str = "INFO") -> str:
+    cleaned = normalize_text(value).upper()
+    if cleaned in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+        return cleaned
+    if cleaned:
+        raise RuntimeError(f"Modo de log invalido: {value}")
+    return default
+
+
 def pick_bool_arg_or_config(arg_value, existing: dict, template: dict, key: str, default: bool) -> bool:
     if arg_value is not None and str(arg_value).strip():
         return as_bool(arg_value)
@@ -169,6 +178,7 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         cancel_blocked = pick_bool_arg_or_config(args.cancel_blocked, existing, template, "PRINTBILLING_CANCEL_BLOCKED", True)
         use_print_event_log = pick_bool_arg_or_config(args.use_print_event_log, existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)
         auto_update = pick_bool_arg_or_config(args.auto_update, existing, template, "PRINTBILLING_AUTO_UPDATE", True)
+        log_level = as_log_level(pick_arg_or_config(args.log_level, existing, template, "PRINTBILLING_LOG_LEVEL", "INFO"))
         if not api_url or not username or not password or not organization_slug:
             raise RuntimeError("Modo silencioso requer --api-url, --username, --password e --organization em instalacoes novas.")
     else:
@@ -201,6 +211,12 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             "Servidor de impressao remoto (opcional)",
             existing.get("PRINTBILLING_SPOOL_SERVER") or template.get("PRINTBILLING_SPOOL_SERVER", ""),
         )
+        log_level = as_log_level(
+            prompt_value(
+                "Modo de log (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+                existing.get("PRINTBILLING_LOG_LEVEL") or template.get("PRINTBILLING_LOG_LEVEL", "INFO"),
+            )
+        )
         cancel_blocked = as_config_bool(pick_config_value(existing, template, "PRINTBILLING_CANCEL_BLOCKED", True), True)
         use_print_event_log = as_config_bool(pick_config_value(existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True), True)
         auto_update = as_config_bool(pick_config_value(existing, template, "PRINTBILLING_AUTO_UPDATE", True), True)
@@ -211,6 +227,7 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
     organization_slug = normalize_text(organization_slug)
     default_username = normalize_text(default_username)
     spool_server = normalize_text(spool_server)
+    log_level = as_log_level(log_level)
     if not api_url or not username or not password or not organization_slug:
         raise RuntimeError("Configuracao do agent requer API URL, usuario, senha e slug da empresa.")
     if is_unsafe_agent_password(password):
@@ -234,6 +251,7 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         "PRINTBILLING_HEARTBEAT_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_HEARTBEAT_INTERVAL", 60), 60, min_value=10),
         "PRINTBILLING_QUEUE_ACTION_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_QUEUE_ACTION_INTERVAL", 30), 30, min_value=5),
         "PRINTBILLING_SPOOL_SERVER": spool_server,
+        "PRINTBILLING_LOG_LEVEL": log_level,
     }
 
 
@@ -299,6 +317,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--organization", help="Slug da empresa")
     parser.add_argument("--default-username", help="Usuario padrao quando o Windows nao informar")
     parser.add_argument("--spool-server", help="Servidor de impressao remoto opcional para enumerar filas")
+    parser.add_argument("--log-level", help="Modo de log: DEBUG, INFO, WARNING, ERROR ou CRITICAL")
     parser.add_argument("--cancel-blocked", help="Cancela trabalhos bloqueados no spool: true ou false")
     parser.add_argument("--use-print-event-log", help="Usa Event Log de impressao do Windows: true ou false")
     parser.add_argument("--auto-update", help="Permite auto-update do agent: true ou false")

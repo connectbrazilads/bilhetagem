@@ -83,6 +83,13 @@ def _config_float(key: str, default: float, *, min_value: float | None = None) -
     return parsed
 
 
+def _config_log_level(key: str, default: str = "INFO") -> str:
+    value = _config_str(key, default).upper()
+    if value in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+        return value
+    return default
+
+
 @dataclass(frozen=True)
 class AgentConfig:
     api_base_url: str = field(default_factory=lambda: _config_str("PRINTBILLING_API_URL", "http://localhost:8000", strip_trailing_slash=True))
@@ -102,6 +109,7 @@ class AgentConfig:
     heartbeat_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_HEARTBEAT_INTERVAL", 60, min_value=10))
     queue_action_interval_seconds: int = field(default_factory=lambda: _config_int("PRINTBILLING_QUEUE_ACTION_INTERVAL", 30, min_value=5))
     spool_server: str | None = field(default_factory=lambda: _config_optional_str("PRINTBILLING_SPOOL_SERVER"))
+    log_level: str = field(default_factory=lambda: _config_log_level("PRINTBILLING_LOG_LEVEL", "INFO"))
 
 
 config = AgentConfig()

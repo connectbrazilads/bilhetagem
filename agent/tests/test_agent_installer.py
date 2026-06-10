@@ -15,6 +15,7 @@ def args(**overrides):
         "organization": None,
         "default_username": None,
         "spool_server": None,
+        "log_level": None,
         "cancel_blocked": None,
         "use_print_event_log": None,
         "auto_update": None,
@@ -31,6 +32,7 @@ def test_silent_install_preserves_existing_config_when_args_are_omitted():
         "PRINTBILLING_ORGANIZATION_SLUG": "cliente-a",
         "PRINTBILLING_DEFAULT_USERNAME": "usuario-padrao",
         "PRINTBILLING_SPOOL_SERVER": r"\\PRINTSERVER",
+        "PRINTBILLING_LOG_LEVEL": "DEBUG",
     }
 
     config = build_config(existing, {}, args())
@@ -41,6 +43,7 @@ def test_silent_install_preserves_existing_config_when_args_are_omitted():
     assert config["PRINTBILLING_ORGANIZATION_SLUG"] == "cliente-a"
     assert config["PRINTBILLING_DEFAULT_USERNAME"] == "usuario-padrao"
     assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\PRINTSERVER"
+    assert config["PRINTBILLING_LOG_LEVEL"] == "DEBUG"
 
 
 def test_silent_install_can_clear_existing_default_username():
@@ -151,6 +154,22 @@ def test_silent_install_can_set_remote_spool_server():
     assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\SRV-PRINT01"
 
 
+def test_silent_install_can_set_log_level():
+    config = build_config(
+        {},
+        {},
+        args(
+            api_url="https://billing.example.com",
+            username="agent",
+            password="secret",
+            organization="cliente-a",
+            log_level=" debug ",
+        ),
+    )
+
+    assert config["PRINTBILLING_LOG_LEVEL"] == "DEBUG"
+
+
 def test_silent_install_can_override_capture_and_update_flags():
     config = build_config(
         {},
@@ -233,6 +252,25 @@ def test_silent_install_rejects_invalid_boolean_arg():
         assert "booleano invalido" in str(exc)
     else:
         raise AssertionError("Valor booleano invalido deveria falhar")
+
+
+def test_silent_install_rejects_invalid_log_level():
+    try:
+        build_config(
+            {},
+            {},
+            args(
+                api_url="https://billing.example.com",
+                username="agent",
+                password="secret",
+                organization="cliente-a",
+                log_level="verbose",
+            ),
+        )
+    except RuntimeError as exc:
+        assert "Modo de log invalido" in str(exc)
+    else:
+        raise AssertionError("Modo de log invalido deveria falhar")
 
 
 def test_silent_new_install_requires_explicit_organization_slug():
