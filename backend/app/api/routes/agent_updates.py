@@ -40,6 +40,7 @@ from app.services.audit_service import write_audit
 from app.services.organization_service import DEFAULT_ORGANIZATION_SLUG
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
 
 
 def _version_tuple(version: str) -> tuple[int, ...]:
@@ -301,6 +302,7 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealth
     present_aliases = [alias for alias in aliases if _alias_is_present(agent, alias)]
     stale_queues = [alias.queue_name for alias in aliases if not _alias_is_present(agent, alias)]
     unbound_queues = [alias.queue_name for alias in present_aliases if alias.printer_id is None]
+    stale_actions = _stale_queue_actions(agent)
 
     if not is_online:
         alerts.append(AgentHealthAlertRead(code="offline", severity="error", message="Agent offline ou sem contato recente"))
@@ -320,11 +322,32 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealth
         sample = ", ".join(unbound_queues[:3])
         suffix = f": {sample}" if sample else ""
         alerts.append(AgentHealthAlertRead(code="unbound_queues", severity="warning", message=f"{count} fila(s) sem vinculo com impressora fisica{suffix}"))
+    if stale_actions:
+        count = len(stale_actions)
+        sample = ", ".join(action.queue_name for action in stale_actions[:3])
+        suffix = f": {sample}" if sample else ""
+        alerts.append(AgentHealthAlertRead(code="stale_queue_actions", severity="warning", message=f"{count} acao(oes) remota(s) sem conclusao ha mais de 15 min{suffix}"))
     latest_version = _published_agent_version()
     if _is_newer(latest_version, agent.version):
         alerts.append(AgentHealthAlertRead(code="outdated_version", severity="info", message=f"Agent abaixo da versao publicada {latest_version}"))
 
     return alerts
+
+
+def _stale_queue_actions(agent: PrintAgent) -> list[AgentQueueAction]:
+    now = datetime.now(timezone.utc)
+    stale: list[AgentQueueAction] = []
+    for action in agent.queue_actions:
+        if action.status not in (AgentQueueActionStatus.pending, AgentQueueActionStatus.running):
+            continue
+        reference = action.dispatched_at if action.status == AgentQueueActionStatus.running else action.requested_at
+        if reference is None:
+            continue
+        if reference.tzinfo is None:
+            reference = reference.replace(tzinfo=timezone.utc)
+        if now - reference > QUEUE_ACTION_STALE_AFTER:
+            stale.append(action)
+    return stale
 
 
 def _alias_is_present(agent: PrintAgent, alias: PrinterAlias) -> bool:
@@ -705,7 +728,7 @@ def list_agents(
 ) -> list[PrintAgentRead]:
     agents = (
         db.query(PrintAgent)
-        .options(selectinload(PrintAgent.aliases))
+        .options(selectinload(PrintAgent.aliases), selectinload(PrintAgent.queue_actions))
         .filter(PrintAgent.organization_id == actor.organization_id)
         .order_by(PrintAgent.last_seen_at.desc().nullslast(), PrintAgent.computer_name, PrintAgent.id)
         .all()

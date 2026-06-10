@@ -1,4 +1,5 @@
 import hashlib
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -489,6 +490,43 @@ def test_list_agents_is_scoped_by_organization(db_session: Session):
     visible_agents = list_agents(db=db_session, actor=actor_default)
 
     assert [agent.agent_uid for agent in visible_agents] == ["agent-a"]
+
+
+def test_list_agents_reports_stale_running_queue_actions(db_session: Session):
+    actor = User(username="agent-stale-action-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA STALE ACTION", ip_address="192.168.1.130", is_color=True)
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-stale-action", computer_name="PC-STALE-ACTION"),
+        request=_request("10.0.0.34"),
+        db=db_session,
+        actor=actor,
+    )
+    action = create_queue_action(
+        agent_id=agent.id,
+        payload=AgentQueueActionCreate(
+            action_type=AgentQueueActionType.create_queue,
+            queue_name="KONICA_STALE_ACTION",
+            printer_id=printer.id,
+            driver_name="KONICA Driver",
+            ip_address="192.168.1.130",
+        ),
+        db=db_session,
+        actor=actor,
+    )
+    poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor)
+    persisted_action = db_session.get(type(action), action.id)
+    persisted_action.dispatched_at = datetime.now(timezone.utc) - timedelta(minutes=16)
+    db_session.commit()
+
+    rows = list_agents(db=db_session, actor=actor)
+    stale_agent = next(row for row in rows if row.agent_uid == agent.agent_uid)
+
+    assert any(
+        alert.code == "stale_queue_actions" and "KONICA_STALE_ACTION" in alert.message
+        for alert in stale_agent.health_alerts
+    )
 
 
 def test_remote_queue_action_lifecycle(db_session: Session):
