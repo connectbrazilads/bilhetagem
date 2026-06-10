@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -49,12 +49,12 @@ def _clean_optional(value: str | None) -> str | None:
     return cleaned or None
 
 
-def _days_match(policy: PrintPolicy, submitted_at: datetime) -> bool:
+def _allowed_weekdays(policy: PrintPolicy) -> set[int] | None:
     if not policy.days_of_week:
-        return True
+        return None
     tokens = {token.strip().lower() for token in policy.days_of_week.split(",") if token.strip()}
     if not tokens:
-        return True
+        return None
     names = {
         "mon": 0,
         "seg": 0,
@@ -77,7 +77,15 @@ def _days_match(policy: PrintPolicy, submitted_at: datetime) -> bool:
             allowed.add(int(token))
         elif token[:3] in names:
             allowed.add(names[token[:3]])
-    return submitted_at.weekday() in allowed
+    return allowed
+
+
+def _days_match(policy: PrintPolicy, submitted_at: datetime, *, use_previous_day: bool = False) -> bool:
+    allowed = _allowed_weekdays(policy)
+    if allowed is None:
+        return True
+    value = submitted_at - timedelta(days=1) if use_previous_day else submitted_at
+    return value.weekday() in allowed
 
 
 def _time_in_window(value: time, start: time, end: time) -> bool:
@@ -110,9 +118,13 @@ def _rule_matches(policy: PrintPolicy, payload: PrintJobCreate) -> bool:
     if policy.rule_type == PolicyRuleType.color:
         return payload.is_color
     if policy.rule_type == PolicyRuleType.time_window:
-        if not policy.start_time or not policy.end_time or not _days_match(policy, payload.submitted_at):
+        if not policy.start_time or not policy.end_time:
             return False
-        return _time_in_window(payload.submitted_at.time(), policy.start_time, policy.end_time)
+        submitted_time = payload.submitted_at.time()
+        use_previous_day = policy.start_time > policy.end_time and submitted_time <= policy.end_time
+        if not _days_match(policy, payload.submitted_at, use_previous_day=use_previous_day):
+            return False
+        return _time_in_window(submitted_time, policy.start_time, policy.end_time)
     return False
 
 

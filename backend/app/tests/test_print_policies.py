@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 
 from sqlalchemy.orm import Session
 
@@ -82,6 +82,86 @@ def test_policy_requires_release_above_page_limit(db_session: Session):
     assert decision.status == JobStatus.pending_release
     assert decision.authorized is True
     assert "Liberar grandes volumes" in (decision.reason or "")
+
+
+def test_time_window_policy_blocks_only_inside_window(db_session: Session):
+    _admin(db_session)
+    _printer(db_session)
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Bloquear expediente noturno",
+            priority=10,
+            rule_type=PolicyRuleType.time_window,
+            action=PolicyAction.block,
+            start_time=time(22, 0),
+            end_time=time(6, 0),
+        )
+    )
+    db_session.commit()
+
+    blocked = register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="plantao",
+            printer_name="KONICA_POLICY",
+            pages=1,
+            is_color=False,
+            external_job_id="eventlog:night-block",
+            submitted_at=datetime(2026, 6, 10, 23, 30, tzinfo=timezone.utc),
+        ),
+        organization_id=1,
+    )
+    allowed = register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="plantao",
+            printer_name="KONICA_POLICY",
+            pages=1,
+            is_color=False,
+            external_job_id="eventlog:day-allow",
+            submitted_at=datetime(2026, 6, 10, 12, 0, tzinfo=timezone.utc),
+        ),
+        organization_id=1,
+    )
+
+    assert blocked.status == JobStatus.blocked
+    assert blocked.reason == "Bloqueado pela politica: Bloquear expediente noturno"
+    assert allowed.status == JobStatus.authorized
+
+
+def test_time_window_policy_with_weekday_matches_after_midnight_continuation(db_session: Session):
+    _admin(db_session)
+    _printer(db_session)
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Bloquear segunda a noite",
+            priority=10,
+            rule_type=PolicyRuleType.time_window,
+            action=PolicyAction.block,
+            days_of_week="seg",
+            start_time=time(22, 0),
+            end_time=time(6, 0),
+        )
+    )
+    db_session.commit()
+
+    decision = register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="plantao",
+            printer_name="KONICA_POLICY",
+            pages=1,
+            is_color=False,
+            external_job_id="eventlog:monday-overnight",
+            submitted_at=datetime(2026, 6, 9, 2, 0, tzinfo=timezone.utc),
+        ),
+        organization_id=1,
+    )
+
+    assert decision.status == JobStatus.blocked
+    assert decision.reason == "Bloqueado pela politica: Bloquear segunda a noite"
 
 
 def test_allow_policy_exception_skips_later_block(db_session: Session):
