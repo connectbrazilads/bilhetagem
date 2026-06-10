@@ -25,6 +25,7 @@ export type DashboardMetrics = {
     unbound_queues: number;
     usb_queues: number;
     duplicate_queue_aliases: number;
+    generic_queue_aliases: number;
   } | null;
   top_users: { username: string; pages: number; cost?: number; cost_per_page?: number }[];
   top_printers: { printer: string; pages: number; cost?: number; cost_per_page?: number }[];

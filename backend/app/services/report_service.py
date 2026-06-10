@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta, timezone
 from collections import defaultdict
+import unicodedata
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -34,6 +35,23 @@ def _normalize_alias_name(value: str | None) -> str | None:
     if not value:
         return None
     return " ".join(value.strip().lower().split()) or None
+
+
+def _plain_text_key(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = unicodedata.normalize("NFKD", value.strip())
+    ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
+    return " ".join(ascii_text.lower().split()) or None
+
+
+def _is_generic_queue_name(value: str | None) -> bool:
+    return _plain_text_key(value) in {
+        "documento de impressao",
+        "print document",
+        "user",
+        "unknown",
+    }
 
 
 def _duplicate_queue_alias_count(aliases: list[PrinterAlias]) -> int:
@@ -118,7 +136,9 @@ def _agent_has_operational_alert(
         return True
     if any(alias.printer_id is None for alias in present_aliases):
         return True
-    return _duplicate_queue_alias_count(present_aliases) > 0
+    if _duplicate_queue_alias_count(present_aliases) > 0:
+        return True
+    return any(_is_generic_queue_name(alias.queue_name) for alias in present_aliases)
 
 
 def _toner_values(printer: Printer) -> list[int]:
@@ -157,6 +177,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     unbound_queues = sum(1 for alias in present_aliases if alias.printer_id is None)
     usb_queues = sum(1 for alias in present_aliases if alias.connection_type == "usb")
     duplicate_queue_aliases = _duplicate_queue_alias_count(present_aliases)
+    generic_queue_aliases = sum(1 for alias in present_aliases if _is_generic_queue_name(alias.queue_name))
     pending_queue_actions = (
         db.query(AgentQueueAction)
         .filter(
@@ -208,6 +229,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         "unbound_queues": int(unbound_queues),
         "usb_queues": int(usb_queues),
         "duplicate_queue_aliases": duplicate_queue_aliases,
+        "generic_queue_aliases": int(generic_queue_aliases),
     }
 
 

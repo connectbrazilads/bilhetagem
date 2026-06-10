@@ -15,6 +15,7 @@ class OperationalHealth(BaseModel):
     unbound_queues: int = 0
     usb_queues: int = 0
     duplicate_queue_aliases: int = 0
+    generic_queue_aliases: int = 0
 
 
 class DashboardContractOverview(BaseModel):

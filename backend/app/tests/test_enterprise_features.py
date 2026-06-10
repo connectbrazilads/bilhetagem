@@ -913,6 +913,15 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
                 connection_type="network",
                 last_seen_at=now,
             ),
+            PrinterAlias(
+                organization_id=1,
+                printer_id=org_one_printer.id,
+                agent_id=org_one_recent_log_agent.id,
+                queue_name="USER",
+                normalized_queue_name="user",
+                connection_type="network",
+                last_seen_at=now,
+            ),
             AgentLog(
                 organization_id=1,
                 agent_id=org_one_recent_log_agent.id,
@@ -1027,12 +1036,14 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         "unbound_queues": 1,
         "usb_queues": 1,
         "duplicate_queue_aliases": 1,
+        "generic_queue_aliases": 1,
     }
     validated_metrics = DashboardMetrics.model_validate(metrics)
     assert validated_metrics.contract_overview is not None
     assert validated_metrics.contract_overview.printer_usage_percent == 50.0
     assert validated_metrics.operational_health is not None
     assert validated_metrics.operational_health.duplicate_queue_aliases == 1
+    assert validated_metrics.operational_health.generic_queue_aliases == 1
     assert validated_metrics.top_users[0].username == "Org 1 User"
     assert validated_metrics.top_printers[0].printer == "Org 1 Printer"
     assert validated_metrics.department_usage[0].department == "Financeiro"
