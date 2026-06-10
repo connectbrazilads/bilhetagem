@@ -13,6 +13,7 @@ from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
 from app.api.routes.settings import (
     get_general_settings,
+    get_operational_settings,
     update_general_settings,
     update_monthly_report_email_settings_endpoint,
 )
@@ -79,6 +80,17 @@ def test_settings_updates_are_audited(db_session: Session):
     assert log.log_metadata["changes"]["blocking_enabled"] == {"before": True, "after": False}
     assert log.log_metadata["changes"]["safe_release_enabled"] == {"before": True, "after": False}
     assert log.log_metadata["changes"]["web_print_enabled"] == {"before": True, "after": False}
+
+
+def test_manager_can_read_operational_settings(db_session: Session):
+    manager = User(username="manager-settings", full_name="Manager", role=UserRole.manager, is_active=True, organization_id=1)
+    db_session.add(manager)
+    db_session.commit()
+    update_system_settings(db_session, {"safe_release_enabled": False}, manager.organization_id)
+
+    settings = get_operational_settings(db=db_session, actor=manager)
+
+    assert settings.safe_release_enabled is False
 
 
 def test_monthly_report_email_settings_updates_are_audited(db_session: Session):

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.user import User, UserRole
-from app.schemas.settings import LDAPSettings, GeneralSettings, MonthlyReportEmailSettings
+from app.schemas.settings import LDAPSettings, GeneralSettings, MonthlyReportEmailSettings, OperationalSettings
 from app.services.ldap_service import test_ldap_connection, sync_ldap_users
 from app.services.settings_service import (
     get_monthly_report_email_settings,
@@ -32,6 +32,15 @@ def get_general_settings(
     actor: User = Depends(require_roles(UserRole.admin, UserRole.agent)),
 ) -> GeneralSettings:
     return GeneralSettings(**get_system_settings_dict(db, actor.organization_id))
+
+
+@router.get("/operational", response_model=OperationalSettings)
+def get_operational_settings(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+) -> OperationalSettings:
+    settings = get_system_settings_dict(db, actor.organization_id)
+    return OperationalSettings(safe_release_enabled=settings["safe_release_enabled"])
 
 
 @router.put("", response_model=GeneralSettings)

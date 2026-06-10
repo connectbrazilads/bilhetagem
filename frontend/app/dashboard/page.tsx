@@ -87,7 +87,7 @@ export default function DashboardPage() {
     const token = localStorage.getItem("token");
     if (!token) return;
     try {
-      const settings = await apiFetch<{ safe_release_enabled: boolean }>("/settings", token);
+      const settings = await apiFetch<{ safe_release_enabled: boolean }>("/settings/operational", token);
       setSafeReleaseEnabled(settings.safe_release_enabled);
     } catch {
       setSafeReleaseEnabled(false);
