@@ -12,7 +12,7 @@ from app.models.user import User, UserRole
 from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
 from app.api.routes.auth import login
-from app.api.routes.audit_logs import list_audit_logs
+from app.api.routes.audit_logs import export_audit_logs, list_audit_logs
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
 from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
@@ -461,10 +461,70 @@ def test_audit_log_listing_is_scoped_by_organization(db_session: Session):
     )
     db_session.commit()
 
-    logs = list_audit_logs(action=None, entity=None, limit=100, db=db_session, actor=admin)
+    logs = list_audit_logs(action=None, entity=None, date_from=None, date_to=None, limit=100, db=db_session, actor=admin)
     assert [log.entity_id for log in logs] == [10]
     assert logs[0].actor_username == "audit-admin"
     assert logs[0].metadata == {"name": "KONICA"}
 
-    filtered = list_audit_logs(action="printer_updated", entity="printers", limit=100, db=db_session, actor=admin)
+    filtered = list_audit_logs(
+        action="printer_updated",
+        entity="printers",
+        date_from=None,
+        date_to=None,
+        limit=100,
+        db=db_session,
+        actor=admin,
+    )
     assert [log.entity_id for log in filtered] == [10]
+
+
+def test_audit_log_filters_by_date_and_exports_csv(db_session: Session):
+    admin = User(username="audit-export", full_name="Audit Export", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.flush()
+
+    old_log = write_audit(
+        db_session,
+        action="user_created",
+        entity="users",
+        entity_id=1,
+        actor_user_id=admin.id,
+        metadata={"username": "antigo"},
+    )
+    old_log.created_at = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    new_log = write_audit(
+        db_session,
+        action="printer_updated",
+        entity="printers",
+        entity_id=2,
+        actor_user_id=admin.id,
+        metadata={"name": "KONICA"},
+    )
+    new_log.created_at = datetime(2026, 2, 1, 10, 0, tzinfo=timezone.utc)
+    db_session.commit()
+
+    filtered = list_audit_logs(
+        action=None,
+        entity=None,
+        date_from=datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc),
+        date_to=datetime(2026, 2, 28, 23, 59, tzinfo=timezone.utc),
+        limit=100,
+        db=db_session,
+        actor=admin,
+    )
+    assert [log.entity_id for log in filtered] == [2]
+
+    response = export_audit_logs(
+        action=None,
+        entity=None,
+        date_from=datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc),
+        date_to=datetime(2026, 2, 28, 23, 59, tzinfo=timezone.utc),
+        limit=100,
+        db=db_session,
+        actor=admin,
+    )
+    body = response.body.decode("utf-8")
+    assert "data_hora,ator,acao,entidade,id_entidade,detalhes" in body
+    assert "audit-export,printer_updated,printers,2" in body
+    assert "KONICA" in body
+    assert "antigo" not in body

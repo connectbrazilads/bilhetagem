@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Filter, History, RefreshCcw } from "lucide-react";
+import { Download, Filter, History, RefreshCcw } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
-import { apiFetch } from "@/lib/api";
+import { API_URL, apiFetch } from "@/lib/api";
 
 type AuditLogRow = {
   id: number;
@@ -22,20 +22,51 @@ export default function AuditPage() {
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [action, setAction] = useState("");
   const [entity, setEntity] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  function buildParams(limit = "200") {
+    const params = new URLSearchParams({ limit });
+    if (action.trim()) params.set("action", action.trim());
+    if (entity.trim()) params.set("entity", entity.trim());
+    if (dateFrom) params.set("date_from", `${dateFrom}T00:00:00`);
+    if (dateTo) params.set("date_to", `${dateTo}T23:59:59`);
+    return params;
+  }
 
   async function load() {
     const token = localStorage.getItem("token");
     if (!token) return;
     setError(null);
-    const params = new URLSearchParams({ limit: "200" });
-    if (action.trim()) params.set("action", action.trim());
-    if (entity.trim()) params.set("entity", entity.trim());
+    const params = buildParams();
     try {
       await apiFetch<AuditLogRow[]>(`/audit-logs?${params.toString()}`, token).then(setLogs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar auditoria");
       setLogs([]);
+    }
+  }
+
+  async function exportCsv() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setError(null);
+    const params = buildParams("5000");
+    try {
+      const response = await fetch(`${API_URL}/audit-logs/export?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "auditoria.csv";
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao exportar auditoria");
     }
   }
 
@@ -59,10 +90,16 @@ export default function AuditPage() {
           <h1 className="text-3xl font-bold tracking-tight">Auditoria</h1>
           <p className="mt-1 text-sm text-muted-foreground">Acompanhe alteracoes administrativas e eventos operacionais por empresa.</p>
         </div>
-        <Button variant="outline" onClick={load}>
-          <RefreshCcw className="h-4 w-4" />
-          Atualizar
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="h-4 w-4" />
+            CSV
+          </Button>
+          <Button variant="outline" onClick={load}>
+            <RefreshCcw className="h-4 w-4" />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       <div className="mb-4 grid gap-4 md:grid-cols-3">
@@ -72,9 +109,11 @@ export default function AuditPage() {
       </div>
 
       <Surface className="mb-4 p-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_160px_auto]">
           <Input placeholder="Filtrar por acao" value={action} onChange={(event) => setAction(event.target.value)} />
           <Input placeholder="Filtrar por entidade" value={entity} onChange={(event) => setEntity(event.target.value)} />
+          <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+          <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
           <Button onClick={load}>
             <Filter className="h-4 w-4" />
             Filtrar
