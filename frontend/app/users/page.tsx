@@ -5,7 +5,7 @@ import { Building2, Edit, Plus, ShieldCheck, Trash2, Users } from "lucide-react"
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getCurrentRole } from "@/lib/api";
 
 type UserRow = {
   id: number;
@@ -56,6 +56,7 @@ export default function UsersPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingDepartmentId, setEditingDepartmentId] = useState<number | null>(null);
   const [showBalance, setShowBalance] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const editingUser = useMemo(() => users.find((user) => user.id === editingId) ?? null, [users, editingId]);
   const editingAgent = editingUser?.role === "agent";
 
@@ -76,6 +77,8 @@ export default function UsersPage() {
   }
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    setIsAdmin(token ? getCurrentRole(token) === "admin" : false);
     load();
   }, []);
 
@@ -90,6 +93,7 @@ export default function UsersPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setError(null);
@@ -128,6 +132,7 @@ export default function UsersPage() {
   }
 
   function startEdit(user: UserRow) {
+    if (!isAdmin) return;
     setEditingId(user.id);
     setForm({
       username: user.username,
@@ -147,6 +152,7 @@ export default function UsersPage() {
 
   async function submitDepartment(event: FormEvent) {
     event.preventDefault();
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setDepartmentError(null);
@@ -170,6 +176,7 @@ export default function UsersPage() {
   }
 
   function startEditDepartment(department: DepartmentRow) {
+    if (!isAdmin) return;
     setEditingDepartmentId(department.id);
     setDepartmentForm({ name: department.name });
   }
@@ -180,6 +187,7 @@ export default function UsersPage() {
   }
 
   async function deleteDepartment(department: DepartmentRow) {
+    if (!isAdmin) return;
     const confirmed = window.confirm(`Excluir o departamento "${department.name}"?`);
     if (!confirmed) return;
     const token = localStorage.getItem("token");
@@ -195,6 +203,7 @@ export default function UsersPage() {
   }
 
   async function deleteUser(user: UserRow) {
+    if (!isAdmin) return;
     if (user.username === "admin" || user.username === "agent" || user.role === "agent") {
       setError("Usuarios tecnicos nao podem ser excluidos.");
       return;
@@ -218,7 +227,9 @@ export default function UsersPage() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Usuarios</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Cadastre usuarios, departamentos e limites de impressao.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {isAdmin ? "Cadastre usuarios, departamentos e limites de impressao." : "Consulte usuarios, departamentos e limites de impressao."}
+          </p>
         </div>
       </div>
 
@@ -229,84 +240,86 @@ export default function UsersPage() {
         <SummaryCard label="Departamentos" value={summary.departments} icon={Building2} />
       </div>
 
-      <Surface as="form" className="mb-4 grid gap-3 p-4 xl:grid-cols-[160px_1fr_150px_190px_120px_auto]" onSubmit={submit}>
-        <Input
-          placeholder="Login"
-          value={form.username}
-          onChange={(event) => setForm({ ...form, username: event.target.value })}
-          required
-          disabled={editingId !== null}
-        />
-        <Input
-          placeholder="Nome"
-          value={form.full_name}
-          onChange={(event) => setForm({ ...form, full_name: event.target.value })}
-          required
-        />
-        <select
-          className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20 disabled:bg-muted disabled:text-muted-foreground"
-          value={editingAgent ? "agent" : form.role}
-          onChange={(event) => setForm({ ...form, role: event.target.value })}
-          disabled={editingAgent}
-        >
-          {editingAgent ? <option value="agent">Tecnico agent</option> : null}
-          {humanRoleOptions.map((role) => (
-            <option key={role.value} value={role.value}>
-              {role.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
-          value={form.department_id}
-          onChange={(event) => setForm({ ...form, department_id: event.target.value })}
-        >
-          <option value="">Sem departamento</option>
-          {departments.map((department) => (
-            <option key={department.id} value={department.id}>
-              {department.name}
-            </option>
-          ))}
-        </select>
-        <Input
-          placeholder="Limite"
-          type="number"
-          value={form.monthly_limit}
-          onChange={(event) => setForm({ ...form, monthly_limit: event.target.value })}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          {showBalance ? (
-            <Input
-              className="w-32"
-              placeholder="Saldo R$"
-              type="number"
-              step="0.01"
-              value={form.monthly_balance}
-              onChange={(event) => setForm({ ...form, monthly_balance: event.target.value })}
-            />
-          ) : null}
-          {editingId ? (
-            <label className="flex items-center gap-2 px-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                checked={form.is_active}
-                onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
+      {isAdmin ? (
+        <Surface as="form" className="mb-4 grid gap-3 p-4 xl:grid-cols-[160px_1fr_150px_190px_120px_auto]" onSubmit={submit}>
+          <Input
+            placeholder="Login"
+            value={form.username}
+            onChange={(event) => setForm({ ...form, username: event.target.value })}
+            required
+            disabled={editingId !== null}
+          />
+          <Input
+            placeholder="Nome"
+            value={form.full_name}
+            onChange={(event) => setForm({ ...form, full_name: event.target.value })}
+            required
+          />
+          <select
+            className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20 disabled:bg-muted disabled:text-muted-foreground"
+            value={editingAgent ? "agent" : form.role}
+            onChange={(event) => setForm({ ...form, role: event.target.value })}
+            disabled={editingAgent}
+          >
+            {editingAgent ? <option value="agent">Tecnico agent</option> : null}
+            {humanRoleOptions.map((role) => (
+              <option key={role.value} value={role.value}>
+                {role.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+            value={form.department_id}
+            onChange={(event) => setForm({ ...form, department_id: event.target.value })}
+          >
+            <option value="">Sem departamento</option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name}
+              </option>
+            ))}
+          </select>
+          <Input
+            placeholder="Limite"
+            type="number"
+            value={form.monthly_limit}
+            onChange={(event) => setForm({ ...form, monthly_limit: event.target.value })}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            {showBalance ? (
+              <Input
+                className="w-32"
+                placeholder="Saldo R$"
+                type="number"
+                step="0.01"
+                value={form.monthly_balance}
+                onChange={(event) => setForm({ ...form, monthly_balance: event.target.value })}
               />
-              Ativo
-            </label>
-          ) : null}
-          <Button type="submit">
-            <Plus className="h-4 w-4" />
-            {editingId ? "Salvar" : "Cadastrar"}
-          </Button>
-          {editingId ? (
-            <Button type="button" variant="outline" onClick={resetForm}>
-              Cancelar
+            ) : null}
+            {editingId ? (
+              <label className="flex items-center gap-2 px-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  checked={form.is_active}
+                  onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
+                />
+                Ativo
+              </label>
+            ) : null}
+            <Button type="submit">
+              <Plus className="h-4 w-4" />
+              {editingId ? "Salvar" : "Cadastrar"}
             </Button>
-          ) : null}
-        </div>
-      </Surface>
+            {editingId ? (
+              <Button type="button" variant="outline" onClick={resetForm}>
+                Cancelar
+              </Button>
+            ) : null}
+          </div>
+        </Surface>
+      ) : null}
 
       {error ? <Surface className="mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</Surface> : null}
 
@@ -317,27 +330,29 @@ export default function UsersPage() {
             Departamentos
           </div>
         </div>
-        <div className="grid gap-4 p-4 lg:grid-cols-[360px_1fr]">
-          <form className="flex flex-col gap-3" onSubmit={submitDepartment}>
-            <Input
-              placeholder="Nome do departamento"
-              value={departmentForm.name}
-              onChange={(event) => setDepartmentForm({ name: event.target.value })}
-              required
-            />
-            <div className="flex gap-2">
-              <Button type="submit">
-                <Plus className="h-4 w-4" />
-                {editingDepartmentId ? "Salvar" : "Cadastrar"}
-              </Button>
-              {editingDepartmentId ? (
-                <Button type="button" variant="outline" onClick={resetDepartmentForm}>
-                  Cancelar
+        <div className={`grid gap-4 p-4 ${isAdmin ? "lg:grid-cols-[360px_1fr]" : ""}`}>
+          {isAdmin ? (
+            <form className="flex flex-col gap-3" onSubmit={submitDepartment}>
+              <Input
+                placeholder="Nome do departamento"
+                value={departmentForm.name}
+                onChange={(event) => setDepartmentForm({ name: event.target.value })}
+                required
+              />
+              <div className="flex gap-2">
+                <Button type="submit">
+                  <Plus className="h-4 w-4" />
+                  {editingDepartmentId ? "Salvar" : "Cadastrar"}
                 </Button>
-              ) : null}
-            </div>
-            {departmentError ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{departmentError}</div> : null}
-          </form>
+                {editingDepartmentId ? (
+                  <Button type="button" variant="outline" onClick={resetDepartmentForm}>
+                    Cancelar
+                  </Button>
+                ) : null}
+              </div>
+              {departmentError ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{departmentError}</div> : null}
+            </form>
+          ) : null}
           <div className="overflow-x-auto">
             {departments.length === 0 ? (
               <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Nenhum departamento cadastrado.</div>
@@ -346,23 +361,25 @@ export default function UsersPage() {
                 <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="p-2">Departamento</th>
-                    <th className="p-2 text-right">Acoes</th>
+                    {isAdmin ? <th className="p-2 text-right">Acoes</th> : null}
                   </tr>
                 </thead>
                 <tbody>
                   {departments.map((department) => (
                     <tr key={department.id} className="border-t">
                       <td className="p-2 font-medium">{department.name}</td>
-                      <td className="p-2 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" onClick={() => startEditDepartment(department)} title="Editar departamento" className="h-8 w-8 p-0">
-                            <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                          </Button>
-                          <Button variant="ghost" onClick={() => deleteDepartment(department)} title="Excluir departamento" className="h-8 w-8 p-0">
-                            <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
-                          </Button>
-                        </div>
-                      </td>
+                      {isAdmin ? (
+                        <td className="p-2 text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" onClick={() => startEditDepartment(department)} title="Editar departamento" className="h-8 w-8 p-0">
+                              <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                            </Button>
+                            <Button variant="ghost" onClick={() => deleteDepartment(department)} title="Excluir departamento" className="h-8 w-8 p-0">
+                              <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
+                            </Button>
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
@@ -391,7 +408,7 @@ export default function UsersPage() {
                   {showBalance ? <th className="p-4 text-right">Gasto</th> : null}
                   <th className="p-4">Perfil</th>
                   <th className="p-4">Status</th>
-                  <th className="p-4 text-right">Acoes</th>
+                  {isAdmin ? <th className="p-4 text-right">Acoes</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -425,18 +442,20 @@ export default function UsersPage() {
                           {user.is_active ? "Ativo" : "Inativo"}
                         </span>
                       </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" onClick={() => startEdit(user)} title="Editar" className="h-8 w-8 p-0">
-                            <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                          </Button>
-                          {canDelete ? (
-                            <Button variant="ghost" onClick={() => deleteUser(user)} title="Excluir" className="h-8 w-8 p-0">
-                              <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
+                      {isAdmin ? (
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" onClick={() => startEdit(user)} title="Editar" className="h-8 w-8 p-0">
+                              <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                             </Button>
-                          ) : null}
-                        </div>
-                      </td>
+                            {canDelete ? (
+                              <Button variant="ghost" onClick={() => deleteUser(user)} title="Excluir" className="h-8 w-8 p-0">
+                                <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
+                              </Button>
+                            ) : null}
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}
