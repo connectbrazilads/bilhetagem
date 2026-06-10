@@ -184,5 +184,13 @@ function Summary({ label, value }: { label: string; value: number }) {
 function formatMetadata(metadata: Record<string, unknown>) {
   const entries = Object.entries(metadata);
   if (!entries.length) return "-";
-  return entries.map(([key, value]) => `${key}: ${String(value)}`).join(" | ");
+  return entries.map(([key, value]) => `${key}: ${formatMetadataValue(value)}`).join(" | ");
+}
+
+function formatMetadataValue(value: unknown) {
+  if (value === null || value === undefined) return "-";
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
 }
