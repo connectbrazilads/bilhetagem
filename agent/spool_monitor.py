@@ -331,12 +331,15 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
             latest_version = info.get("latest_version", "desconhecida")
             logger.info("Atualizacao do agent disponivel: atual=%s nova=%s", AGENT_VERSION, latest_version)
             self._record_log("info", f"Atualizacao do agent disponivel: atual={AGENT_VERSION} nova={latest_version}", "update")
-            update_bytes = self.api_client.download_agent_update()
             expected_sha256 = self._clean_metadata(info.get("sha256"))
             if not expected_sha256:
                 raise RuntimeError("Servidor nao informou SHA256 da atualizacao do agent")
+            expected_sha256 = expected_sha256.lower()
+            if len(expected_sha256) != 64 or any(char not in "0123456789abcdef" for char in expected_sha256):
+                raise RuntimeError(f"Servidor informou SHA256 invalido da atualizacao do agent: {expected_sha256}")
+            update_bytes = self.api_client.download_agent_update()
             actual_sha256 = hashlib.sha256(update_bytes).hexdigest()
-            if actual_sha256.lower() != expected_sha256.lower():
+            if actual_sha256.lower() != expected_sha256:
                 raise RuntimeError(
                     f"SHA256 da atualizacao invalido: esperado={expected_sha256} obtido={actual_sha256}"
                 )

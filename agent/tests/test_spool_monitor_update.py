@@ -72,6 +72,39 @@ def test_agent_update_failure_is_reported_in_diagnostics(monkeypatch, tmp_path: 
     )
 
 
+def test_agent_update_rejects_malformed_sha_before_download(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
+    monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)
+
+    class FakeApiClient:
+        def __init__(self):
+            self.download_called = False
+
+        def get_agent_version_info(self, current_version: str) -> dict:
+            return {
+                "latest_version": "0.3.0",
+                "update_available": True,
+                "sha256": "nao-e-sha",
+            }
+
+        def download_agent_update(self) -> bytes:
+            self.download_called = True
+            return b"agent-update-binary"
+
+    api_client = FakeApiClient()
+    monitor = SpoolMonitor(
+        api_client,
+        agent_config=AgentConfig(auto_update_enabled=True, update_check_interval_seconds=0),
+        sleep=lambda _: None,
+    )
+
+    monitor._check_agent_update_if_due()
+
+    assert api_client.download_called is False
+    assert monitor._last_error is not None
+    assert "Servidor informou SHA256 invalido" in monitor._last_error
+
+
 def test_queue_action_processing_continues_after_malformed_action(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
     monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)
