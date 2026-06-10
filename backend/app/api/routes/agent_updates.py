@@ -93,12 +93,25 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
     manifest_path = _manifest_path()
     releases: list[AgentReleaseRead] = []
     if manifest_path.exists():
-        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = None
+    else:
+        data = None
+
+    if isinstance(data, dict):
         for raw_release in data.get("versions", []):
-            version = str(raw_release["version"])
+            if not isinstance(raw_release, dict):
+                continue
+            version = str(raw_release.get("version") or "")
+            if not version:
+                continue
             files = []
             for raw_file in raw_release.get("files", []):
-                filename = str(raw_file["filename"])
+                if not isinstance(raw_file, dict):
+                    continue
+                filename = str(raw_file.get("filename") or "")
                 if not _is_safe_release_filename(filename):
                     continue
                 path = _release_file(version, filename)

@@ -64,6 +64,26 @@ def test_agent_version_reports_update_when_file_exists(db_session: Session, monk
     assert response.sha256 is not None
 
 
+def test_agent_releases_fall_back_to_legacy_file_when_manifest_is_invalid(db_session: Session, monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(settings, "agent_latest_version", "0.2.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "agent_download_filename", "PrintBillingAgent.exe")
+    (tmp_path / "manifest.json").write_text("{invalid-json", encoding="utf-8")
+    (tmp_path / "PrintBillingAgent.exe").write_bytes(b"legacy-agent")
+    actor = User(username="invalid-manifest-admin", full_name="Release Admin", role=UserRole.admin, is_active=True)
+    db_session.add(actor)
+    db_session.commit()
+
+    releases = list_agent_releases(_=actor)
+    version = agent_version(current_version="0.1.0", _=actor)
+
+    assert [release.version for release in releases] == ["0.2.0"]
+    assert releases[0].signature_status == "unsigned"
+    assert releases[0].files[0].sha256 == hashlib.sha256(b"legacy-agent").hexdigest()
+    assert version.update_available is True
+    assert version.sha256 == hashlib.sha256(b"legacy-agent").hexdigest()
+
+
 def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypatch, tmp_path: Path):
     old_release_dir = tmp_path / "0.2.0"
     old_release_dir.mkdir()
