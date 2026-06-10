@@ -840,8 +840,8 @@ def _new_queue_action(
     )
 
 
-def _queue_action_audit_metadata(action: AgentQueueAction, agent: PrintAgent | None = None, *, bulk: bool = False) -> dict:
-    return {
+def _queue_action_audit_metadata(action: AgentQueueAction, agent: PrintAgent | None = None, *, bulk: bool | None = None) -> dict:
+    metadata = {
         "agent_id": action.agent_id,
         "agent_uid": agent.agent_uid if agent else None,
         "computer_name": agent.computer_name if agent else None,
@@ -851,8 +851,10 @@ def _queue_action_audit_metadata(action: AgentQueueAction, agent: PrintAgent | N
         "driver_name": action.driver_name,
         "port_name": action.port_name,
         "ip_address": action.ip_address,
-        "bulk": bulk,
     }
+    if bulk is not None:
+        metadata["bulk"] = bulk
+    return metadata
 
 
 def _deployment_organization_read(db: Session, organization: Organization) -> AgentDeploymentOrganizationRead:
@@ -1148,7 +1150,7 @@ def create_queue_action(
         entity="agent_queue_actions",
         entity_id=action.id,
         actor_user_id=actor.id,
-        metadata=_queue_action_audit_metadata(action, agent),
+        metadata=_queue_action_audit_metadata(action, agent, bulk=False),
         organization_id=actor.organization_id,
     )
     db.commit()

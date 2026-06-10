@@ -1273,7 +1273,7 @@ def test_remote_queue_action_lifecycle(db_session: Session):
     assert result_audit.log_metadata["printer_id"] == printer.id
     assert result_audit.log_metadata["driver_name"] == "KONICA Driver"
     assert result_audit.log_metadata["ip_address"] == "192.168.1.125"
-    assert result_audit.log_metadata["bulk"] is False
+    assert "bulk" not in result_audit.log_metadata
 
 
 def test_pending_queue_action_can_be_cancelled_by_admin(db_session: Session):
@@ -1316,7 +1316,7 @@ def test_pending_queue_action_can_be_cancelled_by_admin(db_session: Session):
     assert audit.log_metadata["printer_id"] == printer.id
     assert audit.log_metadata["driver_name"] == "KONICA Driver"
     assert audit.log_metadata["ip_address"] == "192.168.1.140"
-    assert audit.log_metadata["bulk"] is False
+    assert "bulk" not in audit.log_metadata
 
 
 def test_running_queue_action_can_be_cancelled_and_rejects_late_result(db_session: Session):
