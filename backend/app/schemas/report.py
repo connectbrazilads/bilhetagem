@@ -71,6 +71,16 @@ class MonthlyClosingOrganizationSnapshot(BaseModel):
     slug: str
 
 
+class MonthlyClosingContractSnapshot(BaseModel):
+    billing_plan: str = "starter"
+    billing_status: str = "trial"
+    contracted_printer_limit: int = 0
+    printers_count: int = 0
+    active_printers_count: int = 0
+    printer_usage_percent: float = 0.0
+    printer_limit_status: str = "unlimited"
+
+
 class MonthlyClosingPeriodSnapshot(BaseModel):
     year: int
     month: int
@@ -127,6 +137,7 @@ class MonthlyClosingEcoSnapshot(BaseModel):
 
 class MonthlyClosingSnapshot(BaseModel):
     organization: MonthlyClosingOrganizationSnapshot
+    contract: MonthlyClosingContractSnapshot = Field(default_factory=MonthlyClosingContractSnapshot)
     period: MonthlyClosingPeriodSnapshot
     totals: MonthlyClosingTotalsSnapshot
     by_user: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)

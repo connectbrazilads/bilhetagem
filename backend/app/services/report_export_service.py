@@ -39,6 +39,38 @@ def _org_name(closing: MonthlyClosing) -> str:
     return getattr(organization, "name", None) or "Sistema de Bilhetagem"
 
 
+def _contract_snapshot(closing: MonthlyClosing) -> dict:
+    return closing.snapshot.get("contract", {}) if closing.snapshot else {}
+
+
+def _billing_plan_label(plan: str | None) -> str:
+    labels = {
+        "starter": "Starter",
+        "professional": "Professional",
+        "enterprise": "Enterprise",
+    }
+    return labels.get(plan or "", plan or "Starter")
+
+
+def _billing_status_label(status: str | None) -> str:
+    labels = {
+        "trial": "Teste",
+        "active": "Em dia",
+        "past_due": "Em atraso",
+        "suspended": "Suspenso",
+    }
+    return labels.get(status or "", status or "Teste")
+
+
+def _printer_contract_label(contract: dict) -> str:
+    limit = int(contract.get("contracted_printer_limit") or 0)
+    active = int(contract.get("active_printers_count") or 0)
+    if limit <= 0:
+        return f"{active} impressora(s) ativa(s) | Sem limite contratado"
+    usage = float(contract.get("printer_usage_percent") or 0.0)
+    return f"{active}/{limit} impressora(s) ativa(s) | {usage:.1f}% do contrato"
+
+
 def _job_user_name(job: PrintJob) -> str:
     return job.user.full_name or job.user.username
 
@@ -101,6 +133,7 @@ def summarize_print_jobs(jobs: list[PrintJob]) -> dict[str, float | int]:
 
 
 def _draw_header(pdf: canvas.Canvas, closing: MonthlyClosing) -> float:
+    contract = _contract_snapshot(closing)
     pdf.setFillColor(PRIMARY)
     pdf.rect(0, PAGE_HEIGHT - 84, PAGE_WIDTH, 84, fill=1, stroke=0)
     pdf.setFillColor(colors.white)
@@ -108,6 +141,13 @@ def _draw_header(pdf: canvas.Canvas, closing: MonthlyClosing) -> float:
     pdf.drawString(40, PAGE_HEIGHT - 38, "Fechamento mensal de impressoes")
     pdf.setFont("Helvetica", 10)
     pdf.drawString(40, PAGE_HEIGHT - 57, f"{_org_name(closing)} | Periodo {closing.month:02d}/{closing.year}")
+    if contract:
+        pdf.setFont("Helvetica", 8)
+        pdf.drawString(
+            40,
+            PAGE_HEIGHT - 72,
+            f"Plano {_billing_plan_label(contract.get('billing_plan'))} | {_billing_status_label(contract.get('billing_status'))} | {_printer_contract_label(contract)}",
+        )
     pdf.drawRightString(PAGE_WIDTH - 40, PAGE_HEIGHT - 57, f"Gerado em {closing.generated_at:%d/%m/%Y %H:%M}")
     return PAGE_HEIGHT - 112
 
@@ -343,6 +383,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     workbook = Workbook()
     summary = workbook.active
     summary.title = "Resumo"
+    contract = _contract_snapshot(closing)
     summary.append(["Indicador", "Valor"])
     summary.append(["Empresa", _org_name(closing)])
     summary.append(["Periodo", f"{closing.month:02d}/{closing.year}"])
@@ -361,6 +402,14 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     summary.append(["CO2 evitado (g)", eco.get("co2_saved_g", 0)])
     summary.append(["Agua preservada (L)", eco.get("water_saved_l", 0)])
     summary.append(["Arvores salvas", eco.get("trees_saved", 0)])
+    if contract:
+        summary.append(["Plano", _billing_plan_label(contract.get("billing_plan"))])
+        summary.append(["Status comercial", _billing_status_label(contract.get("billing_status"))])
+        summary.append(["Limite contratado de impressoras", contract.get("contracted_printer_limit", 0)])
+        summary.append(["Impressoras cadastradas", contract.get("printers_count", 0)])
+        summary.append(["Impressoras ativas", contract.get("active_printers_count", 0)])
+        summary.append(["Uso do contrato de impressoras (%)", contract.get("printer_usage_percent", 0.0)])
+        summary.append(["Status do limite de impressoras", contract.get("printer_limit_status", "unlimited")])
     summary["B14"].number_format = '"R$" #,##0.00'
     _style_sheet(summary)
 

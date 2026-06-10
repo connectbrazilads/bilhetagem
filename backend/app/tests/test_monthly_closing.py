@@ -100,6 +100,9 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     organization = db_session.get(Organization, 1)
     organization.name = "Cliente Fechamento"
     organization.slug = "cliente-fechamento"
+    organization.billing_plan = "professional"
+    organization.billing_status = "active"
+    organization.contracted_printer_limit = 2
     db_session.commit()
 
     closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
@@ -165,8 +168,19 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
         },
     ]
     assert closing.snapshot["organization"] == {"id": 1, "name": "Cliente Fechamento", "slug": "cliente-fechamento"}
+    assert closing.snapshot["contract"] == {
+        "billing_plan": "professional",
+        "billing_status": "active",
+        "contracted_printer_limit": 2,
+        "printers_count": 1,
+        "active_printers_count": 1,
+        "printer_usage_percent": 50.0,
+        "printer_limit_status": "ok",
+    }
     validated_closing = MonthlyClosingRead.model_validate(closing)
     assert validated_closing.snapshot.organization.slug == "cliente-fechamento"
+    assert validated_closing.snapshot.contract.billing_plan == "professional"
+    assert validated_closing.snapshot.contract.printer_usage_percent == 50.0
     assert validated_closing.snapshot.totals.released_jobs == 1
     assert validated_closing.snapshot.by_policy[0].name == "Bloquear colorido"
     assert validated_closing.snapshot.eco.pages_saved == 3
@@ -175,6 +189,9 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     printer.name = "KONICA_NOVA"
     organization.name = "Cliente Renomeado"
     organization.slug = "cliente-renomeado"
+    organization.billing_plan = "enterprise"
+    organization.billing_status = "past_due"
+    organization.contracted_printer_limit = 1
     db_session.commit()
     same_closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
 
@@ -182,6 +199,9 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert same_closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert same_closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
     assert same_closing.snapshot["organization"] == {"id": 1, "name": "Cliente Fechamento", "slug": "cliente-fechamento"}
+    assert same_closing.snapshot["contract"]["billing_plan"] == "professional"
+    assert same_closing.snapshot["contract"]["billing_status"] == "active"
+    assert same_closing.snapshot["contract"]["contracted_printer_limit"] == 2
 
 
 def test_monthly_closing_rejects_invalid_period(db_session: Session):
@@ -224,6 +244,9 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     _seed_job_data(db_session)
     organization = db_session.get(Organization, 1)
     organization.name = "Cliente XLSX"
+    organization.billing_plan = "enterprise"
+    organization.billing_status = "active"
+    organization.contracted_printer_limit = 3
     db_session.commit()
     closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
     organization.name = "Cliente XLSX Renomeado"
@@ -244,6 +267,14 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert workbook["Resumo"]["B8"].value == 5
     assert workbook["Resumo"]["A14"].value == "Custo total"
     assert workbook["Resumo"]["B14"].value == 1.5
+    assert workbook["Resumo"]["A18"].value == "Plano"
+    assert workbook["Resumo"]["B18"].value == "Enterprise"
+    assert workbook["Resumo"]["A19"].value == "Status comercial"
+    assert workbook["Resumo"]["B19"].value == "Em dia"
+    assert workbook["Resumo"]["A20"].value == "Limite contratado de impressoras"
+    assert workbook["Resumo"]["B20"].value == 3
+    assert workbook["Resumo"]["A23"].value == "Uso do contrato de impressoras (%)"
+    assert workbook["Resumo"]["B23"].value == 33.3
     assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"
     assert workbook["Impressoras"]["G1"].value == "Custo/Pag."
     assert workbook["Impressoras"]["G2"].value == 0.11
