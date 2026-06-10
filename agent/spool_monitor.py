@@ -326,6 +326,7 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
                 return
             latest_version = info.get("latest_version", "desconhecida")
             logger.info("Atualizacao do agent disponivel: atual=%s nova=%s", AGENT_VERSION, latest_version)
+            self._record_log("info", f"Atualizacao do agent disponivel: atual={AGENT_VERSION} nova={latest_version}", "update")
             update_bytes = self.api_client.download_agent_update()
             expected_sha256 = self._clean_metadata(info.get("sha256"))
             if not expected_sha256:
@@ -338,12 +339,14 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
             update_path = get_app_dir() / "PrintBillingAgent.update.exe"
             update_path.write_bytes(update_bytes)
             logger.info("Atualizacao do agent baixada e verificada em %s", update_path)
+            self._record_log("info", f"Atualizacao do agent baixada e verificada: {latest_version}", "update")
             if getattr(sys, "frozen", False):
                 self._schedule_self_update(update_path)
             else:
                 logger.info("Ambiente de desenvolvimento detectado; atualizacao nao aplicada automaticamente")
-        except Exception:
+        except Exception as exc:
             logger.exception("Falha ao verificar/baixar atualizacao do agent")
+            self._record_error(f"Falha ao verificar/baixar atualizacao do agent: {exc}")
 
     def _schedule_self_update(self, update_path) -> None:
         current_exe = Path(sys.executable)
@@ -355,6 +358,7 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
         subprocess.Popen(["cmd.exe", "/c", str(script_path)], close_fds=True)
         self._update_started = True
         logger.info("Atualizacao agendada; o servico sera reiniciado")
+        self._record_log("info", "Atualizacao agendada; o servico sera reiniciado", "update")
 
     def _enum_printers(self) -> Iterable[str]:
         flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
