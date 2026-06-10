@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -20,7 +22,19 @@ def _can_manage_all(actor: User) -> bool:
     return bool(actor.organization and actor.organization.slug == DEFAULT_ORGANIZATION_SLUG and actor.role == UserRole.admin)
 
 
+def _agent_is_online(agent: PrintAgent, now: datetime) -> bool:
+    if not agent.last_seen_at:
+        return False
+    last_seen = agent.last_seen_at
+    if last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    return now - last_seen <= timedelta(minutes=3)
+
+
 def _organization_read(db: Session, organization: Organization) -> OrganizationRead:
+    now = datetime.now(timezone.utc)
+    agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization.id).all()
+    online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
     return OrganizationRead(
         id=organization.id,
         name=organization.name,
@@ -29,7 +43,9 @@ def _organization_read(db: Session, organization: Organization) -> OrganizationR
         created_at=organization.created_at,
         users_count=db.query(User).filter(User.organization_id == organization.id).count(),
         printers_count=db.query(Printer).filter(Printer.organization_id == organization.id).count(),
-        agents_count=db.query(PrintAgent).filter(PrintAgent.organization_id == organization.id).count(),
+        agents_count=len(agents),
+        online_agents_count=online_agents,
+        offline_agents_count=len(agents) - online_agents,
         jobs_count=db.query(PrintJob).filter(PrintJob.organization_id == organization.id).count(),
     )
 

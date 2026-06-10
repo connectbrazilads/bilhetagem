@@ -16,6 +16,8 @@ type OrganizationRow = {
   users_count: number;
   printers_count: number;
   agents_count: number;
+  online_agents_count: number;
+  offline_agents_count: number;
   jobs_count: number;
 };
 
@@ -43,6 +45,7 @@ export default function OrganizationsPage() {
       active: organizations.filter((organization) => organization.is_active).length,
       inactive: organizations.filter((organization) => !organization.is_active).length,
       jobs: organizations.reduce((total, organization) => total + organization.jobs_count, 0),
+      onlineAgents: organizations.reduce((total, organization) => total + organization.online_agents_count, 0),
     };
   }, [organizations]);
 
@@ -88,10 +91,11 @@ export default function OrganizationsPage() {
         <p className="mt-1 text-sm text-muted-foreground">Gerencie clientes e o isolamento de dados do ambiente SaaS.</p>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-4">
+      <div className="mb-4 grid gap-4 md:grid-cols-5">
         <Summary label="Empresas" value={summary.total} icon={Building2} />
         <Summary label="Ativas" value={summary.active} icon={Power} />
         <Summary label="Inativas" value={summary.inactive} icon={Power} />
+        <Summary label="Agents online" value={summary.onlineAgents} icon={Power} />
         <Summary label="Jobs registrados" value={summary.jobs} icon={Power} />
       </div>
 
@@ -164,6 +168,8 @@ export default function OrganizationsPage() {
                         <MetricPill label="Usuários" value={organization.users_count} />
                         <MetricPill label="Impressoras" value={organization.printers_count} />
                         <MetricPill label="Agents" value={organization.agents_count} />
+                        <MetricPill label="Online" value={organization.online_agents_count} tone="success" />
+                        <MetricPill label="Offline" value={organization.offline_agents_count} tone={organization.offline_agents_count > 0 ? "danger" : "muted"} />
                         <MetricPill label="Jobs" value={organization.jobs_count} />
                       </div>
                     </td>
@@ -189,9 +195,15 @@ export default function OrganizationsPage() {
   );
 }
 
-function MetricPill({ label, value }: { label: string; value: number }) {
+function MetricPill({ label, value, tone = "muted" }: { label: string; value: number; tone?: "muted" | "success" | "danger" }) {
+  const toneClass =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "danger"
+        ? "border-red-200 bg-red-50 text-red-700"
+        : "bg-muted/40 text-muted-foreground";
   return (
-    <span className="inline-flex rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+    <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${toneClass}`}>
       {value.toLocaleString("pt-BR")} {label}
     </span>
   );

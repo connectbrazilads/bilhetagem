@@ -51,7 +51,7 @@ Entregaveis:
 - Filtrar todas as consultas por empresa.
 - Separar configuracoes por empresa: bloqueio, Follow-Me, Web Print, LDAP, custos padrao e criacao automatica.
 - Criar tela administrativa de empresas.
-- Exibir indicadores operacionais por empresa: usuarios, impressoras, agents e jobs registrados.
+- Exibir indicadores operacionais por empresa: usuarios, impressoras, agents online/offline e jobs registrados.
 
 Criterios de aceite:
 

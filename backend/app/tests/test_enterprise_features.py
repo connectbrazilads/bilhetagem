@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -412,10 +412,20 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
 
     default_user = User(username="usage-user-a", full_name="Usage A", role=UserRole.user, is_active=True, organization_id=1)
     default_printer = Printer(name="Usage Printer A", is_color=False, organization_id=1)
-    default_agent = PrintAgent(agent_uid="usage-agent-a", computer_name="PC-A", organization_id=1)
+    default_agent = PrintAgent(
+        agent_uid="usage-agent-a",
+        computer_name="PC-A",
+        organization_id=1,
+        last_seen_at=datetime.now(timezone.utc),
+    )
     other_user = User(username="usage-user-b", full_name="Usage B", role=UserRole.user, is_active=True, organization_id=other_org.id)
     other_printer = Printer(name="Usage Printer B", is_color=False, organization_id=other_org.id)
-    other_agent = PrintAgent(agent_uid="usage-agent-b", computer_name="PC-B", organization_id=other_org.id)
+    other_agent = PrintAgent(
+        agent_uid="usage-agent-b",
+        computer_name="PC-B",
+        organization_id=other_org.id,
+        last_seen_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+    )
     db_session.add_all([default_user, default_printer, default_agent, other_user, other_printer, other_agent])
     db_session.flush()
     db_session.add_all(
@@ -453,10 +463,13 @@ def test_organization_list_includes_scoped_usage_counts(db_session: Session):
     assert default_row.users_count >= 2
     assert default_row.printers_count >= 1
     assert default_row.agents_count >= 1
+    assert default_row.online_agents_count >= 1
     assert default_row.jobs_count == 1
     assert other_row.users_count == 1
     assert other_row.printers_count == 1
     assert other_row.agents_count == 1
+    assert other_row.online_agents_count == 0
+    assert other_row.offline_agents_count == 1
     assert other_row.jobs_count == 1
 
 

@@ -23,6 +23,8 @@ class OrganizationRead(BaseModel):
     users_count: int = 0
     printers_count: int = 0
     agents_count: int = 0
+    online_agents_count: int = 0
+    offline_agents_count: int = 0
     jobs_count: int = 0
 
     model_config = {"from_attributes": True}
