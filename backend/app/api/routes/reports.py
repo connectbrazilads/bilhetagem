@@ -90,7 +90,17 @@ def send_due_monthly_closing_email_endpoint(
                 entity="monthly_closings",
                 entity_id=result.get("closing_id"),
                 actor_user_id=actor.id,
-                metadata={"period": result.get("period"), "recipients": result.get("recipients", []), "attachments": result.get("attachments", [])},
+                metadata={
+                    "period": result.get("period"),
+                    "year": result.get("year"),
+                    "month": result.get("month"),
+                    "total_jobs": result.get("total_jobs"),
+                    "billable_jobs": result.get("billable_jobs"),
+                    "total_pages": result.get("total_pages"),
+                    "total_cost": result.get("total_cost"),
+                    "recipients": result.get("recipients", []),
+                    "attachments": result.get("attachments", []),
+                },
             )
             db.commit()
         return result
@@ -133,7 +143,17 @@ def send_monthly_closing_email_endpoint(
             entity="monthly_closings",
             entity_id=closing.id,
             actor_user_id=actor.id,
-            metadata={"recipients": result["recipients"], "attachments": result["attachments"]},
+            metadata={
+                "period": result.get("period"),
+                "year": result.get("year"),
+                "month": result.get("month"),
+                "total_jobs": result.get("total_jobs"),
+                "billable_jobs": result.get("billable_jobs"),
+                "total_pages": result.get("total_pages"),
+                "total_cost": result.get("total_cost"),
+                "recipients": result["recipients"],
+                "attachments": result["attachments"],
+            },
         )
         db.commit()
         return result

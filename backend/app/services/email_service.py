@@ -117,7 +117,19 @@ def send_monthly_closing_email(
         f"Trabalhos cobraveis: {closing.billable_jobs}\n"
     )
     send_email(subject, body, resolved_recipients, attachments)
-    return {"sent": True, "recipients": resolved_recipients, "attachments": [item.filename for item in attachments]}
+    return {
+        "sent": True,
+        "closing_id": closing.id,
+        "period": f"{closing.year}-{closing.month:02d}",
+        "year": closing.year,
+        "month": closing.month,
+        "total_jobs": closing.total_jobs,
+        "billable_jobs": closing.billable_jobs,
+        "total_pages": closing.total_pages,
+        "total_cost": closing.total_cost,
+        "recipients": resolved_recipients,
+        "attachments": [item.filename for item in attachments],
+    }
 
 
 def _previous_month(today: date) -> tuple[int, int]:

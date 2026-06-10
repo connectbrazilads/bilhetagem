@@ -37,6 +37,12 @@ def send_due_monthly_reports_once(db: Session, now: datetime | None = None) -> l
                     organization_id=organization.id,
                     metadata={
                         "period": result.get("period"),
+                        "year": result.get("year"),
+                        "month": result.get("month"),
+                        "total_jobs": result.get("total_jobs"),
+                        "billable_jobs": result.get("billable_jobs"),
+                        "total_pages": result.get("total_pages"),
+                        "total_cost": result.get("total_cost"),
                         "recipients": result.get("recipients", []),
                         "attachments": result.get("attachments", []),
                         "automatic": True,

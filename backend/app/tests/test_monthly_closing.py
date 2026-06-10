@@ -7,7 +7,7 @@ from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.api.routes.printers import delete_printer_endpoint
-from app.api.routes.reports import export_monthly_closing, export_report, generate_monthly_closing
+from app.api.routes.reports import export_monthly_closing, export_report, generate_monthly_closing, send_monthly_closing_email_endpoint
 from app.api.routes.settings import get_monthly_report_email_settings_endpoint, update_monthly_report_email_settings_endpoint
 from app.api.routes.users import delete_user_endpoint
 from app.models.department import Department
@@ -17,7 +17,7 @@ from app.models.organization import Organization
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.schemas.settings import MonthlyReportEmailSettings
-from app.schemas.report import MonthlyClosingCreate, MonthlyClosingRead
+from app.schemas.report import MonthlyClosingCreate, MonthlyClosingEmailRequest, MonthlyClosingRead
 from app.services.email_service import send_due_monthly_report_email, send_monthly_closing_email
 from app.services.email_scheduler import send_due_monthly_reports_once
 from app.models.user import User, UserRole
@@ -718,6 +718,14 @@ def test_send_monthly_closing_email_with_attachments(db_session: Session, monkey
     )
 
     assert result["sent"] is True
+    assert result["closing_id"] == closing.id
+    assert result["period"] == "2026-05"
+    assert result["year"] == 2026
+    assert result["month"] == 5
+    assert result["total_jobs"] == 4
+    assert result["billable_jobs"] == 2
+    assert result["total_pages"] == 14
+    assert result["total_cost"] == 1.5
     assert result["recipients"] == ["financeiro@example.com", "gestao@example.com"]
     assert result["attachments"] == ["fechamento-2026-05.pdf", "fechamento-2026-05.xlsx"]
     assert len(sent_messages) == 1
@@ -741,6 +749,54 @@ def test_send_monthly_closing_email_rejects_invalid_recipients_before_smtp(db_se
         send_monthly_closing_email(db_session, closing, recipients="financeiro@example.com,sem-email")
 
     assert smtp_calls == []
+
+
+def test_send_monthly_closing_email_endpoint_writes_commercial_audit(db_session: Session, monkeypatch):
+    _seed_job_data(db_session)
+    closing = create_monthly_closing(db_session, organization_id=1, year=2026, month=5)
+    actor = User(username="email-endpoint-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    def fake_send(db: Session, closing_arg: MonthlyClosing, recipients=None, include_pdf=None, include_xlsx=None) -> dict:
+        assert closing_arg.id == closing.id
+        return {
+            "sent": True,
+            "closing_id": closing.id,
+            "period": "2026-05",
+            "year": 2026,
+            "month": 5,
+            "total_jobs": 4,
+            "billable_jobs": 2,
+            "total_pages": 14,
+            "total_cost": 1.5,
+            "recipients": ["financeiro@example.com"],
+            "attachments": ["fechamento-2026-05.pdf"],
+        }
+
+    monkeypatch.setattr("app.api.routes.reports.send_monthly_closing_email", fake_send)
+
+    result = send_monthly_closing_email_endpoint(
+        closing.id,
+        MonthlyClosingEmailRequest(recipients="financeiro@example.com", include_pdf=True, include_xlsx=False),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert result["sent"] is True
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_email_sent", AuditLog.entity_id == closing.id).one()
+    assert audit.actor_user_id == actor.id
+    assert audit.log_metadata == {
+        "period": "2026-05",
+        "year": 2026,
+        "month": 5,
+        "total_jobs": 4,
+        "billable_jobs": 2,
+        "total_pages": 14,
+        "total_cost": 1.5,
+        "recipients": ["financeiro@example.com"],
+        "attachments": ["fechamento-2026-05.pdf"],
+    }
 
 
 def test_due_monthly_report_email_sends_previous_month_once(db_session: Session, monkeypatch):
@@ -782,6 +838,12 @@ def test_due_monthly_report_email_sends_previous_month_once(db_session: Session,
 
     assert first["sent"] is True
     assert first["period"] == "2026-05"
+    assert first["year"] == 2026
+    assert first["month"] == 5
+    assert first["total_jobs"] == 4
+    assert first["billable_jobs"] == 2
+    assert first["total_pages"] == 14
+    assert first["total_cost"] == 1.5
     assert first["attachments"] == ["fechamento-2026-05.pdf"]
     assert second["sent"] is False
     assert second["reason"] == "Fechamento mensal ja enviado"
@@ -805,6 +867,12 @@ def test_monthly_report_email_scheduler_processes_active_organizations(db_sessio
                 "sent": True,
                 "period": "2026-05",
                 "closing_id": 99,
+                "year": 2026,
+                "month": 5,
+                "total_jobs": 4,
+                "billable_jobs": 2,
+                "total_pages": 14,
+                "total_cost": 1.5,
                 "recipients": ["financeiro@example.com"],
                 "attachments": ["fechamento-2026-05.pdf"],
                 "reason": None,
@@ -821,6 +889,9 @@ def test_monthly_report_email_scheduler_processes_active_organizations(db_sessio
     assert audit.organization_id == 1
     assert audit.entity_id == 99
     assert audit.log_metadata["automatic"] is True
+    assert audit.log_metadata["period"] == "2026-05"
+    assert audit.log_metadata["total_pages"] == 14
+    assert audit.log_metadata["total_cost"] == 1.5
 
 
 def test_monthly_report_email_scheduler_audits_failures_per_organization(db_session: Session, monkeypatch):
