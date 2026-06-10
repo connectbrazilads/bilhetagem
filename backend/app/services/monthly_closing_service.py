@@ -27,6 +27,12 @@ def _round_money(value: float) -> float:
     return round(float(value or 0.0), 2)
 
 
+def _cost_per_page(cost: float, pages: int) -> float:
+    if pages <= 0:
+        return 0.0
+    return _round_money(cost / pages)
+
+
 def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: int) -> dict:
     start, end = period_bounds(year, month)
     jobs = (
@@ -97,6 +103,7 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
                 "mono_pages": data["mono_pages"],
                 "color_pages": data["color_pages"],
                 "cost": _round_money(data["cost"]),
+                "cost_per_page": _cost_per_page(data["cost"], data["pages"]),
             }
             for name, data in sorted(mapping.items(), key=lambda item: (-item[1]["pages"], item[0].lower()))
         ]

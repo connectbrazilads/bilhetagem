@@ -137,9 +137,10 @@ def _draw_section(pdf: canvas.Canvas, closing: MonthlyClosing, y: float, title: 
     pdf.setFillColor(MUTED)
     pdf.setFont("Helvetica-Bold", 8)
     pdf.drawString(48, y - 10, "Nome")
-    pdf.drawRightString(350, y - 10, "Paginas")
-    pdf.drawRightString(420, y - 10, "P&B")
-    pdf.drawRightString(490, y - 10, "Cor")
+    pdf.drawRightString(330, y - 10, "Paginas")
+    pdf.drawRightString(385, y - 10, "P&B")
+    pdf.drawRightString(435, y - 10, "Cor")
+    pdf.drawRightString(500, y - 10, "Custo/Pag.")
     pdf.drawRightString(PAGE_WIDTH - 48, y - 10, "Custo")
     y -= 24
     pdf.setFont("Helvetica", 8)
@@ -151,9 +152,10 @@ def _draw_section(pdf: canvas.Canvas, closing: MonthlyClosing, y: float, title: 
         if len(name) > 44:
             name = name[:41] + "..."
         pdf.drawString(48, y, name)
-        pdf.drawRightString(350, y, str(row.get("pages", 0)))
-        pdf.drawRightString(420, y, str(row.get("mono_pages", 0)))
-        pdf.drawRightString(490, y, str(row.get("color_pages", 0)))
+        pdf.drawRightString(330, y, str(row.get("pages", 0)))
+        pdf.drawRightString(385, y, str(row.get("mono_pages", 0)))
+        pdf.drawRightString(435, y, str(row.get("color_pages", 0)))
+        pdf.drawRightString(500, y, _money(float(row.get("cost_per_page", 0))))
         pdf.drawRightString(PAGE_WIDTH - 48, y, _money(float(row.get("cost", 0))))
         y -= 16
     return y - 12
@@ -310,11 +312,12 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
 
     for sheet_name, key in (("Usuarios", "by_user"), ("Departamentos", "by_department"), ("Impressoras", "by_printer"), ("Tipo", "by_type")):
         sheet = workbook.create_sheet(sheet_name)
-        sheet.append(["Nome", "Trabalhos", "Paginas", "P&B", "Coloridas", "Custo"])
+        sheet.append(["Nome", "Trabalhos", "Paginas", "P&B", "Coloridas", "Custo", "Custo/Pag."])
         for row in closing.snapshot.get(key, []):
-            sheet.append([row["name"], row["jobs"], row["pages"], row["mono_pages"], row["color_pages"], row["cost"]])
-        for row in sheet.iter_rows(min_row=2, min_col=6, max_col=6):
-            row[0].number_format = '"R$" #,##0.00'
+            sheet.append([row["name"], row["jobs"], row["pages"], row["mono_pages"], row["color_pages"], row["cost"], row.get("cost_per_page", 0)])
+        for row in sheet.iter_rows(min_row=2, min_col=6, max_col=7):
+            for cell in row:
+                cell.number_format = '"R$" #,##0.00'
         _style_sheet(sheet)
 
     buffer = BytesIO()

@@ -69,6 +69,7 @@ type ClosingSnapshotRow = {
   jobs?: number;
   pages: number;
   cost: number;
+  cost_per_page?: number;
 };
 
 type MonthlyClosingEmailResult = {
@@ -501,6 +502,7 @@ function SnapshotList({ title, rows }: { title: string; rows: ClosingSnapshotRow
               <span className="truncate font-medium">{row.name}</span>
               <span className="whitespace-nowrap text-right text-muted-foreground">
                 {row.pages.toLocaleString("pt-BR")} pag. | R$ {row.cost.toFixed(2)}
+                {typeof row.cost_per_page === "number" ? ` | R$ ${row.cost_per_page.toFixed(2)}/pag.` : ""}
               </span>
             </div>
           ))}

@@ -89,6 +89,7 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert closing.total_cost == 1.5
     assert closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
+    assert closing.snapshot["by_printer"][0]["cost_per_page"] == 0.11
 
     user.full_name = "Ana Renomeada"
     printer.name = "KONICA_NOVA"
@@ -116,6 +117,8 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert workbook["Resumo"]["A12"].value == "Custo total"
     assert workbook["Resumo"]["B12"].value == 1.5
     assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"
+    assert workbook["Impressoras"]["G1"].value == "Custo/Pag."
+    assert workbook["Impressoras"]["G2"].value == 0.11
     audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_exported", AuditLog.entity_id == closing.id).one()
     assert audit.log_metadata == {"format": "xlsx"}
 
