@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Download, FileText, Mail, Printer, Search, Users } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
@@ -57,11 +57,18 @@ type MonthlyClosing = {
   blocked_pages: number;
   total_cost: number;
   snapshot: {
-    by_user?: { name: string; pages: number; cost: number }[];
-    by_department?: { name: string; pages: number; cost: number }[];
-    by_printer?: { name: string; pages: number; cost: number }[];
+    by_user?: ClosingSnapshotRow[];
+    by_department?: ClosingSnapshotRow[];
+    by_printer?: ClosingSnapshotRow[];
   };
   generated_at: string;
+};
+
+type ClosingSnapshotRow = {
+  name: string;
+  jobs?: number;
+  pages: number;
+  cost: number;
 };
 
 type MonthlyClosingEmailResult = {
@@ -352,25 +359,41 @@ export default function ReportsPage() {
               </thead>
               <tbody>
                 {closings.map((closing) => (
-                  <tr key={closing.id} className="border-t bg-white hover:bg-muted/30">
-                    <td className="p-4 font-semibold">{String(closing.month).padStart(2, "0")}/{closing.year}</td>
-                    <td className="p-4 text-right font-semibold">{closing.total_pages.toLocaleString("pt-BR")}</td>
-                    <td className="p-4 text-right">{closing.mono_pages.toLocaleString("pt-BR")}</td>
-                    <td className="p-4 text-right">{closing.color_pages.toLocaleString("pt-BR")}</td>
-                    <td className="p-4 text-right font-semibold">R$ {closing.total_cost.toFixed(2)}</td>
-                    <td className="p-4 text-right">{closing.blocked_pages.toLocaleString("pt-BR")}</td>
-                    <td className="p-4 text-muted-foreground">{new Date(closing.generated_at).toLocaleString("pt-BR")}</td>
-                    <td className="p-4">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => sendClosingEmail(closing)} disabled={sendingEmailId === closing.id}>
-                          <Mail className="h-4 w-4" />
-                          {sendingEmailId === closing.id ? "..." : "E-mail"}
-                        </Button>
-                        <Button variant="outline" onClick={() => downloadClosing(closing, "pdf")}>PDF</Button>
-                        <Button onClick={() => downloadClosing(closing, "xlsx")}>Excel</Button>
-                      </div>
-                    </td>
-                  </tr>
+                  <Fragment key={closing.id}>
+                    <tr key={`${closing.id}-row`} className="border-t bg-white hover:bg-muted/30">
+                      <td className="p-4 font-semibold">{String(closing.month).padStart(2, "0")}/{closing.year}</td>
+                      <td className="p-4 text-right font-semibold">{closing.total_pages.toLocaleString("pt-BR")}</td>
+                      <td className="p-4 text-right">{closing.mono_pages.toLocaleString("pt-BR")}</td>
+                      <td className="p-4 text-right">{closing.color_pages.toLocaleString("pt-BR")}</td>
+                      <td className="p-4 text-right font-semibold">R$ {closing.total_cost.toFixed(2)}</td>
+                      <td className="p-4 text-right">{closing.blocked_pages.toLocaleString("pt-BR")}</td>
+                      <td className="p-4 text-muted-foreground">{new Date(closing.generated_at).toLocaleString("pt-BR")}</td>
+                      <td className="p-4">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => sendClosingEmail(closing)} disabled={sendingEmailId === closing.id}>
+                            <Mail className="h-4 w-4" />
+                            {sendingEmailId === closing.id ? "..." : "E-mail"}
+                          </Button>
+                          <Button variant="outline" onClick={() => downloadClosing(closing, "pdf")}>PDF</Button>
+                          <Button onClick={() => downloadClosing(closing, "xlsx")}>Excel</Button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr key={`${closing.id}-snapshot`} className="border-t bg-muted/20">
+                      <td colSpan={8} className="p-4">
+                        <div className="mb-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
+                          <span>{closing.billable_jobs.toLocaleString("pt-BR")} trabalho(s) cobráveis</span>
+                          <span>{closing.pending_jobs.toLocaleString("pt-BR")} pendente(s)</span>
+                          <span>{closing.blocked_jobs.toLocaleString("pt-BR")} bloqueado(s)</span>
+                        </div>
+                        <div className="grid gap-4 lg:grid-cols-3">
+                          <SnapshotList title="Top usuários" rows={closing.snapshot.by_user ?? []} />
+                          <SnapshotList title="Top departamentos" rows={closing.snapshot.by_department ?? []} />
+                          <SnapshotList title="Top impressoras" rows={closing.snapshot.by_printer ?? []} />
+                        </div>
+                      </td>
+                    </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -446,6 +469,29 @@ export default function ReportsPage() {
         )}
       </Surface>
     </ProtectedPage>
+  );
+}
+
+function SnapshotList({ title, rows }: { title: string; rows: ClosingSnapshotRow[] }) {
+  const topRows = rows.slice(0, 3);
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
+      {topRows.length === 0 ? (
+        <div className="text-sm text-muted-foreground">Sem dados.</div>
+      ) : (
+        <div className="space-y-2">
+          {topRows.map((row) => (
+            <div key={row.name} className="grid grid-cols-[1fr_auto] gap-3 text-sm">
+              <span className="truncate font-medium">{row.name}</span>
+              <span className="whitespace-nowrap text-right text-muted-foreground">
+                {row.pages.toLocaleString("pt-BR")} pag. | R$ {row.cost.toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
