@@ -3,6 +3,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.models.department import Department
 from app.models.printer import Printer
 from app.models.print_agent import PrintAgent
 from app.models.printer_alias import PrinterAlias
@@ -259,12 +260,13 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     db_session.add(other_org)
     db_session.flush()
 
+    org_one_department = Department(organization_id=1, name="Financeiro")
     org_one_admin = User(username="org1-admin", full_name="Org 1 Admin", role=UserRole.admin, is_active=True, organization_id=1)
-    org_one_user = User(username="org1-user", full_name="Org 1 User", role=UserRole.user, is_active=True, organization_id=1)
+    org_one_user = User(username="org1-user", full_name="Org 1 User", role=UserRole.user, is_active=True, organization_id=1, department=org_one_department)
     org_two_user = User(username="org2-user", full_name="Org 2 User", role=UserRole.user, is_active=True, organization_id=other_org.id)
     org_one_printer = Printer(name="Org 1 Printer", is_color=False, organization_id=1)
     org_two_printer = Printer(name="Org 2 Printer", is_color=False, organization_id=other_org.id)
-    db_session.add_all([org_one_admin, org_one_user, org_two_user, org_one_printer, org_two_printer])
+    db_session.add_all([org_one_department, org_one_admin, org_one_user, org_two_user, org_one_printer, org_two_printer])
     db_session.flush()
 
     db_session.add_all(
@@ -307,6 +309,9 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     metrics = dashboard_metrics(db_session, organization_id=1)
 
     assert {user.username for user in users} == {"org1-admin", "org1-user"}
+    org_user_read = next(user for user in users if user.username == "org1-user")
+    assert org_user_read.department_id == org_one_department.id
+    assert org_user_read.department_name == "Financeiro"
     assert [printer.name for printer in printers] == ["Org 1 Printer"]
     assert [job.username for job in jobs] == ["org1-user"]
     assert metrics["pages_month"] == 3

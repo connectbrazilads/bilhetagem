@@ -35,11 +35,19 @@ type UserRow = {
   id: number;
   username: string;
   full_name: string;
+  department_id: number | null;
+  department_name: string | null;
 };
 
 type PrinterRow = {
   id: number;
   name: string;
+  aliases?: {
+    id: number;
+    queue_name: string;
+    computer_name: string | null;
+    printer_id: number | null;
+  }[];
 };
 
 type PolicySimulation = {
@@ -136,6 +144,32 @@ export default function PoliciesPage() {
       blockers: policies.filter((policy) => policy.action === "block").length,
     };
   }, [policies]);
+
+  const departments = useMemo(() => {
+    const byId = new Map<number, string>();
+    for (const user of users) {
+      if (user.department_id && user.department_name) {
+        byId.set(user.department_id, user.department_name);
+      }
+    }
+    return Array.from(byId.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [users]);
+
+  const aliases = useMemo(() => {
+    return printers.flatMap((printer) =>
+      (printer.aliases ?? []).map((alias) => ({
+        ...alias,
+        printer_name: printer.name,
+      })),
+    );
+  }, [printers]);
+
+  const selectedUser = users.find((user) => user.id.toString() === form.user_id);
+  const selectedDepartment = departments.find((department) => department.id.toString() === form.department_id);
+  const selectedPrinter = printers.find((printer) => printer.id.toString() === form.printer_id);
+  const selectedAlias = aliases.find((alias) => alias.id.toString() === form.printer_alias_id);
 
   function payload() {
     return {
@@ -250,10 +284,33 @@ export default function PoliciesPage() {
     if (policy.max_pages) parts.push(`>${policy.max_pages} pag.`);
     if (policy.start_time && policy.end_time) parts.push(`${policy.start_time.slice(0, 5)}-${policy.end_time.slice(0, 5)}`);
     if (policy.queue_name) parts.push(`Fila ${policy.queue_name}`);
-    if (policy.user_id) parts.push(`Usuario #${policy.user_id}`);
-    if (policy.department_id) parts.push(`Depto #${policy.department_id}`);
-    if (policy.printer_id) parts.push(`Impressora #${policy.printer_id}`);
+    if (policy.user_id) {
+      const user = users.find((item) => item.id === policy.user_id);
+      parts.push(user ? `Usuario ${user.username}` : `Usuario #${policy.user_id}`);
+    }
+    if (policy.department_id) {
+      const department = departments.find((item) => item.id === policy.department_id);
+      parts.push(department ? `Depto ${department.name}` : `Depto #${policy.department_id}`);
+    }
+    if (policy.printer_id) {
+      const printer = printers.find((item) => item.id === policy.printer_id);
+      parts.push(printer ? `Impressora ${printer.name}` : `Impressora #${policy.printer_id}`);
+    }
+    if (policy.printer_alias_id) {
+      const alias = aliases.find((item) => item.id === policy.printer_alias_id);
+      parts.push(alias ? `Fila ${alias.queue_name}` : `Alias #${policy.printer_alias_id}`);
+    }
     return parts.join(" - ");
+  }
+
+  function changeRuleType(ruleType: PolicyRuleType) {
+    setForm({
+      ...form,
+      rule_type: ruleType,
+      max_pages: ruleType === "max_pages" ? form.max_pages : "",
+      start_time: ruleType === "time_window" ? form.start_time : "",
+      end_time: ruleType === "time_window" ? form.end_time : "",
+    });
   }
 
   return (
@@ -275,7 +332,7 @@ export default function PoliciesPage() {
         <div className="grid gap-3 lg:grid-cols-[1fr_120px_170px_170px_130px]">
           <Input placeholder="Nome da politica" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
           <Input placeholder="Prioridade" type="number" value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })} required />
-          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.rule_type} onChange={(event) => setForm({ ...form, rule_type: event.target.value as PolicyRuleType })}>
+          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.rule_type} onChange={(event) => changeRuleType(event.target.value as PolicyRuleType)}>
             {Object.entries(ruleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
           <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.action} onChange={(event) => setForm({ ...form, action: event.target.value as PolicyAction })}>
@@ -288,24 +345,45 @@ export default function PoliciesPage() {
         </div>
 
         <div className="grid gap-3 lg:grid-cols-5">
-          <Input placeholder="Max paginas" type="number" value={form.max_pages} onChange={(event) => setForm({ ...form, max_pages: event.target.value })} />
-          <Input placeholder="Dias seg,ter ou 0,1" value={form.days_of_week} onChange={(event) => setForm({ ...form, days_of_week: event.target.value })} />
-          <Input type="time" value={form.start_time} onChange={(event) => setForm({ ...form, start_time: event.target.value })} />
-          <Input type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} />
+          <Input
+            placeholder="Max paginas"
+            type="number"
+            value={form.max_pages}
+            onChange={(event) => setForm({ ...form, max_pages: event.target.value })}
+            disabled={form.rule_type !== "max_pages"}
+            required={form.rule_type === "max_pages"}
+          />
+          <Input placeholder="Dias: 0,1,2 ou seg,ter" value={form.days_of_week} onChange={(event) => setForm({ ...form, days_of_week: event.target.value })} />
+          <Input type="time" value={form.start_time} onChange={(event) => setForm({ ...form, start_time: event.target.value })} disabled={form.rule_type !== "time_window"} required={form.rule_type === "time_window"} />
+          <Input type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} disabled={form.rule_type !== "time_window"} required={form.rule_type === "time_window"} />
           <Input placeholder="Mensagem" value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} />
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_130px_130px_1fr_auto]">
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
           <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.user_id} onChange={(event) => setForm({ ...form, user_id: event.target.value })}>
             <option value="">Todos os usuarios</option>
-            {users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
+            {users.map((user) => <option key={user.id} value={user.id}>{user.username} - {user.full_name}</option>)}
+          </select>
+          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.department_id} onChange={(event) => setForm({ ...form, department_id: event.target.value })}>
+            <option value="">Todos departamentos</option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name}
+              </option>
+            ))}
           </select>
           <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.printer_id} onChange={(event) => setForm({ ...form, printer_id: event.target.value })}>
             <option value="">Todas impressoras</option>
             {printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
           </select>
-          <Input placeholder="Depto ID" type="number" value={form.department_id} onChange={(event) => setForm({ ...form, department_id: event.target.value })} />
-          <Input placeholder="Alias ID" type="number" value={form.printer_alias_id} onChange={(event) => setForm({ ...form, printer_alias_id: event.target.value })} />
+          <select className="h-9 rounded-md border bg-white px-3 text-sm" value={form.printer_alias_id} onChange={(event) => setForm({ ...form, printer_alias_id: event.target.value })}>
+            <option value="">Todas filas detectadas</option>
+            {aliases.map((alias) => (
+              <option key={alias.id} value={alias.id}>
+                {alias.queue_name} - {alias.computer_name || alias.printer_name}
+              </option>
+            ))}
+          </select>
           <Input placeholder="Nome da fila" value={form.queue_name} onChange={(event) => setForm({ ...form, queue_name: event.target.value })} />
           <div className="flex gap-2">
             <Button type="submit">
@@ -318,6 +396,12 @@ export default function PoliciesPage() {
               </Button>
             ) : null}
           </div>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          {selectedUser ? <span className="rounded-full bg-muted px-2 py-1">Usuario: {selectedUser.username}</span> : null}
+          {selectedDepartment ? <span className="rounded-full bg-muted px-2 py-1">Departamento: {selectedDepartment.name}</span> : null}
+          {selectedPrinter ? <span className="rounded-full bg-muted px-2 py-1">Impressora: {selectedPrinter.name}</span> : null}
+          {selectedAlias ? <span className="rounded-full bg-muted px-2 py-1">Fila: {selectedAlias.queue_name}</span> : null}
         </div>
       </Surface>
 

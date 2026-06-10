@@ -25,6 +25,7 @@ def _read_user(user: User, db: Session) -> UserRead:
         username=user.username,
         full_name=user.full_name,
         role=user.role,
+        department_id=user.department_id,
         department_name=user.department.name if user.department else None,
         is_active=user.is_active,
         created_at=user.created_at,
