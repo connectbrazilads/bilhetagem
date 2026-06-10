@@ -52,6 +52,7 @@ type PrinterRow = {
     queue_name: string;
     computer_name: string | null;
     printer_id: number | null;
+    fingerprint: string | null;
   }[];
 };
 
@@ -92,6 +93,7 @@ const emptySimulationForm = {
   printer_name: "",
   pages: "1",
   is_color: false,
+  printer_alias_id: "",
   queue_name: "",
 };
 
@@ -165,6 +167,7 @@ export default function PoliciesPage() {
   const selectedDepartment = departments.find((department) => department.id.toString() === form.department_id);
   const selectedPrinter = printers.find((printer) => printer.id.toString() === form.printer_id);
   const selectedAlias = aliases.find((alias) => alias.id.toString() === form.printer_alias_id);
+  const selectedSimulationAlias = aliases.find((alias) => alias.id.toString() === simulationForm.printer_alias_id);
 
   function payload() {
     return {
@@ -266,12 +269,27 @@ export default function PoliciesPage() {
           pages: Number(simulationForm.pages),
           is_color: simulationForm.is_color,
           queue_name: simulationForm.queue_name || null,
+          printer_fingerprint: selectedSimulationAlias?.fingerprint || null,
         }),
       });
       setSimulation(result);
     } catch (err) {
       setSimulationError(err instanceof Error ? err.message : "Falha ao simular politica");
     }
+  }
+
+  function selectSimulationAlias(aliasId: string) {
+    const alias = aliases.find((item) => item.id.toString() === aliasId);
+    if (!alias) {
+      setSimulationForm({ ...simulationForm, printer_alias_id: "", queue_name: "" });
+      return;
+    }
+    setSimulationForm({
+      ...simulationForm,
+      printer_alias_id: aliasId,
+      printer_name: alias.printer_name,
+      queue_name: alias.queue_name,
+    });
   }
 
   async function reorderPolicy(policyId: number, direction: "up" | "down") {
@@ -457,7 +475,7 @@ export default function PoliciesPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_110px_120px_1fr_auto]">
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_110px_120px_1fr_auto]">
           <select
             className="h-9 rounded-md border bg-white px-3 text-sm"
             value={simulationForm.username}
@@ -474,13 +492,25 @@ export default function PoliciesPage() {
           <select
             className="h-9 rounded-md border bg-white px-3 text-sm"
             value={simulationForm.printer_name}
-            onChange={(event) => setSimulationForm({ ...simulationForm, printer_name: event.target.value })}
+            onChange={(event) => setSimulationForm({ ...simulationForm, printer_name: event.target.value, printer_alias_id: "", queue_name: "" })}
             required
           >
             <option value="">Impressora</option>
             {printers.map((printer) => (
               <option key={printer.id} value={printer.name}>
                 {printer.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-9 rounded-md border bg-white px-3 text-sm"
+            value={simulationForm.printer_alias_id}
+            onChange={(event) => selectSimulationAlias(event.target.value)}
+          >
+            <option value="">Fila detectada opcional</option>
+            {aliases.map((alias) => (
+              <option key={alias.id} value={alias.id}>
+                {alias.queue_name} - {alias.computer_name || alias.printer_name}
               </option>
             ))}
           </select>

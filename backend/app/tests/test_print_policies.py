@@ -328,6 +328,50 @@ def test_printer_alias_policy_only_affects_selected_local_queue(db_session: Sess
     assert allowed.reason is None
 
 
+def test_policy_simulation_resolves_alias_by_fingerprint(db_session: Session):
+    user = User(username="alias-sim", full_name="Alias Sim", role=UserRole.user, is_active=True, organization_id=1)
+    printer = _printer(db_session)
+    alias = PrinterAlias(
+        organization_id=1,
+        printer_id=printer.id,
+        queue_name="KONICA FINANCEIRO LOCAL",
+        fingerprint="queue:pc-alias|konica-financeiro-local|ip_192.168.1.125|driver",
+    )
+    db_session.add_all([user, alias])
+    db_session.flush()
+    db_session.add(
+        PrintPolicy(
+            organization_id=1,
+            name="Liberar fila financeira",
+            priority=10,
+            rule_type=PolicyRuleType.always,
+            action=PolicyAction.require_release,
+            printer_alias_id=alias.id,
+        )
+    )
+    db_session.commit()
+
+    simulation = simulate_print_policy(
+        db_session,
+        PrintJobCreate(
+            username="alias-sim",
+            printer_name="Fila local do Windows",
+            queue_name=alias.queue_name,
+            pages=2,
+            is_color=False,
+            printer_fingerprint=alias.fingerprint,
+        ),
+        organization_id=1,
+    )
+
+    assert simulation.alias is not None
+    assert simulation.alias.id == alias.id
+    assert simulation.printer.id == printer.id
+    assert simulation.decision.policy is not None
+    assert simulation.decision.policy.name == "Liberar fila financeira"
+    assert simulation.decision.action == PolicyAction.require_release
+
+
 def test_queue_name_policy_matches_normalized_queue_name(db_session: Session):
     _admin(db_session)
     _printer(db_session)
