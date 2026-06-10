@@ -1072,6 +1072,12 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert org_user_read.department_id == org_one_department.id
     assert org_user_read.department_name == "Financeiro"
     assert [printer.name for printer in printers] == ["Org 1 Duplicate Printer", "Org 1 Printer"]
+    conflict_by_name = {printer.name: printer for printer in printers}
+    assert conflict_by_name["Org 1 Duplicate Printer"].identity_conflict_count == 1
+    assert conflict_by_name["Org 1 Duplicate Printer"].identity_conflict_types == ["ip"]
+    assert conflict_by_name["Org 1 Duplicate Printer"].identity_conflict_printer_ids == [org_one_printer.id]
+    assert conflict_by_name["Org 1 Printer"].identity_conflict_count == 1
+    assert conflict_by_name["Org 1 Printer"].identity_conflict_printer_ids == [org_one_duplicate_printer.id]
     assert [job.username for job in jobs] == ["org1-user"]
     assert jobs[0].department_id == org_one_department.id
     assert jobs[0].department_name == "Financeiro"

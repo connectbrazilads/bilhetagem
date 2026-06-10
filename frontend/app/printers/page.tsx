@@ -21,6 +21,9 @@ type PrinterRow = {
   paper_status: string | null;
   serial_number: string | null;
   page_counter: number | null;
+  identity_conflict_count: number;
+  identity_conflict_types: string[];
+  identity_conflict_printer_ids: number[];
   aliases?: {
     id: number;
     printer_id: number | null;
@@ -296,6 +299,24 @@ export default function PrintersPage() {
     return "Sem monitoramento";
   }
 
+  function identityConflictLabel(type: string) {
+    if (type === "serial") return "serial";
+    if (type === "ip") return "IP";
+    if (type === "device") return "device";
+    if (type === "fingerprint") return "fingerprint";
+    return type;
+  }
+
+  function identityConflictSummary(printer: PrinterRow) {
+    if (!printer.identity_conflict_count) return "";
+    const types = printer.identity_conflict_types.map(identityConflictLabel).join(", ");
+    const related = printer.identity_conflict_printer_ids
+      .map((id) => printers.find((item) => item.id === id)?.name)
+      .filter(Boolean)
+      .join(", ");
+    return related ? `Conflito de ${types} com ${related}` : `Conflito de ${types}`;
+  }
+
   return (
     <ProtectedPage>
       <div className="mb-6">
@@ -426,6 +447,7 @@ export default function PrintersPage() {
               {printers.filter((printer) => printer.id !== mergingPrinter.id).map((printer) => (
                 <option key={printer.id} value={printer.id}>
                   {printer.name}
+                  {mergingPrinter.identity_conflict_printer_ids.includes(printer.id) ? " - conflito fisico" : ""}
                 </option>
               ))}
             </select>
@@ -478,6 +500,12 @@ export default function PrintersPage() {
                       </span>
                     </div>
                   )}
+                  {printer.identity_conflict_count > 0 ? (
+                    <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                      <AlertTriangle className="h-3 w-3" />
+                      Conflito fisico
+                    </div>
+                  ) : null}
                 </td>
                 <td className="p-3">{printer.location ?? "-"}</td>
                 <td className="p-3">
@@ -632,6 +660,33 @@ export default function PrintersPage() {
                   <span className="ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">Inativa</span>
                 )}
               </div>
+
+              {selectedPrinter.identity_conflict_count > 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold">Possivel impressora duplicada</div>
+                      <div className="mt-0.5 text-xs">{identityConflictSummary(selectedPrinter)}</div>
+                    </div>
+                    {isAdmin ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 shrink-0 bg-white"
+                        onClick={() => {
+                          setMergingPrinter(selectedPrinter);
+                          setMergeTargetId(selectedPrinter.identity_conflict_printer_ids[0]?.toString() || "");
+                          setSelectedPrinter(null);
+                        }}
+                      >
+                        <GitMerge className="h-4 w-4" />
+                        Mesclar
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Info Grid */}
               <div className="grid grid-cols-2 gap-4">

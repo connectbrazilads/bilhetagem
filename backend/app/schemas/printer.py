@@ -49,6 +49,9 @@ class PrinterRead(BaseModel):
     page_counter: int | None
     created_at: datetime
     aliases: list[PrinterAliasRead] = Field(default_factory=list)
+    identity_conflict_count: int = 0
+    identity_conflict_types: list[str] = Field(default_factory=list)
+    identity_conflict_printer_ids: list[int] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

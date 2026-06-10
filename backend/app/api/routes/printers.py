@@ -13,6 +13,7 @@ from app.repositories.printers import create_printer
 from app.schemas.printer import PrinterAliasBind, PrinterAliasRead, PrinterCreate, PrinterRead, PrinterStatusUpdate, PrinterUpdate
 from app.services.audit_service import write_audit
 from app.services.printer_limit_service import PrinterLimitExceeded, ensure_printer_limit_available
+from app.services.printer_identity_service import physical_identity_conflicts
 
 router = APIRouter(prefix="/printers", tags=["printers"])
 
@@ -65,18 +66,41 @@ def _ensure_agent_can_update_printer_status(db: Session, actor: User, printer_id
         raise HTTPException(status_code=403, detail="Agent nao possui fila vinculada a esta impressora")
 
 
+def _annotate_identity_conflicts(db: Session, organization_id: int, printers: list[Printer]) -> list[Printer]:
+    conflict_types: dict[int, set[str]] = {printer.id: set() for printer in printers}
+    conflict_printer_ids: dict[int, set[int]] = {printer.id: set() for printer in printers}
+    known_printer_ids = set(conflict_types)
+
+    for group in physical_identity_conflicts(db, organization_id):
+        involved_ids = group.printer_ids & known_printer_ids
+        if not involved_ids:
+            continue
+        for printer_id in involved_ids:
+            conflict_types[printer_id].add(group.identity_type)
+            conflict_printer_ids[printer_id].update(group.printer_ids - {printer_id})
+
+    for printer in printers:
+        types = sorted(conflict_types.get(printer.id, set()))
+        related_ids = sorted(conflict_printer_ids.get(printer.id, set()))
+        printer.identity_conflict_count = len(types)
+        printer.identity_conflict_types = types
+        printer.identity_conflict_printer_ids = related_ids
+    return printers
+
+
 @router.get("", response_model=list[PrinterRead])
 def list_printers(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.agent)),
 ) -> list[Printer]:
-    return (
+    printers = (
         db.query(Printer)
         .options(selectinload(Printer.aliases))
         .filter(Printer.organization_id == actor.organization_id)
         .order_by(Printer.name)
         .all()
     )
+    return _annotate_identity_conflicts(db, actor.organization_id, printers)
 
 
 @router.post("", response_model=PrinterRead, status_code=status.HTTP_201_CREATED)
@@ -335,4 +359,5 @@ def merge_printer_endpoint(
     db.delete(source)
     db.commit()
     db.refresh(target)
+    _annotate_identity_conflicts(db, actor.organization_id, [target])
     return target
