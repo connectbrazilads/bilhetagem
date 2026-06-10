@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, Edit, Plus, Power } from "lucide-react";
+import { Building2, Edit, KeyRound, Plus, Power } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -96,6 +96,10 @@ export default function OrganizationsPage() {
     setForm(emptyForm);
   }
 
+  function fillPassword(field: "admin_password" | "agent_password") {
+    setForm((current) => ({ ...current, [field]: generatePassword() }));
+  }
+
   return (
     <ProtectedPage>
       <div className="mb-6">
@@ -158,16 +162,28 @@ export default function OrganizationsPage() {
               <Input value={form.admin_username} onChange={(event) => setForm({ ...form, admin_username: event.target.value })} required />
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Senha do admin
-              <Input type="password" value={form.admin_password} onChange={(event) => setForm({ ...form, admin_password: event.target.value })} required minLength={8} />
+              <span className="flex items-center justify-between gap-2">
+                Senha do admin
+                <Button type="button" variant="outline" className="h-7 px-2 text-xs" onClick={() => fillPassword("admin_password")} title="Gerar senha forte para o admin">
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Gerar
+                </Button>
+              </span>
+              <Input type="password" value={form.admin_password} onChange={(event) => setForm({ ...form, admin_password: event.target.value })} required minLength={8} autoComplete="new-password" />
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
               Usuário do agent
               <Input value={form.agent_username} onChange={(event) => setForm({ ...form, agent_username: event.target.value })} required />
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Senha do agent
-              <Input type="password" value={form.agent_password} onChange={(event) => setForm({ ...form, agent_password: event.target.value })} required minLength={8} />
+              <span className="flex items-center justify-between gap-2">
+                Senha do agent
+                <Button type="button" variant="outline" className="h-7 px-2 text-xs" onClick={() => fillPassword("agent_password")} title="Gerar senha forte para o agent">
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Gerar
+                </Button>
+              </span>
+              <Input type="password" value={form.agent_password} onChange={(event) => setForm({ ...form, agent_password: event.target.value })} required minLength={8} autoComplete="new-password" />
             </label>
           </div>
         ) : null}
@@ -237,6 +253,40 @@ export default function OrganizationsPage() {
 
 function money(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function generatePassword(length = 18) {
+  const groups = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnopqrstuvwxyz", "23456789", "!@#$%*?"];
+  const all = groups.join("");
+  const chars = groups.map((group) => pickChar(group));
+  while (chars.length < length) {
+    chars.push(pickChar(all));
+  }
+  return shuffle(chars).join("");
+}
+
+function pickChar(source: string) {
+  const index = secureRandom(source.length);
+  return source[index];
+}
+
+function secureRandom(max: number) {
+  const cryptoApi = typeof crypto !== "undefined" ? crypto : null;
+  if (cryptoApi?.getRandomValues) {
+    const values = new Uint32Array(1);
+    cryptoApi.getRandomValues(values);
+    return values[0] % max;
+  }
+  return Math.floor(Math.random() * max);
+}
+
+function shuffle(values: string[]) {
+  const result = [...values];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = secureRandom(index + 1);
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
 }
 
 function MetricPill({ label, value, tone = "muted" }: { label: string; value: number; tone?: "muted" | "success" | "danger" }) {
