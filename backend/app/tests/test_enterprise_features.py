@@ -474,6 +474,89 @@ def test_usb_job_matches_known_alias_device_id_case_insensitive(db_session: Sess
     assert db_session.query(PrinterAlias).filter(PrinterAlias.queue_name == "USER").one().printer_id == printer.id
 
 
+def test_generic_printer_name_uses_single_bound_agent_printer(db_session: Session):
+    printer = Printer(organization_id=1, name="KONICA MINOLTA C368SeriesPS", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-single-printer", computer_name="PC-FIN")
+    db_session.add_all([printer, agent])
+    db_session.flush()
+    db_session.add(
+        PrinterAlias(
+            organization_id=1,
+            printer=printer,
+            agent=agent,
+            queue_name="KONICA Financeiro",
+            normalized_queue_name="konica financeiro",
+            driver_name="KONICA Driver",
+        )
+    )
+    db_session.commit()
+
+    register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="diego",
+            printer_name="USER",
+            queue_name="USER",
+            pages=1,
+            is_color=False,
+            external_job_id="eventlog:generic-single-printer",
+            agent_uid=agent.agent_uid,
+            computer_name=agent.computer_name,
+        ),
+    )
+
+    job = db_session.query(PrintJob).one()
+    assert db_session.query(Printer).count() == 1
+    assert job.printer_id == printer.id
+    assert db_session.query(PrinterAlias).filter(PrinterAlias.queue_name == "USER").one().printer_id == printer.id
+
+
+def test_generic_printer_name_does_not_guess_when_agent_has_multiple_bound_printers(db_session: Session):
+    konica = Printer(organization_id=1, name="KONICA FINANCEIRO", is_color=True)
+    brother = Printer(organization_id=1, name="BROTHER RH", is_color=False)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-multiple-printers", computer_name="PC-MULTI")
+    db_session.add_all([konica, brother, agent])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PrinterAlias(
+                organization_id=1,
+                printer=konica,
+                agent=agent,
+                queue_name="KONICA Financeiro",
+                normalized_queue_name="konica financeiro",
+            ),
+            PrinterAlias(
+                organization_id=1,
+                printer=brother,
+                agent=agent,
+                queue_name="Brother RH",
+                normalized_queue_name="brother rh",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="diego",
+            printer_name="USER",
+            queue_name="USER",
+            pages=1,
+            is_color=False,
+            external_job_id="eventlog:generic-multiple-printers",
+            agent_uid=agent.agent_uid,
+            computer_name=agent.computer_name,
+        ),
+    )
+
+    job = db_session.query(PrintJob).filter(PrintJob.external_job_id == "eventlog:generic-multiple-printers").one()
+    user_printer = db_session.query(Printer).filter(Printer.name == "USER").one()
+    assert db_session.query(Printer).count() == 3
+    assert job.printer_id == user_printer.id
+
+
 def test_merge_printer_moves_jobs_and_aliases(db_session: Session):
     actor = User(username="admin", full_name="Admin", role=UserRole.admin, is_active=True)
     user = User(username="diego", full_name="Diego", role=UserRole.user, is_active=True)

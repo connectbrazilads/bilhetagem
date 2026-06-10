@@ -1,3 +1,5 @@
+import unicodedata
+
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -80,6 +82,24 @@ def _identity_key(value: str | None) -> str | None:
     return cleaned.lower() if cleaned else None
 
 
+def _plain_text_key(value: str | None) -> str | None:
+    cleaned = _clean_optional(value)
+    if not cleaned:
+        return None
+    normalized = unicodedata.normalize("NFKD", cleaned)
+    ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
+    return " ".join(ascii_text.lower().split()) or None
+
+
+def _is_generic_printer_name(value: str | None) -> bool:
+    return _plain_text_key(value) in {
+        "documento de impressao",
+        "print document",
+        "user",
+        "unknown",
+    }
+
+
 def _same_identity(left: str | None, right: str | None) -> bool:
     left_key = _identity_key(left)
     right_key = _identity_key(right)
@@ -115,6 +135,24 @@ def _find_bound_alias_by_identity(db: Session, organization_id: int, column, val
         )
         .first()
     )
+
+
+def _find_single_bound_agent_printer(db: Session, organization_id: int, agent: PrintAgent | None) -> Printer | None:
+    if not agent:
+        return None
+    aliases = (
+        db.query(PrinterAlias)
+        .filter(
+            PrinterAlias.organization_id == organization_id,
+            PrinterAlias.agent_id == agent.id,
+            PrinterAlias.printer_id.isnot(None),
+        )
+        .all()
+    )
+    printer_ids = {alias.printer_id for alias in aliases if alias.printer_id is not None}
+    if len(printer_ids) != 1:
+        return None
+    return aliases[0].printer
 
 
 def _policy_audit_metadata(policy_decision: PolicyDecision, requested_is_color: bool, effective_is_color: bool) -> dict:
@@ -208,6 +246,11 @@ def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAge
         alias = _find_bound_alias_by_identity(db, organization_id, PrinterAlias.fingerprint, fingerprint)
         if alias and alias.printer:
             return alias.printer
+
+    if _is_generic_printer_name(payload.printer_name) or _is_generic_printer_name(payload.queue_name):
+        printer = _find_single_bound_agent_printer(db, organization_id, agent)
+        if printer:
+            return printer
 
     return db.query(Printer).filter(Printer.organization_id == organization_id, Printer.name == payload.printer_name).first()
 
