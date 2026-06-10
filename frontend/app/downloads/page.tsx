@@ -5,7 +5,7 @@ import { Check, Copy, Download, FileArchive, RefreshCw, ShieldCheck, TerminalSqu
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
-import { API_URL, apiFetch } from "@/lib/api";
+import { API_URL, apiFetch, getCurrentRole } from "@/lib/api";
 
 type ReleaseFile = {
   kind: string;
@@ -76,6 +76,7 @@ function maskSecret(command: string, secret: string) {
 export default function DownloadsPage() {
   const [releases, setReleases] = useState<AgentRelease[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [deployOrg, setDeployOrg] = useState("default");
   const [deployUser, setDeployUser] = useState("agent");
@@ -90,7 +91,8 @@ export default function DownloadsPage() {
     try {
       const data = await apiFetch<AgentRelease[]>("/agent/releases", token);
       setReleases(data);
-      const orgs = await apiFetch<OrganizationOption[]>("/agent/deployment-organizations", token).catch(() => []);
+      const canPrepareDeployment = getCurrentRole(token) === "admin";
+      const orgs = canPrepareDeployment ? await apiFetch<OrganizationOption[]>("/agent/deployment-organizations", token).catch(() => []) : [];
       setOrganizations(orgs);
       const currentSlug = localStorage.getItem("organization_slug") || "default";
       if (orgs.length > 0 && !orgs.some((organization) => organization.slug === deployOrg)) {
@@ -108,6 +110,8 @@ export default function DownloadsPage() {
   }
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    setIsAdmin(token ? getCurrentRole(token) === "admin" : false);
     setDeployOrg(localStorage.getItem("organization_slug") || "default");
     load();
   }, []);
@@ -178,73 +182,75 @@ export default function DownloadsPage() {
         </Button>
       </div>
 
-      <Surface className="mb-6 p-4">
-        <div className="mb-4 flex items-start gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <TerminalSquare className="h-5 w-5" />
+      {isAdmin ? (
+        <Surface className="mb-6 p-4">
+          <div className="mb-4 flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <TerminalSquare className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold">Instalacao silenciosa</h2>
+              <p className="text-xs text-muted-foreground">Comandos prontos para implantar o agent. A senha fica mascarada na tela, mas e copiada corretamente.</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-sm font-bold">Instalacao silenciosa</h2>
-            <p className="text-xs text-muted-foreground">Comandos prontos para implantar o agent. A senha fica mascarada na tela, mas e copiada corretamente.</p>
+          <div className="mb-4 grid gap-3 md:grid-cols-4">
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              API
+              <Input value={API_URL} readOnly />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Empresa
+              {organizations.length > 0 ? (
+                <select
+                  className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+                  value={deployOrg}
+                  onChange={(event) => setDeployOrg(event.target.value)}
+                >
+                  {organizations.map((organization) => (
+                    <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
+                      {organization.name} ({organization.slug}){organization.is_active ? "" : " - inativa"}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={deployOrg} onChange={(event) => setDeployOrg(event.target.value)} />
+              )}
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Usuario agent
+              <Input value={deployUser} onChange={(event) => setDeployUser(event.target.value)} />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Senha agent
+              <Input type="password" value={deployPassword} onChange={(event) => setDeployPassword(event.target.value)} />
+            </label>
           </div>
-        </div>
-        <div className="mb-4 grid gap-3 md:grid-cols-4">
-          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-            API
-            <Input value={API_URL} readOnly />
+          <label className="mb-4 grid max-w-md gap-1.5 text-xs font-semibold text-muted-foreground">
+            Usuario padrao do PC
+            <Input placeholder="Opcional" value={defaultUsername} onChange={(event) => setDefaultUsername(event.target.value)} />
           </label>
-          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-            Empresa
-            {organizations.length > 0 ? (
-              <select
-                className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
-                value={deployOrg}
-                onChange={(event) => setDeployOrg(event.target.value)}
-              >
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
-                    {organization.name} ({organization.slug}){organization.is_active ? "" : " - inativa"}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <Input value={deployOrg} onChange={(event) => setDeployOrg(event.target.value)} />
-            )}
-          </label>
-          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-            Usuario agent
-            <Input value={deployUser} onChange={(event) => setDeployUser(event.target.value)} />
-          </label>
-          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-            Senha agent
-            <Input type="password" value={deployPassword} onChange={(event) => setDeployPassword(event.target.value)} />
-          </label>
-        </div>
-        <label className="mb-4 grid max-w-md gap-1.5 text-xs font-semibold text-muted-foreground">
-          Usuario padrao do PC
-          <Input placeholder="Opcional" value={defaultUsername} onChange={(event) => setDefaultUsername(event.target.value)} />
-        </label>
-        <div className="grid gap-3 lg:grid-cols-2">
-          <CommandBox
-            title="EXE"
-            command={exeCommand}
-            displayCommand={maskSecret(exeCommand, deployPassword)}
-            disabled={!installerFile || !commandReady}
-            emptyMessage={!installerFile ? undefined : commandMissingMessage}
-            copied={copiedCommand === "exe"}
-            onCopy={() => copyCommand("exe", exeCommand)}
-          />
-          <CommandBox
-            title="MSI"
-            command={msiCommand}
-            displayCommand={maskSecret(msiCommand, deployPassword)}
-            disabled={!msiFile || !commandReady}
-            emptyMessage={!msiFile ? undefined : commandMissingMessage}
-            copied={copiedCommand === "msi"}
-            onCopy={() => copyCommand("msi", msiCommand)}
-          />
-        </div>
-      </Surface>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <CommandBox
+              title="EXE"
+              command={exeCommand}
+              displayCommand={maskSecret(exeCommand, deployPassword)}
+              disabled={!installerFile || !commandReady}
+              emptyMessage={!installerFile ? undefined : commandMissingMessage}
+              copied={copiedCommand === "exe"}
+              onCopy={() => copyCommand("exe", exeCommand)}
+            />
+            <CommandBox
+              title="MSI"
+              command={msiCommand}
+              displayCommand={maskSecret(msiCommand, deployPassword)}
+              disabled={!msiFile || !commandReady}
+              emptyMessage={!msiFile ? undefined : commandMissingMessage}
+              copied={copiedCommand === "msi"}
+              onCopy={() => copyCommand("msi", msiCommand)}
+            />
+          </div>
+        </Surface>
+      ) : null}
 
       <Surface className="overflow-hidden">
         {releases.length === 0 ? (
