@@ -11,6 +11,7 @@ from app.core.deps import require_roles
 from app.models.audit_log import AuditLog
 from app.models.user import User, UserRole
 from app.schemas.audit import AuditLogRead
+from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
 
@@ -107,6 +108,24 @@ def export_audit_logs(
                 json.dumps(log.log_metadata or {}, ensure_ascii=False),
             ]
         )
+
+    write_audit(
+        db,
+        action="audit_logs_exported",
+        entity="audit_logs",
+        actor_user_id=actor.id,
+        metadata={
+            "rows": len(rows),
+            "filters": {
+                "action": action,
+                "entity": entity,
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+                "limit": limit,
+            },
+        },
+    )
+    db.commit()
 
     return Response(
         content=output.getvalue(),

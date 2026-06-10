@@ -861,3 +861,11 @@ def test_audit_log_filters_by_date_and_exports_csv(db_session: Session):
     assert "audit-export,printer_updated,printers,2" in body
     assert "KONICA" in body
     assert "antigo" not in body
+    assert "audit_logs_exported" not in body
+
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "audit_logs_exported").one()
+    assert audit.actor_user_id == admin.id
+    assert audit.log_metadata["rows"] == 1
+    assert audit.log_metadata["filters"]["date_from"] == "2026-02-01T00:00:00+00:00"
+    assert audit.log_metadata["filters"]["date_to"] == "2026-02-28T23:59:00+00:00"
+    assert audit.log_metadata["filters"]["limit"] == 100
