@@ -624,8 +624,8 @@ def list_agent_deployment_organizations(
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> list[Organization]:
     if _can_manage_all_organizations(actor):
-        return db.query(Organization).order_by(Organization.name).all()
-    return [actor.organization]
+        return db.query(Organization).filter(Organization.is_active.is_(True)).order_by(Organization.name).all()
+    return [actor.organization] if actor.organization and actor.organization.is_active else []
 
 
 @router.get("/releases/{version}/download")

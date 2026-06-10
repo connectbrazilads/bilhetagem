@@ -223,7 +223,8 @@ def test_deployment_organizations_are_scoped_for_download_commands(db_session: S
     platform_options = list_agent_deployment_organizations(db=db_session, actor=platform_admin)
     tenant_options = list_agent_deployment_organizations(db=db_session, actor=tenant_manager)
 
-    assert {organization.slug for organization in platform_options} >= {"default", "cliente-download", "cliente-inativo-download"}
+    assert {organization.slug for organization in platform_options} >= {"default", "cliente-download"}
+    assert "cliente-inativo-download" not in {organization.slug for organization in platform_options}
     assert [organization.slug for organization in tenant_options] == ["cliente-download"]
 
 
