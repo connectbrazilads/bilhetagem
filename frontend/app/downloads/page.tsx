@@ -388,6 +388,7 @@ export default function DownloadsPage() {
                   value={deployOrg}
                   onChange={(event) => {
                     const slug = event.target.value;
+                    if (slug !== deployOrg) setDeployPassword("");
                     setDeployOrg(slug);
                     const organization = organizations.find((item) => item.slug === slug);
                     if (organization?.agent_username) {
@@ -402,7 +403,13 @@ export default function DownloadsPage() {
                   ))}
                 </select>
               ) : (
-                <Input value={deployOrg} onChange={(event) => setDeployOrg(event.target.value)} />
+                <Input
+                  value={deployOrg}
+                  onChange={(event) => {
+                    if (event.target.value !== deployOrg) setDeployPassword("");
+                    setDeployOrg(event.target.value);
+                  }}
+                />
               )}
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
@@ -417,7 +424,7 @@ export default function DownloadsPage() {
               Senha atual do agent
               <Input type="password" value={deployPassword} onChange={(event) => setDeployPassword(event.target.value)} />
               <span className="text-[11px] font-medium text-muted-foreground">
-                Use a senha cadastrada para o usuario tecnico desta empresa; ela nao e exibida nem gerada pelo painel.
+                Use a senha cadastrada para o usuario tecnico desta empresa; ao trocar a empresa, este campo e limpo automaticamente.
               </span>
             </label>
           </div>
