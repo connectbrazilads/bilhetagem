@@ -53,7 +53,19 @@ from app.schemas.settings import LDAPSettings
 
 
 def test_seed_rejects_default_or_placeholder_passwords():
-    for password in ("", "admin12345", "agent12345", "change-me-admin-password", "change-me-agent-password"):
+    unsafe_passwords = (
+        "",
+        "admin",
+        "agent",
+        "admin12345",
+        "agent12345",
+        "change-me-admin-password",
+        "change-me-agent-password",
+        "password",
+        "senha123",
+        "12345678",
+    )
+    for password in unsafe_passwords:
         with pytest.raises(RuntimeError):
             validate_seed_password(password, "INITIAL_ADMIN_PASSWORD")
 
