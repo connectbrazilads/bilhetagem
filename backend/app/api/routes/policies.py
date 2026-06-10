@@ -9,8 +9,9 @@ from app.models.print_policy import PrintPolicy, PolicyRuleType
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
 from app.models.user import User, UserRole
-from app.schemas.policy import PrintPolicyCreate, PrintPolicyRead, PrintPolicyUpdate
+from app.schemas.policy import PrintPolicyCreate, PrintPolicyRead, PrintPolicySimulationRead, PrintPolicySimulationRequest, PrintPolicyUpdate
 from app.services.audit_service import write_audit
+from app.services.policy_service import simulate_print_policy
 
 router = APIRouter(prefix="/policies", tags=["policies"])
 
@@ -94,6 +95,32 @@ def create_policy(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Politica ja cadastrada") from exc
+
+
+@router.post("/simulate", response_model=PrintPolicySimulationRead)
+def simulate_policy(
+    payload: PrintPolicySimulationRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+) -> PrintPolicySimulationRead:
+    try:
+        simulation = simulate_print_policy(db, payload, actor.organization_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    decision = simulation.decision
+    return PrintPolicySimulationRead(
+        matched=decision.policy is not None,
+        policy_id=decision.policy.id if decision.policy else None,
+        policy_name=decision.policy.name if decision.policy else None,
+        action=decision.action,
+        reason=decision.reason,
+        force_mono=decision.force_mono,
+        effective_is_color=payload.is_color and not decision.force_mono,
+        user_id=simulation.user.id,
+        printer_id=simulation.printer.id,
+        printer_alias_id=simulation.alias.id if simulation.alias else None,
+    )
 
 
 @router.put("/{policy_id}", response_model=PrintPolicyRead)

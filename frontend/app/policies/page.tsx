@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Edit, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Edit, Plus, ShieldCheck, TestTube2, Trash2 } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -42,6 +42,19 @@ type PrinterRow = {
   name: string;
 };
 
+type PolicySimulation = {
+  matched: boolean;
+  policy_id: number | null;
+  policy_name: string | null;
+  action: PolicyAction | null;
+  reason: string | null;
+  force_mono: boolean;
+  effective_is_color: boolean;
+  user_id: number;
+  printer_id: number;
+  printer_alias_id: number | null;
+};
+
 const emptyForm = {
   name: "",
   description: "",
@@ -59,6 +72,14 @@ const emptyForm = {
   start_time: "",
   end_time: "",
   message: "",
+};
+
+const emptySimulationForm = {
+  username: "",
+  printer_name: "",
+  pages: "1",
+  is_color: false,
+  queue_name: "",
 };
 
 const ruleLabels: Record<PolicyRuleType, string> = {
@@ -80,6 +101,9 @@ export default function PoliciesPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [form, setForm] = useState(emptyForm);
+  const [simulationForm, setSimulationForm] = useState(emptySimulationForm);
+  const [simulation, setSimulation] = useState<PolicySimulation | null>(null);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,6 +120,14 @@ export default function PoliciesPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    setSimulationForm((current) => ({
+      ...current,
+      username: current.username || users[0]?.username || "",
+      printer_name: current.printer_name || printers[0]?.name || "",
+    }));
+  }, [users, printers]);
 
   const summary = useMemo(() => {
     return {
@@ -190,6 +222,29 @@ export default function PoliciesPage() {
     }
   }
 
+  async function simulatePolicy(event: FormEvent) {
+    event.preventDefault();
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setSimulation(null);
+    setSimulationError(null);
+    try {
+      const result = await apiFetch<PolicySimulation>("/policies/simulate", token, {
+        method: "POST",
+        body: JSON.stringify({
+          username: simulationForm.username,
+          printer_name: simulationForm.printer_name,
+          pages: Number(simulationForm.pages),
+          is_color: simulationForm.is_color,
+          queue_name: simulationForm.queue_name || null,
+        }),
+      });
+      setSimulation(result);
+    } catch (err) {
+      setSimulationError(err instanceof Error ? err.message : "Falha ao simular politica");
+    }
+  }
+
   function describePolicy(policy: PolicyRow) {
     const parts = [ruleLabels[policy.rule_type]];
     if (policy.max_pages) parts.push(`>${policy.max_pages} pag.`);
@@ -267,6 +322,91 @@ export default function PoliciesPage() {
       </Surface>
 
       {error ? <Surface className="mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</Surface> : null}
+
+      <Surface as="form" className="mb-4 grid gap-4 p-4" onSubmit={simulatePolicy}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <TestTube2 className="h-4 w-4" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Simular politica</h2>
+            <p className="text-xs text-muted-foreground">Teste um trabalho hipotetico sem criar impressao nem consumir cota.</p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_110px_120px_1fr_auto]">
+          <select
+            className="h-9 rounded-md border bg-white px-3 text-sm"
+            value={simulationForm.username}
+            onChange={(event) => setSimulationForm({ ...simulationForm, username: event.target.value })}
+            required
+          >
+            <option value="">Usuario</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.username}>
+                {user.username}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-9 rounded-md border bg-white px-3 text-sm"
+            value={simulationForm.printer_name}
+            onChange={(event) => setSimulationForm({ ...simulationForm, printer_name: event.target.value })}
+            required
+          >
+            <option value="">Impressora</option>
+            {printers.map((printer) => (
+              <option key={printer.id} value={printer.name}>
+                {printer.name}
+              </option>
+            ))}
+          </select>
+          <Input
+            type="number"
+            min={1}
+            placeholder="Paginas"
+            value={simulationForm.pages}
+            onChange={(event) => setSimulationForm({ ...simulationForm, pages: event.target.value })}
+            required
+          />
+          <label className="flex items-center gap-2 px-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={simulationForm.is_color}
+              onChange={(event) => setSimulationForm({ ...simulationForm, is_color: event.target.checked })}
+            />
+            Colorido
+          </label>
+          <Input
+            placeholder="Fila opcional"
+            value={simulationForm.queue_name}
+            onChange={(event) => setSimulationForm({ ...simulationForm, queue_name: event.target.value })}
+          />
+          <Button type="submit">
+            <TestTube2 className="h-4 w-4" />
+            Testar
+          </Button>
+        </div>
+
+        {simulation ? (
+          <div
+            className={`rounded-md border p-3 text-sm ${
+              simulation.matched ? "border-blue-200 bg-blue-50 text-blue-900" : "border-slate-200 bg-slate-50 text-slate-700"
+            }`}
+          >
+            {simulation.matched ? (
+              <span>
+                Politica aplicada: <strong>{simulation.policy_name}</strong> ({simulation.action ? actionLabels[simulation.action] : "-"})
+                {simulation.force_mono ? " - cobraria como P&B" : ""}. {simulation.reason || ""}
+              </span>
+            ) : (
+              <span>Nenhuma politica ativa seria aplicada para este trabalho.</span>
+            )}
+          </div>
+        ) : null}
+        {simulationError ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{simulationError}</div> : null}
+      </Surface>
 
       <Surface className="overflow-hidden">
         <table className="w-full text-sm">

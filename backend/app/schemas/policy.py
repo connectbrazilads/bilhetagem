@@ -3,6 +3,7 @@ from datetime import datetime, time
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.print_policy import PolicyAction, PolicyRuleType
+from app.schemas.job import PrintJobCreate
 
 
 class PrintPolicyBase(BaseModel):
@@ -60,3 +61,20 @@ class PrintPolicyRead(PrintPolicyBase):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PrintPolicySimulationRequest(PrintJobCreate):
+    pass
+
+
+class PrintPolicySimulationRead(BaseModel):
+    matched: bool
+    policy_id: int | None = None
+    policy_name: str | None = None
+    action: PolicyAction | None = None
+    reason: str | None = None
+    force_mono: bool = False
+    effective_is_color: bool
+    user_id: int
+    printer_id: int
+    printer_alias_id: int | None = None

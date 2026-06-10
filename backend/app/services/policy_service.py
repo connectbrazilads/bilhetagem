@@ -3,6 +3,7 @@ from datetime import datetime, time
 
 from sqlalchemy.orm import Session
 
+from app.models.print_agent import PrintAgent
 from app.models.print_policy import PolicyAction, PolicyRuleType, PrintPolicy
 from app.models.printer import Printer
 from app.models.printer_alias import PrinterAlias
@@ -18,10 +19,34 @@ class PolicyDecision:
     force_mono: bool = False
 
 
+@dataclass(frozen=True)
+class PolicySimulation:
+    decision: PolicyDecision
+    user: User
+    printer: Printer
+    alias: PrinterAlias | None = None
+
+
 def _normalize(value: str | None) -> str | None:
     if not value:
         return None
     return " ".join(value.strip().lower().split()) or None
+
+
+def _normalize_username(username: str) -> str:
+    normalized = username.strip()
+    if "\\" in normalized:
+        normalized = normalized.rsplit("\\", 1)[-1]
+    if "@" in normalized:
+        normalized = normalized.split("@", 1)[0]
+    return normalized.strip().lower() or "unknown"
+
+
+def _clean_optional(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
 
 
 def _days_match(policy: PrintPolicy, submitted_at: datetime) -> bool:
@@ -131,3 +156,54 @@ def evaluate_print_policies(
             force_mono=policy.action == PolicyAction.force_mono and payload.is_color,
         )
     return PolicyDecision()
+
+
+def simulate_print_policy(db: Session, payload: PrintJobCreate, organization_id: int) -> PolicySimulation:
+    username = _normalize_username(payload.username)
+    user = db.query(User).filter(User.organization_id == organization_id, User.username == username).first()
+    if not user:
+        raise ValueError(f"Usuario '{username}' nao cadastrado")
+
+    agent = None
+    if _clean_optional(payload.agent_uid):
+        agent = (
+            db.query(PrintAgent)
+            .filter(PrintAgent.organization_id == organization_id, PrintAgent.agent_uid == _clean_optional(payload.agent_uid))
+            .first()
+        )
+
+    queue_name = _clean_optional(payload.queue_name) or payload.printer_name
+    alias = None
+    if agent and queue_name:
+        alias = (
+            db.query(PrinterAlias)
+            .filter(
+                PrinterAlias.organization_id == organization_id,
+                PrinterAlias.agent_id == agent.id,
+                PrinterAlias.queue_name == queue_name,
+            )
+            .first()
+        )
+    if alias is None and _clean_optional(payload.printer_fingerprint):
+        alias = (
+            db.query(PrinterAlias)
+            .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.fingerprint == _clean_optional(payload.printer_fingerprint))
+            .first()
+        )
+
+    printer = None
+    serial = _clean_optional(payload.printer_serial)
+    if serial:
+        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.serial_number == serial).first()
+    ip_address = _clean_optional(payload.printer_ip_address)
+    if printer is None and ip_address:
+        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.ip_address == ip_address).first()
+    if printer is None and alias and alias.printer:
+        printer = alias.printer
+    if printer is None:
+        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.name == payload.printer_name).first()
+    if not printer:
+        raise ValueError(f"Impressora '{payload.printer_name}' nao cadastrada")
+
+    decision = evaluate_print_policies(db, payload, user, printer, alias, organization_id)
+    return PolicySimulation(decision=decision, user=user, printer=printer, alias=alias)

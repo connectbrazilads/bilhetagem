@@ -8,6 +8,7 @@ from app.models.print_policy import PolicyAction, PolicyRuleType, PrintPolicy
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate
+from app.services.policy_service import simulate_print_policy
 from app.services.print_job_service import register_print_job
 
 
@@ -126,3 +127,51 @@ def test_allow_policy_exception_skips_later_block(db_session: Session):
     job = db_session.query(PrintJob).filter(PrintJob.id == decision.job_id).one()
     assert job.policy_name == "Excecao financeiro"
     assert job.policy_action == "allow"
+
+
+def test_policy_simulation_does_not_create_job_or_debit_quota(db_session: Session):
+    user = User(username="simulador", full_name="Usuario Simulador", role=UserRole.user, is_active=True, organization_id=1)
+    printer = _printer(db_session)
+    db_session.add_all(
+        [
+            user,
+            PrintPolicy(
+                organization_id=1,
+                name="Simular colorido",
+                priority=10,
+                rule_type=PolicyRuleType.color,
+                action=PolicyAction.force_mono,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    simulation = simulate_print_policy(
+        db_session,
+        PrintJobCreate(username="simulador", printer_name=printer.name, pages=3, is_color=True),
+        organization_id=1,
+    )
+
+    assert simulation.decision.policy is not None
+    assert simulation.decision.policy.name == "Simular colorido"
+    assert simulation.decision.action == PolicyAction.force_mono
+    assert simulation.decision.force_mono is True
+    assert db_session.query(PrintJob).count() == 0
+
+
+def test_policy_simulation_respects_organization_scope(db_session: Session):
+    user = User(username="empresa_um", full_name="Empresa Um", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="IMPRESA_ORG_1", is_color=True)
+    db_session.add_all([user, printer])
+    db_session.commit()
+
+    try:
+        simulate_print_policy(
+            db_session,
+            PrintJobCreate(username="empresa_um", printer_name="IMPRESA_ORG_1", pages=1, is_color=False),
+            organization_id=999,
+        )
+    except ValueError as exc:
+        assert "Usuario 'empresa_um' nao cadastrado" in str(exc)
+    else:
+        raise AssertionError("Simulacao deveria respeitar isolamento por empresa")
