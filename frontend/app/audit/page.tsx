@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Filter, History, RefreshCcw } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
@@ -32,16 +32,16 @@ export default function AuditPage() {
   const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  function buildParams(limit = "200") {
+  const buildParams = useCallback((limit = "200") => {
     const params = new URLSearchParams({ limit });
     if (action.trim()) params.set("action", action.trim());
     if (entity.trim()) params.set("entity", entity.trim());
     if (dateFrom) params.set("date_from", `${dateFrom}T00:00:00`);
     if (dateTo) params.set("date_to", `${dateTo}T23:59:59`);
     return params;
-  }
+  }, [action, dateFrom, dateTo, entity]);
 
-  async function load() {
+  const load = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) return;
     setError(null);
@@ -52,9 +52,9 @@ export default function AuditPage() {
       setError(err instanceof Error ? err.message : "Falha ao carregar auditoria");
       setLogs([]);
     }
-  }
+  }, [buildParams]);
 
-  async function loadFacets() {
+  const loadFacets = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) return;
     try {
@@ -63,7 +63,7 @@ export default function AuditPage() {
     } catch {
       setFacets({ actions: [], entities: [] });
     }
-  }
+  }, []);
 
   async function exportCsv() {
     const token = localStorage.getItem("token");
@@ -97,7 +97,7 @@ export default function AuditPage() {
   useEffect(() => {
     loadFacets();
     load();
-  }, []);
+  }, [load, loadFacets]);
 
   const summary = useMemo(() => {
     const actors = new Set(logs.map((log) => log.actor_username || "sistema"));

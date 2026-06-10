@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/shell";
@@ -16,8 +16,7 @@ const DEFAULT_PANEL_ROLES = ["admin", "manager"];
 export function ProtectedPage({ children, roles }: ProtectedPageProps) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
-  const allowedRoles = roles ?? DEFAULT_PANEL_ROLES;
-  const allowedRolesKey = allowedRoles.join(",");
+  const allowedRoles = useMemo(() => roles ?? DEFAULT_PANEL_ROLES, [roles]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -42,7 +41,7 @@ export function ProtectedPage({ children, roles }: ProtectedPageProps) {
       return;
     }
     setReady(true);
-  }, [router, allowedRolesKey]);
+  }, [router, allowedRoles]);
 
   if (!ready) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Carregando...</div>;

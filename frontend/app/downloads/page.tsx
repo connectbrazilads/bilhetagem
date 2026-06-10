@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Download, FileArchive, RefreshCw, ShieldCheck, TerminalSquare } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
@@ -112,7 +112,7 @@ export default function DownloadsPage() {
   const [copiedSha, setCopiedSha] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) return;
     setLoading(true);
@@ -123,26 +123,27 @@ export default function DownloadsPage() {
       const orgs = canPrepareDeployment ? await apiFetch<OrganizationOption[]>("/agent/deployment-organizations", token).catch(() => []) : [];
       setOrganizations(orgs);
       const currentSlug = localStorage.getItem("organization_slug") || "default";
-      if (orgs.length > 0 && !orgs.some((organization) => organization.slug === deployOrg)) {
+      setDeployOrg((current) => {
+        if (orgs.length === 0 || orgs.some((organization) => organization.slug === current)) return current;
         const preferred =
           orgs.find((organization) => organization.slug === currentSlug && organization.is_active) ??
           orgs.find((organization) => organization.is_active) ??
           orgs[0];
-        setDeployOrg(preferred.slug);
-      }
+        return preferred.slug;
+      });
     } catch {
       setReleases([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     setIsAdmin(token ? getCurrentRole(token) === "admin" : false);
     setDeployOrg(localStorage.getItem("organization_slug") || "default");
     load();
-  }, []);
+  }, [load]);
 
   async function downloadFile(file: ReleaseFile) {
     const token = localStorage.getItem("token");

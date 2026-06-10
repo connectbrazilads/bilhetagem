@@ -181,7 +181,7 @@ export default function SettingsPage() {
       setLdapBindPassword("");
       setStatusMsg({ text: "Configuracoes salvas com sucesso.", type: "success" });
       setTimeout(() => setStatusMsg(null), 3000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatusMsg({ text: `Erro ao salvar configuracoes: ${readError(err)}`, type: "error" });
     } finally {
       setLoading(false);
@@ -206,7 +206,7 @@ export default function SettingsPage() {
         text: response.success ? "Conexao de teste com LDAP bem-sucedida." : response.message || "Erro desconhecido ao testar conexao.",
         type: response.success ? "success" : "error",
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatusMsg({ text: `Falha na conexao LDAP: ${readError(err)}`, type: "error" });
     } finally {
       setLoading(false);
@@ -237,7 +237,7 @@ export default function SettingsPage() {
         text: `Sincronizacao concluida: ${response.total_synced} usuario(s), ${response.new_users} novo(s), ${response.updated_users} atualizado(s), ${response.skipped_users || 0} ignorado(s).`,
         type: "success",
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatusMsg({ text: `Erro ao sincronizar LDAP: ${readError(err)}`, type: "error" });
     } finally {
       setLoading(false);
@@ -290,7 +290,7 @@ export default function SettingsPage() {
       } else {
         setWebPrintStatus({ text: `Impressao bloqueada: ${decision.reason || "Saldo ou cota insuficiente"}`, type: "error" });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setWebPrintStatus({ text: `Falha no Web Print: ${readError(err)}`, type: "error" });
     } finally {
       setWebPrintLoading(false);
@@ -560,11 +560,11 @@ function ToggleRow({ id, checked, onChange, label }: { id: string; checked: bool
   );
 }
 
-function readError(err: any) {
-  let errorText = err?.message || "";
+function readError(err: unknown) {
+  let errorText = err instanceof Error ? err.message : "";
   try {
-    const parsed = JSON.parse(errorText);
-    if (parsed.detail) errorText = parsed.detail;
+    const parsed = JSON.parse(errorText) as { detail?: unknown };
+    if (typeof parsed.detail === "string") errorText = parsed.detail;
   } catch {}
   return errorText || "Erro desconhecido";
 }

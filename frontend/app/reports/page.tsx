@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Download, FileText, Mail, Printer, Search, Users } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
@@ -120,7 +120,19 @@ export default function ReportsPage() {
   const [mailMessage, setMailMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [sendingEmailId, setSendingEmailId] = useState<number | "due" | null>(null);
 
-  async function loadJobs() {
+  const reportQueryParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (userId) params.set("user_id", userId);
+    if (departmentId) params.set("department_id", departmentId);
+    if (printerId) params.set("printer_id", printerId);
+    if (dateQuery) {
+      params.set("date_from", `${dateQuery}T00:00:00`);
+      params.set("date_to", `${dateQuery}T23:59:59`);
+    }
+    return params.toString();
+  }, [dateQuery, departmentId, printerId, userId]);
+
+  const loadJobs = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) return;
     setLoading(true);
@@ -133,7 +145,7 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [reportQueryParams]);
 
   async function loadClosings() {
     const token = localStorage.getItem("token");
@@ -157,19 +169,7 @@ export default function ReportsPage() {
     loadFilterOptions();
     loadJobs();
     loadClosings();
-  }, []);
-
-  function reportQueryParams() {
-    const params = new URLSearchParams();
-    if (userId) params.set("user_id", userId);
-    if (departmentId) params.set("department_id", departmentId);
-    if (printerId) params.set("printer_id", printerId);
-    if (dateQuery) {
-      params.set("date_from", `${dateQuery}T00:00:00`);
-      params.set("date_to", `${dateQuery}T23:59:59`);
-    }
-    return params.toString();
-  }
+  }, [loadJobs]);
 
   async function download(format: "pdf" | "xlsx") {
     const token = localStorage.getItem("token");
