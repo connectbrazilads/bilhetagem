@@ -33,6 +33,15 @@ def _agent_is_online(agent: PrintAgent, now: datetime) -> bool:
     return now - last_seen <= timedelta(minutes=3)
 
 
+def _changed_values(before: dict, after: dict) -> dict:
+    changes = {}
+    for key, after_value in after.items():
+        before_value = before.get(key)
+        if before_value != after_value:
+            changes[key] = {"before": before_value, "after": after_value}
+    return changes
+
+
 def _organization_read(db: Session, organization: Organization) -> OrganizationRead:
     now = datetime.now(timezone.utc)
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
@@ -146,21 +155,24 @@ def update_organization(
     if not organization:
         raise HTTPException(status_code=404, detail="Empresa nao encontrada")
 
+    before = {"name": organization.name, "is_active": organization.is_active}
     if payload.name is not None:
         organization.name = payload.name
     if payload.is_active is not None:
         organization.is_active = payload.is_active
 
     try:
-        write_audit(
-            db,
-            action="organization_updated",
-            entity="organizations",
-            entity_id=organization.id,
-            actor_user_id=actor.id,
-            metadata={"name": organization.name, "is_active": organization.is_active},
-            organization_id=actor.organization_id,
-        )
+        changes = _changed_values(before, {"name": organization.name, "is_active": organization.is_active})
+        if changes:
+            write_audit(
+                db,
+                action="organization_updated",
+                entity="organizations",
+                entity_id=organization.id,
+                actor_user_id=actor.id,
+                metadata={"changes": changes},
+                organization_id=actor.organization_id,
+            )
         db.commit()
         db.refresh(organization)
         return _organization_read(db, organization)

@@ -14,7 +14,7 @@ from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
 from app.api.routes.auth import login
 from app.api.routes.audit_logs import export_audit_logs, list_audit_logs
-from app.api.routes.organizations import create_organization, list_organizations
+from app.api.routes.organizations import create_organization, list_organizations, update_organization
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint
 from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
@@ -32,7 +32,7 @@ from app.services.ldap_service import sync_ldap_users, test_ldap_connection as c
 from app.api.routes.jobs import get_pdf_page_count
 from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
-from app.schemas.organization import OrganizationCreate
+from app.schemas.organization import OrganizationCreate, OrganizationUpdate
 
 def test_snmp_poll_uses_real_status_payload(db_session: Session, monkeypatch):
     # Mock SessionLocal in snmp_service to return db_session
@@ -440,6 +440,37 @@ def test_creating_organization_seeds_initial_admin_and_agent_users(db_session: S
     assert audit.log_metadata["agent_username"] == "agent"
     assert "cliente12345" not in str(audit.log_metadata)
     assert "agent12345" not in str(audit.log_metadata)
+
+
+def test_updating_organization_writes_changed_fields_to_audit(db_session: Session):
+    platform_admin = User(username="platform-update-admin", full_name="Platform Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    organization = Organization(name="Cliente Audit Update", slug="cliente-audit-update", is_active=True)
+    db_session.add_all([platform_admin, organization])
+    db_session.commit()
+
+    updated = update_organization(
+        organization.id,
+        OrganizationUpdate(name="Cliente Audit Renomeado", is_active=False),
+        db=db_session,
+        actor=platform_admin,
+    )
+    assert updated.name == "Cliente Audit Renomeado"
+    assert updated.is_active is False
+
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").one()
+    assert audit.log_metadata["changes"]["name"] == {
+        "before": "Cliente Audit Update",
+        "after": "Cliente Audit Renomeado",
+    }
+    assert audit.log_metadata["changes"]["is_active"] == {"before": True, "after": False}
+
+    update_organization(
+        organization.id,
+        OrganizationUpdate(name="Cliente Audit Renomeado", is_active=False),
+        db=db_session,
+        actor=platform_admin,
+    )
+    assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 1
 
 
 def test_organization_list_includes_scoped_usage_counts(db_session: Session):

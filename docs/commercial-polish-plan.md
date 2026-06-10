@@ -53,6 +53,7 @@ Entregaveis:
 - Separar configuracoes por empresa: bloqueio, Follow-Me, Web Print, LDAP, custos padrao e criacao automatica.
 - Criar tela administrativa de empresas.
 - Exibir indicadores operacionais por empresa: usuarios, impressoras, agents online/offline, jobs, paginas e custo mensal faturavel.
+- Auditar alteracoes de empresa com antes/depois, especialmente ativacao e desativacao.
 
 Criterios de aceite:
 
