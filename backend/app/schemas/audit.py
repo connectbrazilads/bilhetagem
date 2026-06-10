@@ -13,3 +13,8 @@ class AuditLogRead(BaseModel):
     entity_id: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
+
+
+class AuditLogFacets(BaseModel):
+    actions: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list)

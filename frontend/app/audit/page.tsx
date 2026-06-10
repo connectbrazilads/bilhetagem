@@ -18,8 +18,14 @@ type AuditLogRow = {
   created_at: string;
 };
 
+type AuditFacets = {
+  actions: string[];
+  entities: string[];
+};
+
 export default function AuditPage() {
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
+  const [facets, setFacets] = useState<AuditFacets>({ actions: [], entities: [] });
   const [action, setAction] = useState("");
   const [entity, setEntity] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -48,6 +54,17 @@ export default function AuditPage() {
     }
   }
 
+  async function loadFacets() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      const data = await apiFetch<AuditFacets>("/audit-logs/facets", token);
+      setFacets(data);
+    } catch {
+      setFacets({ actions: [], entities: [] });
+    }
+  }
+
   async function exportCsv() {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -71,6 +88,7 @@ export default function AuditPage() {
   }
 
   useEffect(() => {
+    loadFacets();
     load();
   }, []);
 
@@ -110,8 +128,30 @@ export default function AuditPage() {
 
       <Surface className="mb-4 p-4">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_160px_auto]">
-          <Input placeholder="Filtrar por acao" value={action} onChange={(event) => setAction(event.target.value)} />
-          <Input placeholder="Filtrar por entidade" value={entity} onChange={(event) => setEntity(event.target.value)} />
+          <select
+            className="h-9 rounded-md border bg-white px-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+            value={action}
+            onChange={(event) => setAction(event.target.value)}
+          >
+            <option value="">Todas as acoes</option>
+            {facets.actions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-9 rounded-md border bg-white px-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+            value={entity}
+            onChange={(event) => setEntity(event.target.value)}
+          >
+            <option value="">Todas as entidades</option>
+            {facets.entities.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
           <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
           <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
           <Button onClick={load}>

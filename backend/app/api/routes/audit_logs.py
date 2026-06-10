@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.core.deps import require_roles
 from app.models.audit_log import AuditLog
 from app.models.user import User, UserRole
-from app.schemas.audit import AuditLogRead
+from app.schemas.audit import AuditLogFacets, AuditLogRead
 from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
@@ -73,6 +73,31 @@ def list_audit_logs(
         date_to=date_to,
     ).limit(limit).all()
     return [_to_read_model(log, username) for log, username in rows]
+
+
+@router.get("/facets", response_model=AuditLogFacets)
+def list_audit_log_facets(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+) -> AuditLogFacets:
+    actions = (
+        db.query(AuditLog.action)
+        .filter(AuditLog.organization_id == actor.organization_id)
+        .distinct()
+        .order_by(AuditLog.action)
+        .all()
+    )
+    entities = (
+        db.query(AuditLog.entity)
+        .filter(AuditLog.organization_id == actor.organization_id)
+        .distinct()
+        .order_by(AuditLog.entity)
+        .all()
+    )
+    return AuditLogFacets(
+        actions=[action for (action,) in actions],
+        entities=[entity for (entity,) in entities],
+    )
 
 
 @router.get("/export")

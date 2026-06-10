@@ -16,7 +16,7 @@ from app.models.user import User, UserRole
 from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
 from app.api.routes.auth import login
-from app.api.routes.audit_logs import export_audit_logs, list_audit_logs
+from app.api.routes.audit_logs import export_audit_logs, list_audit_log_facets, list_audit_logs
 from app.api.routes.organizations import create_organization, list_organizations, update_organization
 from app.api.routes.reports import export_report
 from app.api.routes.printers import bind_printer_alias_endpoint, merge_printer_endpoint, update_printer_endpoint
@@ -1043,6 +1043,39 @@ def test_audit_log_listing_is_scoped_by_organization(db_session: Session):
         actor=admin,
     )
     assert [log.entity_id for log in filtered] == [10]
+
+
+def test_audit_log_facets_are_scoped_by_organization(db_session: Session):
+    other_org = Organization(name="Cliente Facets", slug="cliente-facets", is_active=True)
+    admin = User(username="audit-facets", full_name="Audit Facets", role=UserRole.admin, is_active=True, organization_id=1)
+    other_admin = User(username="audit-facets-other", full_name="Audit Other", role=UserRole.admin, is_active=True, organization=other_org)
+    db_session.add_all([other_org, admin, other_admin])
+    db_session.flush()
+
+    write_audit(
+        db_session,
+        action="settings_updated",
+        entity="settings",
+        actor_user_id=admin.id,
+    )
+    write_audit(
+        db_session,
+        action="printer_created",
+        entity="printers",
+        actor_user_id=admin.id,
+    )
+    write_audit(
+        db_session,
+        action="organization_updated",
+        entity="organizations",
+        actor_user_id=other_admin.id,
+    )
+    db_session.commit()
+
+    facets = list_audit_log_facets(db=db_session, actor=admin)
+
+    assert facets.actions == ["printer_created", "settings_updated"]
+    assert facets.entities == ["printers", "settings"]
 
 
 def test_audit_log_filters_by_date_and_exports_csv(db_session: Session):
