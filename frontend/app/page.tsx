@@ -39,6 +39,10 @@ export default function LoginPage() {
         throw new Error(await readLoginError(response));
       }
       const data = await response.json();
+      if (data.role === "agent") {
+        setError("Usuario tecnico do agent nao acessa o painel administrativo.");
+        return;
+      }
       localStorage.setItem("token", data.access_token);
       localStorage.setItem("organization_slug", data.organization_slug || normalizedOrganization);
       if (data.organization_name) localStorage.setItem("organization_name", data.organization_name);

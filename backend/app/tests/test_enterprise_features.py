@@ -506,6 +506,7 @@ def test_same_user_and_printer_names_can_exist_in_different_organizations(db_ses
 
     assert db_session.query(User).filter(User.username == "admin").count() == 2
     assert db_session.query(Printer).filter(Printer.name == "KONICA").count() == 2
+    assert token.role == "admin"
     assert token.organization_id == other_org.id
     assert token.organization_slug == "cliente-c"
     assert token.organization_name == "Cliente C"
@@ -558,6 +559,7 @@ def test_agent_login_requires_explicit_organization_slug(db_session: Session):
         LoginRequest(username="agent-login-scope", password="AgentLoginScopePassword2026", organization_slug="default"),
         db=db_session,
     )
+    assert token.role == "agent"
     assert token.organization_id == 1
 
 

@@ -37,6 +37,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     token = create_access_token(user.username, {"role": user.role.value, "organization_id": user.organization_id})
     return TokenResponse(
         access_token=token,
+        role=user.role.value,
         organization_id=user.organization_id,
         organization_slug=user.organization.slug if user.organization else None,
         organization_name=user.organization.name if user.organization else None,

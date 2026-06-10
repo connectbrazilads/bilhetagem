@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/shell";
-import { isTokenExpired } from "@/lib/api";
+import { getCurrentRole, isTokenExpired } from "@/lib/api";
 
 export function ProtectedPage({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -13,6 +13,11 @@ export function ProtectedPage({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token || isTokenExpired(token)) {
+      localStorage.removeItem("token");
+      router.replace("/");
+      return;
+    }
+    if (getCurrentRole(token) === "agent") {
       localStorage.removeItem("token");
       router.replace("/");
       return;
