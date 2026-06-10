@@ -5,7 +5,7 @@ import { Activity, AlertTriangle, Cpu, Droplets, Edit, FileText, GitMerge, Hash,
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getCurrentRole } from "@/lib/api";
 
 type PrinterRow = {
   id: number;
@@ -37,6 +37,7 @@ type PrinterRow = {
 
 export default function PrintersPage() {
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [form, setForm] = useState({
     name: "",
     location: "",
@@ -61,6 +62,8 @@ export default function PrintersPage() {
   }
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    setIsAdmin(token ? getCurrentRole(token) === "admin" : false);
     load();
     // Poll printer status every 10 seconds for SNMP updates
     const interval = setInterval(load, 10000);
@@ -69,6 +72,7 @@ export default function PrintersPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setError(null);
@@ -116,6 +120,7 @@ export default function PrintersPage() {
   }
 
   function startEdit(printer: PrinterRow) {
+    if (!isAdmin) return;
     setEditingId(printer.id);
     setForm({
       name: printer.name,
@@ -129,6 +134,7 @@ export default function PrintersPage() {
   }
 
   async function deletePrinter(printer: PrinterRow) {
+    if (!isAdmin) return;
     const confirmed = window.confirm(`Excluir a impressora "${printer.name}" e os historicos vinculados a ela?`);
     if (!confirmed) return;
     const token = localStorage.getItem("token");
@@ -158,6 +164,7 @@ export default function PrintersPage() {
   }
 
   async function mergePrinter() {
+    if (!isAdmin) return;
     if (!mergingPrinter || !mergeTargetId) return;
     const target = printers.find((printer) => printer.id.toString() === mergeTargetId);
     if (!target) return;
@@ -237,110 +244,112 @@ export default function PrintersPage() {
         <p className="text-sm text-muted-foreground">Adicione e gerencie filas de impressao e monitore o status do hardware via SNMP.</p>
       </div>
 
-      <Surface as="form" className="mb-6 flex flex-wrap gap-3 items-end p-4" onSubmit={submit}>
-        <div className="grid gap-1.5 flex-1 min-w-[150px]">
-          <label className="text-xs font-semibold text-muted-foreground">Fila de Impressao</label>
-          <Input
-            placeholder="Ex: Sala_TI"
-            value={form.name}
-            onChange={(event) => setForm({ ...form, name: event.target.value })}
-            required
-            disabled={editingId !== null}
-          />
-        </div>
-        
-        <div className="grid gap-1.5 flex-1 min-w-[150px]">
-          <label className="text-xs font-semibold text-muted-foreground">Localizacao</label>
-          <Input
-            placeholder="Ex: Bloco B, Terreo"
-            value={form.location}
-            onChange={(event) => setForm({ ...form, location: event.target.value })}
-          />
-        </div>
-
-        <div className="grid gap-1.5 w-40">
-          <label className="text-xs font-semibold text-muted-foreground">Endereco IP (SNMP)</label>
-          <Input
-            placeholder="Ex: 192.168.1.50"
-            value={form.ip_address}
-            onChange={(event) => setForm({ ...form, ip_address: event.target.value })}
-          />
-        </div>
-
-        <div className="grid gap-1.5 w-28">
-          <label className="text-xs font-semibold text-muted-foreground">Custo P&B (R$)</label>
-          <Input
-            placeholder="0.05"
-            type="number"
-            step="0.01"
-            value={form.cost_mono}
-            onChange={(event) => setForm({ ...form, cost_mono: event.target.value })}
-            required
-          />
-        </div>
-
-        <div className="grid gap-1.5 w-28">
-          <label className="text-xs font-semibold text-muted-foreground">Custo Cor (R$)</label>
-          <Input
-            placeholder="0.25"
-            type="number"
-            step="0.01"
-            value={form.cost_color}
-            onChange={(event) => setForm({ ...form, cost_color: event.target.value })}
-            required
-          />
-        </div>
-
-        <div className="flex gap-4 items-center mb-2 px-2 select-none">
-          <label className="flex items-center gap-2 text-sm cursor-pointer font-medium">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-              checked={form.is_color}
-              onChange={(event) => setForm({ ...form, is_color: event.target.checked })}
+      {isAdmin ? (
+        <Surface as="form" className="mb-6 flex flex-wrap gap-3 items-end p-4" onSubmit={submit}>
+          <div className="grid gap-1.5 flex-1 min-w-[150px]">
+            <label className="text-xs font-semibold text-muted-foreground">Fila de Impressao</label>
+            <Input
+              placeholder="Ex: Sala_TI"
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              required
+              disabled={editingId !== null}
             />
-            Colorida
-          </label>
-          
-          {editingId ? (
+          </div>
+
+          <div className="grid gap-1.5 flex-1 min-w-[150px]">
+            <label className="text-xs font-semibold text-muted-foreground">Localizacao</label>
+            <Input
+              placeholder="Ex: Bloco B, Terreo"
+              value={form.location}
+              onChange={(event) => setForm({ ...form, location: event.target.value })}
+            />
+          </div>
+
+          <div className="grid gap-1.5 w-40">
+            <label className="text-xs font-semibold text-muted-foreground">Endereco IP (SNMP)</label>
+            <Input
+              placeholder="Ex: 192.168.1.50"
+              value={form.ip_address}
+              onChange={(event) => setForm({ ...form, ip_address: event.target.value })}
+            />
+          </div>
+
+          <div className="grid gap-1.5 w-28">
+            <label className="text-xs font-semibold text-muted-foreground">Custo P&B (R$)</label>
+            <Input
+              placeholder="0.05"
+              type="number"
+              step="0.01"
+              value={form.cost_mono}
+              onChange={(event) => setForm({ ...form, cost_mono: event.target.value })}
+              required
+            />
+          </div>
+
+          <div className="grid gap-1.5 w-28">
+            <label className="text-xs font-semibold text-muted-foreground">Custo Cor (R$)</label>
+            <Input
+              placeholder="0.25"
+              type="number"
+              step="0.01"
+              value={form.cost_color}
+              onChange={(event) => setForm({ ...form, cost_color: event.target.value })}
+              required
+            />
+          </div>
+
+          <div className="flex gap-4 items-center mb-2 px-2 select-none">
             <label className="flex items-center gap-2 text-sm cursor-pointer font-medium">
               <input
                 type="checkbox"
                 className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                checked={form.is_active}
-                onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
+                checked={form.is_color}
+                onChange={(event) => setForm({ ...form, is_color: event.target.checked })}
               />
-              Ativa
+              Colorida
             </label>
-          ) : null}
-        </div>
 
-        <div className="flex gap-2 mb-0.5">
-          <Button type="submit" className="px-5">
-            {editingId ? "Salvar" : "Cadastrar"}
-          </Button>
-          {editingId ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setEditingId(null);
-                setForm({
-                  name: "",
-                  location: "",
-                  is_color: false,
-                  cost_mono: "0.05",
-                  cost_color: "0.25",
-                  is_active: true,
-                  ip_address: "",
-                });
-              }}
-            >
-              Cancelar
+            {editingId ? (
+              <label className="flex items-center gap-2 text-sm cursor-pointer font-medium">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  checked={form.is_active}
+                  onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
+                />
+                Ativa
+              </label>
+            ) : null}
+          </div>
+
+          <div className="flex gap-2 mb-0.5">
+            <Button type="submit" className="px-5">
+              {editingId ? "Salvar" : "Cadastrar"}
             </Button>
-          ) : null}
-        </div>
-      </Surface>
+            {editingId ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingId(null);
+                  setForm({
+                    name: "",
+                    location: "",
+                    is_color: false,
+                    cost_mono: "0.05",
+                    cost_color: "0.25",
+                    is_active: true,
+                    ip_address: "",
+                  });
+                }}
+              >
+                Cancelar
+              </Button>
+            ) : null}
+          </div>
+        </Surface>
+      ) : null}
 
       {error ? (
         <Surface className="mb-6 p-4 text-sm bg-red-50 border-red-200 text-red-800 flex items-center gap-2">
@@ -349,7 +358,7 @@ export default function PrintersPage() {
         </Surface>
       ) : null}
 
-      {mergingPrinter ? (
+      {isAdmin && mergingPrinter ? (
         <Surface className="mb-6 flex flex-wrap items-end gap-3 p-4">
           <div className="min-w-[240px] flex-1">
             <div className="text-xs font-semibold text-muted-foreground">Unir impressora duplicada</div>
@@ -507,15 +516,19 @@ export default function PrintersPage() {
                         <Info className="h-4 w-4 text-primary" />
                       </Button>
                     )}
-                    <Button variant="ghost" onClick={(e) => { e.stopPropagation(); startEdit(printer); }} title="Editar" className="h-8 w-8 p-0">
-                      <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                    </Button>
-                    <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setMergingPrinter(printer); setMergeTargetId(""); }} title="Unir duplicada" className="h-8 w-8 p-0">
-                      <GitMerge className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                    </Button>
-                    <Button variant="ghost" onClick={(e) => { e.stopPropagation(); deletePrinter(printer); }} title="Excluir" className="h-8 w-8 p-0">
-                      <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
-                    </Button>
+                    {isAdmin ? (
+                      <>
+                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); startEdit(printer); }} title="Editar" className="h-8 w-8 p-0">
+                          <Edit className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                        </Button>
+                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setMergingPrinter(printer); setMergeTargetId(""); }} title="Unir duplicada" className="h-8 w-8 p-0">
+                          <GitMerge className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                        </Button>
+                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); deletePrinter(printer); }} title="Excluir" className="h-8 w-8 p-0">
+                          <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
                 </td>
               </tr>
@@ -693,10 +706,12 @@ export default function PrintersPage() {
 
             {/* Footer */}
             <div className="bg-muted/30 px-6 py-3 flex justify-end gap-2 border-t">
-              <Button variant="outline" onClick={() => { setSelectedPrinter(null); startEdit(selectedPrinter); }}>
-                <Edit className="h-4 w-4 mr-1.5" />
-                Editar
-              </Button>
+              {isAdmin ? (
+                <Button variant="outline" onClick={() => { setSelectedPrinter(null); startEdit(selectedPrinter); }}>
+                  <Edit className="h-4 w-4 mr-1.5" />
+                  Editar
+                </Button>
+              ) : null}
               <Button onClick={() => setSelectedPrinter(null)}>
                 Fechar
               </Button>
