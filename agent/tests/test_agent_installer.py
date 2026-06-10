@@ -103,6 +103,38 @@ def test_silent_reinstall_preserves_capture_and_update_flags():
     assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\PRINTSERVER"
 
 
+def test_silent_reinstall_falls_back_when_existing_numeric_flags_are_invalid():
+    existing = {
+        "PRINTBILLING_API_URL": "https://billing.example.com",
+        "PRINTBILLING_AGENT_USER": "agent",
+        "PRINTBILLING_AGENT_PASSWORD": "secret",
+        "PRINTBILLING_ORGANIZATION_SLUG": "cliente-a",
+        "PRINTBILLING_CANCEL_BLOCKED": "talvez",
+        "PRINTBILLING_USE_PRINT_EVENT_LOG": "nao",
+        "PRINTBILLING_AUTO_UPDATE": "sim",
+        "PRINTBILLING_POLL_INTERVAL": "zero",
+        "PRINTBILLING_SNMP_POLL_INTERVAL": "-1",
+        "PRINTBILLING_SNMP_TIMEOUT_SECONDS": "0",
+        "PRINTBILLING_SNMP_RETRIES": "-2",
+        "PRINTBILLING_UPDATE_CHECK_INTERVAL": "30",
+        "PRINTBILLING_HEARTBEAT_INTERVAL": "5",
+        "PRINTBILLING_QUEUE_ACTION_INTERVAL": "1",
+    }
+
+    config = build_config(existing, {}, args())
+
+    assert config["PRINTBILLING_CANCEL_BLOCKED"] is True
+    assert config["PRINTBILLING_USE_PRINT_EVENT_LOG"] is False
+    assert config["PRINTBILLING_AUTO_UPDATE"] is True
+    assert config["PRINTBILLING_POLL_INTERVAL"] == 5
+    assert config["PRINTBILLING_SNMP_POLL_INTERVAL"] == 60
+    assert config["PRINTBILLING_SNMP_TIMEOUT_SECONDS"] == 2.0
+    assert config["PRINTBILLING_SNMP_RETRIES"] == 1
+    assert config["PRINTBILLING_UPDATE_CHECK_INTERVAL"] == 3600
+    assert config["PRINTBILLING_HEARTBEAT_INTERVAL"] == 60
+    assert config["PRINTBILLING_QUEUE_ACTION_INTERVAL"] == 30
+
+
 def test_silent_install_can_set_remote_spool_server():
     config = build_config(
         {},

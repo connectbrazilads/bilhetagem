@@ -102,6 +102,39 @@ def as_bool(value) -> bool:
     raise RuntimeError(f"Valor booleano invalido: {value}")
 
 
+def as_config_bool(value, default: bool) -> bool:
+    try:
+        return as_bool(value)
+    except RuntimeError:
+        return default
+
+
+def as_config_int(value, default: int, *, min_value: int | None = None) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    if min_value is not None and parsed < min_value:
+        return default
+    return parsed
+
+
+def as_config_float(value, default: float, *, min_value: float | None = None) -> float:
+    try:
+        parsed = float(str(value).strip().replace(",", "."))
+    except (TypeError, ValueError):
+        return default
+    if min_value is not None and parsed < min_value:
+        return default
+    return parsed
+
+
+def pick_bool_arg_or_config(arg_value, existing: dict, template: dict, key: str, default: bool) -> bool:
+    if arg_value is not None and str(arg_value).strip():
+        return as_bool(arg_value)
+    return as_config_bool(pick_config_value(existing, template, key, default), default)
+
+
 def normalize_text(value) -> str:
     return str(value or "").strip()
 
@@ -121,9 +154,9 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             allow_empty_arg=True,
         )
         spool_server = pick_arg_or_config(args.spool_server, existing, template, "PRINTBILLING_SPOOL_SERVER", "")
-        cancel_blocked = pick_arg_or_config(args.cancel_blocked, existing, template, "PRINTBILLING_CANCEL_BLOCKED", True)
-        use_print_event_log = pick_arg_or_config(args.use_print_event_log, existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)
-        auto_update = pick_arg_or_config(args.auto_update, existing, template, "PRINTBILLING_AUTO_UPDATE", True)
+        cancel_blocked = pick_bool_arg_or_config(args.cancel_blocked, existing, template, "PRINTBILLING_CANCEL_BLOCKED", True)
+        use_print_event_log = pick_bool_arg_or_config(args.use_print_event_log, existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)
+        auto_update = pick_bool_arg_or_config(args.auto_update, existing, template, "PRINTBILLING_AUTO_UPDATE", True)
         if not api_url or not username or not password or not organization_slug:
             raise RuntimeError("Modo silencioso requer --api-url, --username, --password e --organization em instalacoes novas.")
     else:
@@ -156,9 +189,9 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             "Servidor de impressao remoto (opcional)",
             existing.get("PRINTBILLING_SPOOL_SERVER") or template.get("PRINTBILLING_SPOOL_SERVER", ""),
         )
-        cancel_blocked = pick_config_value(existing, template, "PRINTBILLING_CANCEL_BLOCKED", True)
-        use_print_event_log = pick_config_value(existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)
-        auto_update = pick_config_value(existing, template, "PRINTBILLING_AUTO_UPDATE", True)
+        cancel_blocked = as_config_bool(pick_config_value(existing, template, "PRINTBILLING_CANCEL_BLOCKED", True), True)
+        use_print_event_log = as_config_bool(pick_config_value(existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True), True)
+        auto_update = as_config_bool(pick_config_value(existing, template, "PRINTBILLING_AUTO_UPDATE", True), True)
 
     api_url = normalize_text(api_url)
     username = normalize_text(username)
@@ -174,18 +207,18 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         "PRINTBILLING_AGENT_USER": username,
         "PRINTBILLING_AGENT_PASSWORD": password,
         "PRINTBILLING_ORGANIZATION_SLUG": organization_slug,
-        "PRINTBILLING_CANCEL_BLOCKED": as_bool(cancel_blocked),
-        "PRINTBILLING_POLL_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_POLL_INTERVAL", 5)),
+        "PRINTBILLING_CANCEL_BLOCKED": cancel_blocked,
+        "PRINTBILLING_POLL_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_POLL_INTERVAL", 5), 5, min_value=1),
         "PRINTBILLING_DEFAULT_USERNAME": default_username,
-        "PRINTBILLING_SNMP_POLL_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_SNMP_POLL_INTERVAL", 60)),
+        "PRINTBILLING_SNMP_POLL_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_SNMP_POLL_INTERVAL", 60), 60, min_value=1),
         "PRINTBILLING_SNMP_COMMUNITY": pick_config_value(existing, template, "PRINTBILLING_SNMP_COMMUNITY", "public"),
-        "PRINTBILLING_SNMP_TIMEOUT_SECONDS": float(pick_config_value(existing, template, "PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2)),
-        "PRINTBILLING_SNMP_RETRIES": int(pick_config_value(existing, template, "PRINTBILLING_SNMP_RETRIES", 1)),
-        "PRINTBILLING_USE_PRINT_EVENT_LOG": as_bool(use_print_event_log),
-        "PRINTBILLING_AUTO_UPDATE": as_bool(auto_update),
-        "PRINTBILLING_UPDATE_CHECK_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600)),
-        "PRINTBILLING_HEARTBEAT_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_HEARTBEAT_INTERVAL", 60)),
-        "PRINTBILLING_QUEUE_ACTION_INTERVAL": int(pick_config_value(existing, template, "PRINTBILLING_QUEUE_ACTION_INTERVAL", 30)),
+        "PRINTBILLING_SNMP_TIMEOUT_SECONDS": as_config_float(pick_config_value(existing, template, "PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2), 2.0, min_value=0.1),
+        "PRINTBILLING_SNMP_RETRIES": as_config_int(pick_config_value(existing, template, "PRINTBILLING_SNMP_RETRIES", 1), 1, min_value=0),
+        "PRINTBILLING_USE_PRINT_EVENT_LOG": use_print_event_log,
+        "PRINTBILLING_AUTO_UPDATE": auto_update,
+        "PRINTBILLING_UPDATE_CHECK_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600), 3600, min_value=60),
+        "PRINTBILLING_HEARTBEAT_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_HEARTBEAT_INTERVAL", 60), 60, min_value=10),
+        "PRINTBILLING_QUEUE_ACTION_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_QUEUE_ACTION_INTERVAL", 30), 30, min_value=5),
         "PRINTBILLING_SPOOL_SERVER": spool_server,
     }
 
