@@ -52,6 +52,8 @@ Para remover:
 .\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "SENHA_FORTE_DO_AGENT" --organization default --default-username ""
 ```
 
+Na reinstalacao silenciosa, parametros omitidos reutilizam o `config.json` existente. Para remover um usuario padrao antigo do PC, envie explicitamente `--default-username ""`.
+
 ## Auto-update
 
 O backend expoe:

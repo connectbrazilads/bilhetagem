@@ -79,6 +79,12 @@ def pick_config_value(existing: dict, template: dict, key: str, default):
     return default
 
 
+def pick_arg_or_config(arg_value, existing: dict, template: dict, key: str, default, *, allow_empty_arg: bool = False):
+    if arg_value is not None and (allow_empty_arg or str(arg_value).strip()):
+        return arg_value
+    return pick_config_value(existing, template, key, default)
+
+
 def as_bool(value) -> bool:
     if isinstance(value, bool):
         return value
@@ -87,11 +93,18 @@ def as_bool(value) -> bool:
 
 def build_config(existing: dict, template: dict, args: argparse.Namespace) -> dict:
     if args.silent:
-        api_url = args.api_url or existing.get("PRINTBILLING_API_URL") or template.get("PRINTBILLING_API_URL", "")
-        username = args.username or existing.get("PRINTBILLING_AGENT_USER") or template.get("PRINTBILLING_AGENT_USER", "agent")
-        password = args.password or existing.get("PRINTBILLING_AGENT_PASSWORD") or template.get("PRINTBILLING_AGENT_PASSWORD", "")
-        default_username = args.default_username or existing.get("PRINTBILLING_DEFAULT_USERNAME") or template.get("PRINTBILLING_DEFAULT_USERNAME", "")
-        organization_slug = args.organization or existing.get("PRINTBILLING_ORGANIZATION_SLUG") or template.get("PRINTBILLING_ORGANIZATION_SLUG", "default")
+        api_url = pick_arg_or_config(args.api_url, existing, template, "PRINTBILLING_API_URL", "")
+        username = pick_arg_or_config(args.username, existing, template, "PRINTBILLING_AGENT_USER", "agent")
+        password = pick_arg_or_config(args.password, existing, template, "PRINTBILLING_AGENT_PASSWORD", "")
+        organization_slug = pick_arg_or_config(args.organization, existing, template, "PRINTBILLING_ORGANIZATION_SLUG", "default")
+        default_username = pick_arg_or_config(
+            args.default_username,
+            existing,
+            template,
+            "PRINTBILLING_DEFAULT_USERNAME",
+            "",
+            allow_empty_arg=True,
+        )
         if not api_url or not username or not password:
             raise RuntimeError("Modo silencioso requer --api-url, --username e --password.")
     else:
@@ -197,11 +210,11 @@ def install(args: argparse.Namespace) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Instalador do PrintBilling Agent")
     parser.add_argument("--silent", action="store_true", help="Instala sem prompts interativos")
-    parser.add_argument("--api-url", default="", help="URL da API na VPS")
-    parser.add_argument("--username", default="", help="Usuario tecnico do agent")
-    parser.add_argument("--password", default="", help="Senha do usuario tecnico")
-    parser.add_argument("--organization", default="", help="Slug da empresa")
-    parser.add_argument("--default-username", default="", help="Usuario padrao quando o Windows nao informar")
+    parser.add_argument("--api-url", help="URL da API na VPS")
+    parser.add_argument("--username", help="Usuario tecnico do agent")
+    parser.add_argument("--password", help="Senha do usuario tecnico")
+    parser.add_argument("--organization", help="Slug da empresa")
+    parser.add_argument("--default-username", help="Usuario padrao quando o Windows nao informar")
     return parser.parse_args()
 
 
