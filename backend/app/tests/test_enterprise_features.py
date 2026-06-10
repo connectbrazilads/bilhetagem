@@ -814,6 +814,25 @@ def test_department_admin_crud_is_scoped_and_protects_in_use_departments(db_sess
     assert result == {"status": "deleted"}
 
 
+def test_department_update_and_delete_audit_metadata(db_session: Session):
+    admin = User(username="dept-audit-admin", full_name="Dept Audit Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    department = Department(organization_id=1, name="Financeiro")
+    db_session.add_all([admin, department])
+    db_session.commit()
+
+    updated = update_department(department.id, DepartmentUpdate(name="Operacoes"), db=db_session, actor=admin)
+    assert updated.name == "Operacoes"
+    update_audit = db_session.query(AuditLog).filter(AuditLog.action == "department_updated", AuditLog.entity_id == department.id).one()
+    assert update_audit.log_metadata["changes"] == {
+        "name": {"before": "Financeiro", "after": "Operacoes"},
+    }
+
+    result = delete_department(department.id, db=db_session, actor=admin)
+    assert result == {"status": "deleted"}
+    delete_audit = db_session.query(AuditLog).filter(AuditLog.action == "department_deleted", AuditLog.entity_id == department.id).one()
+    assert delete_audit.log_metadata == {"name": "Operacoes"}
+
+
 def test_user_department_id_assignment_is_scoped_and_clearable(db_session: Session):
     other_org = Organization(name="Cliente User Dept", slug="cliente-user-dept", is_active=True)
     admin = User(username="user-dept-admin", full_name="User Dept Admin", role=UserRole.admin, is_active=True, organization_id=1)

@@ -13,6 +13,14 @@ from app.services.audit_service import write_audit
 router = APIRouter(prefix="/departments", tags=["departments"])
 
 
+def _changed_values(before: dict, after: dict) -> dict:
+    return {
+        key: {"before": before_value, "after": after[key]}
+        for key, before_value in before.items()
+        if before_value != after[key]
+    }
+
+
 @router.get("", response_model=list[DepartmentRead])
 def list_departments(
     db: Session = Depends(get_db),
@@ -55,9 +63,19 @@ def update_department(
     department = db.query(Department).filter(Department.organization_id == actor.organization_id, Department.id == department_id).first()
     if not department:
         raise HTTPException(status_code=404, detail="Departamento nao encontrado")
+    before = {"name": department.name}
     department.name = payload.name.strip()
     try:
-        write_audit(db, action="department_updated", entity="departments", entity_id=department.id, actor_user_id=actor.id)
+        changes = _changed_values(before, {"name": department.name})
+        if changes:
+            write_audit(
+                db,
+                action="department_updated",
+                entity="departments",
+                entity_id=department.id,
+                actor_user_id=actor.id,
+                metadata={"changes": changes},
+            )
         db.commit()
         db.refresh(department)
         return department
@@ -79,7 +97,14 @@ def delete_department(
     policies_count = db.query(PrintPolicy).filter(PrintPolicy.organization_id == actor.organization_id, PrintPolicy.department_id == department.id).count()
     if users_count or policies_count:
         raise HTTPException(status_code=400, detail="Departamento em uso por usuarios ou politicas")
-    write_audit(db, action="department_deleted", entity="departments", entity_id=department.id, actor_user_id=actor.id)
+    write_audit(
+        db,
+        action="department_deleted",
+        entity="departments",
+        entity_id=department.id,
+        actor_user_id=actor.id,
+        metadata={"name": department.name},
+    )
     db.delete(department)
     db.commit()
     return {"status": "deleted"}
