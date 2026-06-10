@@ -12,6 +12,8 @@ type ReleaseFile = {
   filename: string;
   size_bytes: number;
   sha256: string;
+  signature_status: string | null;
+  signer_subject: string | null;
   download_url: string;
 };
 
@@ -27,6 +29,18 @@ function formatBytes(value: number) {
   if (value > 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
   if (value > 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${value} B`;
+}
+
+function signatureClass(status: string | null) {
+  if (status === "Valid") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (!status || status === "NotSigned") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-red-200 bg-red-50 text-red-700";
+}
+
+function signatureLabel(status: string | null) {
+  if (status === "Valid") return "Assinado";
+  if (!status || status === "NotSigned") return "Sem assinatura";
+  return status;
 }
 
 export default function DownloadsPage() {
@@ -90,6 +104,7 @@ export default function DownloadsPage() {
                   <th className="p-4">Versao</th>
                   <th className="p-4">Arquivo</th>
                   <th className="p-4">Tipo</th>
+                  <th className="p-4">Assinatura</th>
                   <th className="p-4 text-right">Tamanho</th>
                   <th className="p-4">SHA256</th>
                   <th className="p-4 text-right">Download</th>
@@ -114,6 +129,14 @@ export default function DownloadsPage() {
                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                           <ShieldCheck className="h-3 w-3" />
                           {file.kind}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${signatureClass(file.signature_status)}`}
+                          title={file.signer_subject || undefined}
+                        >
+                          {signatureLabel(file.signature_status)}
                         </span>
                       </td>
                       <td className="p-4 text-right">{formatBytes(file.size_bytes)}</td>

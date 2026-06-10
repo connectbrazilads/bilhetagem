@@ -18,6 +18,8 @@ class AgentReleaseFileRead(BaseModel):
     filename: str
     size_bytes: int
     sha256: str
+    signature_status: str | None = None
+    signer_subject: str | None = None
     download_url: str
 
 

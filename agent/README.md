@@ -82,6 +82,19 @@ Saida padrao:
 
 Para publicar na VPS, copie a pasta da versao e o `manifest.json` para o diretorio configurado em
 `AGENT_DOWNLOAD_DIR`, e ajuste `AGENT_LATEST_VERSION` para a versao publicada.
+O manifest inclui `signature_status` e `signer_subject`, exibidos na tela **Downloads**.
+
+Valide os hashes e o status de assinatura antes de publicar:
+
+```powershell
+.\verify_release.ps1
+```
+
+Quando o certificado real ja estiver configurado, valide exigindo assinatura:
+
+```powershell
+.\verify_release.ps1 -RequireSignature
+```
 
 Assinatura opcional via `signtool.exe`:
 

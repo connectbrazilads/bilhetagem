@@ -101,6 +101,8 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                         filename=filename,
                         size_bytes=int(raw_file.get("size_bytes") or path.stat().st_size),
                         sha256=str(raw_file.get("sha256") or _sha256(path)),
+                        signature_status=raw_file.get("signature_status"),
+                        signer_subject=raw_file.get("signer_subject"),
                         download_url=f"/agent/releases/{version}/download?filename={filename}",
                     )
                 )
@@ -126,6 +128,8 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                         filename=path.name,
                         size_bytes=path.stat().st_size,
                         sha256=_sha256(path),
+                        signature_status=None,
+                        signer_subject=None,
                         download_url="/agent/download",
                     )
                 ],

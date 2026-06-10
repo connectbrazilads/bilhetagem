@@ -52,13 +52,24 @@ function Invoke-CodeSign([string]$Path) {
     }
 }
 
+function Get-SignatureInfo([string]$Path) {
+    $signature = Get-AuthenticodeSignature -FilePath $Path
+    return [ordered]@{
+        signature_status = $signature.Status.ToString()
+        signer_subject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { $null }
+    }
+}
+
 function Get-FileEntry([string]$Kind, [string]$Path, [string]$ReleaseVersion) {
     $hash = (Get-FileHash -Algorithm SHA256 -Path $Path).Hash.ToLowerInvariant()
+    $signatureInfo = Get-SignatureInfo $Path
     return [ordered]@{
         kind = $Kind
         filename = Split-Path -Leaf $Path
         size_bytes = (Get-Item $Path).Length
         sha256 = $hash
+        signature_status = $signatureInfo.signature_status
+        signer_subject = $signatureInfo.signer_subject
         download_url = "/agent/releases/$ReleaseVersion/download?filename=$(Split-Path -Leaf $Path)"
     }
 }

@@ -73,6 +73,20 @@ Get-AuthenticodeSignature .\PrintBillingAgent.exe
 
 O hash deve bater com `SHA256SUMS.txt` e com o hash exibido na tela Downloads.
 
+Valide automaticamente:
+
+```powershell
+.\verify_release.ps1
+```
+
+Depois que o certificado real estiver configurado:
+
+```powershell
+.\verify_release.ps1 -RequireSignature
+```
+
+A tela **Downloads** mostra `signature_status` e o assunto do certificado quando o arquivo estiver assinado.
+
 ## Observacoes sobre SmartScreen
 
 Certificado comum reduz alertas, mas reputacao do SmartScreen pode exigir volume de instalacoes ao longo do tempo. Para distribuicao ampla, avalie certificado EV Code Signing.

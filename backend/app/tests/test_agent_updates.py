@@ -56,8 +56,8 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
               "channel": "stable",
               "notes": "Teste",
               "files": [
-                {"kind": "agent", "filename": "PrintBillingAgent.exe"},
-                {"kind": "installer", "filename": "PrintBillingAgentInstaller.exe"}
+                {"kind": "agent", "filename": "PrintBillingAgent.exe", "signature_status": "Valid", "signer_subject": "CN=PrintBilling"},
+                {"kind": "installer", "filename": "PrintBillingAgentInstaller.exe", "signature_status": "NotSigned"}
               ]
             }
           ]
@@ -77,6 +77,7 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     assert releases[0].version == "0.3.0"
     assert {file.kind for file in releases[0].files} == {"agent", "installer"}
     assert releases[0].files[0].sha256
+    assert next(file.signature_status for file in releases[0].files if file.kind == "agent") == "Valid"
     assert version.update_available is True
     assert version.sha256 == next(file.sha256 for file in releases[0].files if file.kind == "agent")
 
