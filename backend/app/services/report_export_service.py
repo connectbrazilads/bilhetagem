@@ -282,6 +282,7 @@ def render_monthly_closing_pdf(closing: MonthlyClosing) -> bytes:
     y = _draw_section(pdf, closing, y, "Ranking por impressora", closing.snapshot.get("by_printer", []))
     y = _draw_section(pdf, closing, y, "Ranking por usuario", closing.snapshot.get("by_user", []))
     y = _draw_section(pdf, closing, y, "Consumo por departamento", closing.snapshot.get("by_department", []))
+    y = _draw_section(pdf, closing, y, "Consumo por centro de custo", closing.snapshot.get("by_cost_center", []))
     y = _draw_section(pdf, closing, y, "Colorido x preto e branco", closing.snapshot.get("by_type", []), limit=4)
     y = _draw_policy_section(pdf, closing, y, closing.snapshot.get("by_policy", []))
 
@@ -424,7 +425,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
         summary[cell].number_format = '"R$" #,##0.00'
     _style_sheet(summary)
 
-    for sheet_name, key in (("Usuarios", "by_user"), ("Departamentos", "by_department"), ("Impressoras", "by_printer"), ("Tipo", "by_type")):
+    for sheet_name, key in (("Usuarios", "by_user"), ("Departamentos", "by_department"), ("Centros de Custo", "by_cost_center"), ("Impressoras", "by_printer"), ("Tipo", "by_type")):
         sheet = workbook.create_sheet(sheet_name)
         sheet.append(["Nome", "Trabalhos", "Paginas", "P&B", "Coloridas", "Custo", "Custo/Pag.", "% Paginas", "% Custo"])
         for row in closing.snapshot.get(key, []):

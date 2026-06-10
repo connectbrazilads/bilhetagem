@@ -70,6 +70,9 @@ def _ensure_lite_schema() -> None:
         ).scalar()
         if users_exists:
             conn.exec_driver_sql("UPDATE users SET role = 'agent' WHERE lower(username) = 'agent' OR full_name = 'Agente Windows'")
+        department_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(departments)").fetchall()}
+        if "cost_center" not in department_columns:
+            conn.exec_driver_sql("ALTER TABLE departments ADD COLUMN cost_center VARCHAR(120)")
         existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(printers)").fetchall()}
         if "toner_levels" not in existing_columns:
             conn.exec_driver_sql("ALTER TABLE printers ADD COLUMN toner_levels JSON")

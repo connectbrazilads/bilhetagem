@@ -166,6 +166,7 @@ class MonthlyClosingSnapshot(BaseModel):
     totals: MonthlyClosingTotalsSnapshot
     by_user: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)
     by_department: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)
+    by_cost_center: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)
     by_printer: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)
     by_type: list[MonthlyClosingUsageSnapshot] = Field(default_factory=list)
     by_policy: list[MonthlyClosingPolicySnapshot] = Field(default_factory=list)

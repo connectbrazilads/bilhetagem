@@ -23,6 +23,7 @@ type UserRow = {
 type DepartmentRow = {
   id: number;
   name: string;
+  cost_center: string | null;
   created_at: string;
 };
 
@@ -38,6 +39,7 @@ const emptyForm = {
 
 const emptyDepartmentForm = {
   name: "",
+  cost_center: "",
 };
 
 const humanRoleOptions = [
@@ -160,12 +162,12 @@ export default function UsersPage() {
       if (editingDepartmentId) {
         await apiFetch<DepartmentRow>(`/departments/${editingDepartmentId}`, token, {
           method: "PUT",
-          body: JSON.stringify({ name: departmentForm.name }),
+          body: JSON.stringify({ name: departmentForm.name, cost_center: departmentForm.cost_center || null }),
         });
       } else {
         await apiFetch<DepartmentRow>("/departments", token, {
           method: "POST",
-          body: JSON.stringify({ name: departmentForm.name }),
+          body: JSON.stringify({ name: departmentForm.name, cost_center: departmentForm.cost_center || null }),
         });
       }
       resetDepartmentForm();
@@ -178,7 +180,7 @@ export default function UsersPage() {
   function startEditDepartment(department: DepartmentRow) {
     if (!isAdmin) return;
     setEditingDepartmentId(department.id);
-    setDepartmentForm({ name: department.name });
+    setDepartmentForm({ name: department.name, cost_center: department.cost_center ?? "" });
   }
 
   function resetDepartmentForm() {
@@ -336,8 +338,13 @@ export default function UsersPage() {
               <Input
                 placeholder="Nome do departamento"
                 value={departmentForm.name}
-                onChange={(event) => setDepartmentForm({ name: event.target.value })}
+                onChange={(event) => setDepartmentForm({ ...departmentForm, name: event.target.value })}
                 required
+              />
+              <Input
+                placeholder="Centro de custo"
+                value={departmentForm.cost_center}
+                onChange={(event) => setDepartmentForm({ ...departmentForm, cost_center: event.target.value })}
               />
               <div className="flex gap-2">
                 <Button type="submit">
@@ -361,6 +368,7 @@ export default function UsersPage() {
                 <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="p-2">Departamento</th>
+                    <th className="p-2">Centro de custo</th>
                     {isAdmin ? <th className="p-2 text-right">Acoes</th> : null}
                   </tr>
                 </thead>
@@ -368,6 +376,7 @@ export default function UsersPage() {
                   {departments.map((department) => (
                     <tr key={department.id} className="border-t">
                       <td className="p-2 font-medium">{department.name}</td>
+                      <td className="p-2 text-muted-foreground">{department.cost_center ?? "-"}</td>
                       {isAdmin ? (
                         <td className="p-2 text-right">
                           <div className="flex justify-end gap-1">

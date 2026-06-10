@@ -65,6 +65,7 @@ type MonthlyClosing = {
     };
     by_user?: ClosingSnapshotRow[];
     by_department?: ClosingSnapshotRow[];
+    by_cost_center?: ClosingSnapshotRow[];
     by_printer?: ClosingSnapshotRow[];
     by_policy?: ClosingPolicySnapshotRow[];
   };
@@ -486,9 +487,10 @@ export default function ReportsPage() {
                           <span>{closing.blocked_jobs.toLocaleString("pt-BR")} bloqueado(s)</span>
                           <span>R$ {(closing.snapshot.totals?.blocked_cost ?? 0).toFixed(2)} bloqueado estimado</span>
                         </div>
-                        <div className="grid gap-4 lg:grid-cols-4">
+                        <div className="grid gap-4 lg:grid-cols-5">
                           <SnapshotList title="Top usuarios" rows={closing.snapshot.by_user ?? []} />
                           <SnapshotList title="Top departamentos" rows={closing.snapshot.by_department ?? []} />
+                          <SnapshotList title="Centros de custo" rows={closing.snapshot.by_cost_center ?? []} />
                           <SnapshotList title="Top impressoras" rows={closing.snapshot.by_printer ?? []} />
                           <PolicySnapshotList rows={closing.snapshot.by_policy ?? []} />
                         </div>

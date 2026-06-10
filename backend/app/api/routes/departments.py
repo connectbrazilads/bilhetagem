@@ -21,6 +21,13 @@ def _changed_values(before: dict, after: dict) -> dict:
     }
 
 
+def _clean_cost_center(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 @router.get("", response_model=list[DepartmentRead])
 def list_departments(
     db: Session = Depends(get_db),
@@ -40,11 +47,18 @@ def create_department(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> Department:
-    department = Department(organization_id=actor.organization_id, name=payload.name.strip())
+    department = Department(organization_id=actor.organization_id, name=payload.name.strip(), cost_center=_clean_cost_center(payload.cost_center))
     db.add(department)
     try:
         db.flush()
-        write_audit(db, action="department_created", entity="departments", entity_id=department.id, actor_user_id=actor.id)
+        write_audit(
+            db,
+            action="department_created",
+            entity="departments",
+            entity_id=department.id,
+            actor_user_id=actor.id,
+            metadata={"name": department.name, "cost_center": department.cost_center},
+        )
         db.commit()
         db.refresh(department)
         return department
@@ -63,10 +77,11 @@ def update_department(
     department = db.query(Department).filter(Department.organization_id == actor.organization_id, Department.id == department_id).first()
     if not department:
         raise HTTPException(status_code=404, detail="Departamento nao encontrado")
-    before = {"name": department.name}
+    before = {"name": department.name, "cost_center": department.cost_center}
     department.name = payload.name.strip()
+    department.cost_center = _clean_cost_center(payload.cost_center)
     try:
-        changes = _changed_values(before, {"name": department.name})
+        changes = _changed_values(before, {"name": department.name, "cost_center": department.cost_center})
         if changes:
             write_audit(
                 db,
@@ -103,7 +118,7 @@ def delete_department(
         entity="departments",
         entity_id=department.id,
         actor_user_id=actor.id,
-        metadata={"name": department.name},
+        metadata={"name": department.name, "cost_center": department.cost_center},
     )
     db.delete(department)
     db.commit()

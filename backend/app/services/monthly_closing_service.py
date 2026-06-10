@@ -91,6 +91,7 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
     blocked_statuses = {JobStatus.blocked, JobStatus.cancelled}
     by_user: dict[str, dict] = defaultdict(_empty_bucket)
     by_department: dict[str, dict] = defaultdict(_empty_bucket)
+    by_cost_center: dict[str, dict] = defaultdict(_empty_bucket)
     by_printer: dict[str, dict] = defaultdict(_empty_bucket)
     by_type: dict[str, dict] = defaultdict(_empty_bucket)
     by_policy: dict[tuple[str, str], dict] = {}
@@ -151,9 +152,10 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
 
         user_name = job.user.full_name or job.user.username
         department_name = job.user.department.name if job.user.department else "Sem departamento"
+        cost_center_name = job.user.department.cost_center if job.user.department and job.user.department.cost_center else "Sem centro de custo"
         printer_name = job.printer.name
         type_name = "Colorido" if job.is_color else "Preto e branco"
-        for bucket in (by_user[user_name], by_department[department_name], by_printer[printer_name], by_type[type_name]):
+        for bucket in (by_user[user_name], by_department[department_name], by_cost_center[cost_center_name], by_printer[printer_name], by_type[type_name]):
             bucket["jobs"] += 1
             bucket["pages"] += job.pages
             bucket["color_pages" if job.is_color else "mono_pages"] += job.pages
@@ -225,6 +227,7 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
         "totals": totals,
         "by_user": rows(by_user),
         "by_department": rows(by_department),
+        "by_cost_center": rows(by_cost_center),
         "by_printer": rows(by_printer),
         "by_type": rows(by_type),
         "by_policy": policy_rows(),

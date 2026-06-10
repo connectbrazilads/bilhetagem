@@ -24,7 +24,7 @@ from app.services.monthly_closing_service import create_monthly_closing
 
 
 def _seed_job_data(db_session: Session) -> tuple[User, Printer]:
-    department = Department(organization_id=1, name="Financeiro")
+    department = Department(organization_id=1, name="Financeiro", cost_center="CC-FIN")
     user = User(username="ana", full_name="Ana Financeiro", role=UserRole.user, department=department, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="KONICA_FECHAMENTO", is_color=True, cost_mono=0.05, cost_color=0.25)
     db_session.add_all([department, user, printer])
@@ -120,6 +120,8 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert closing.snapshot["totals"]["pending_cost"] == 1.25
     assert closing.snapshot["totals"]["blocked_cost"] == 0.75
     assert closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
+    assert closing.snapshot["by_cost_center"][0]["name"] == "CC-FIN"
+    assert closing.snapshot["by_cost_center"][0]["pages"] == 14
     assert closing.snapshot["by_printer"][0]["name"] == "KONICA_FECHAMENTO"
     assert closing.snapshot["by_printer"][0]["cost_per_page"] == 0.11
     assert closing.snapshot["by_printer"][0]["page_share_percent"] == 100.0
@@ -196,6 +198,7 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert validated_closing.snapshot.totals.blocked_cost == 0.75
     assert validated_closing.snapshot.by_policy[0].name == "Bloquear colorido"
     assert validated_closing.snapshot.by_policy[0].blocked_cost == 0.75
+    assert validated_closing.snapshot.by_cost_center[0].name == "CC-FIN"
     assert validated_closing.snapshot.by_printer[0].page_share_percent == 100.0
     assert validated_closing.snapshot.by_printer[0].cost_share_percent == 100.0
     assert validated_closing.snapshot.eco.pages_saved == 3
@@ -274,7 +277,7 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert response.media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert response.body.startswith(b"PK")
     workbook = load_workbook(BytesIO(response.body), data_only=True)
-    assert workbook.sheetnames == ["Resumo", "Usuarios", "Departamentos", "Impressoras", "Tipo", "Politicas"]
+    assert workbook.sheetnames == ["Resumo", "Usuarios", "Departamentos", "Centros de Custo", "Impressoras", "Tipo", "Politicas"]
     assert workbook["Resumo"]["B2"].value == "Cliente XLSX"
     assert workbook["Resumo"]["A6"].value == "Trabalhos liberados"
     assert workbook["Resumo"]["B6"].value == 1
@@ -301,6 +304,8 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert workbook["Impressoras"]["H2"].value == 100
     assert workbook["Impressoras"]["I1"].value == "% Custo"
     assert workbook["Impressoras"]["I2"].value == 100
+    assert workbook["Centros de Custo"]["A2"].value == "CC-FIN"
+    assert workbook["Centros de Custo"]["C2"].value == 14
     assert workbook["Politicas"]["A1"].value == "Politica"
     assert workbook["Politicas"]["A2"].value == "Bloquear colorido"
     assert workbook["Politicas"]["B2"].value == "Bloqueio"

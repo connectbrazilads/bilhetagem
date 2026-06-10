@@ -853,7 +853,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     db_session.add(other_org)
     db_session.flush()
 
-    org_one_department = Department(organization_id=1, name="Financeiro")
+    org_one_department = Department(organization_id=1, name="Financeiro", cost_center="CC-FIN")
     org_one_admin = User(username="org1-admin", full_name="Org 1 Admin", role=UserRole.admin, is_active=True, organization_id=1)
     org_one_user = User(username="org1-user", full_name="Org 1 User", role=UserRole.user, is_active=True, organization_id=1, department=org_one_department)
     org_two_user = User(username="org2-user", full_name="Org 2 User", role=UserRole.user, is_active=True, organization_id=other_org.id)
@@ -1160,6 +1160,19 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert snapshot["by_user"] == [
         {
             "name": "Org 1 User",
+            "jobs": 1,
+            "pages": 3,
+            "mono_pages": 3,
+            "color_pages": 0,
+            "cost": 0.15,
+            "cost_per_page": 0.05,
+            "page_share_percent": 100.0,
+            "cost_share_percent": 100.0,
+        },
+    ]
+    assert snapshot["by_cost_center"] == [
+        {
+            "name": "CC-FIN",
             "jobs": 1,
             "pages": 3,
             "mono_pages": 3,
@@ -1809,12 +1822,14 @@ def test_department_admin_crud_is_scoped_and_protects_in_use_departments(db_sess
     db_session.add(other_department)
     db_session.commit()
 
-    department = create_department(DepartmentCreate(name="Financeiro"), db=db_session, actor=admin)
+    department = create_department(DepartmentCreate(name="Financeiro", cost_center="CC-FIN"), db=db_session, actor=admin)
     assert department.organization_id == 1
+    assert department.cost_center == "CC-FIN"
     assert [item.name for item in list_departments(db=db_session, actor=admin)] == ["Financeiro"]
 
-    updated = update_department(department.id, DepartmentUpdate(name="Administrativo"), db=db_session, actor=admin)
+    updated = update_department(department.id, DepartmentUpdate(name="Administrativo", cost_center="CC-ADM"), db=db_session, actor=admin)
     assert updated.name == "Administrativo"
+    assert updated.cost_center == "CC-ADM"
     assert db_session.query(Department).filter(Department.organization_id == other_org.id, Department.name == "Financeiro").one()
 
     user = User(username="dept-user", full_name="Dept User", role=UserRole.user, is_active=True, organization_id=1, department_id=department.id)
@@ -1833,21 +1848,23 @@ def test_department_admin_crud_is_scoped_and_protects_in_use_departments(db_sess
 
 def test_department_update_and_delete_audit_metadata(db_session: Session):
     admin = User(username="dept-audit-admin", full_name="Dept Audit Admin", role=UserRole.admin, is_active=True, organization_id=1)
-    department = Department(organization_id=1, name="Financeiro")
+    department = Department(organization_id=1, name="Financeiro", cost_center="CC-FIN")
     db_session.add_all([admin, department])
     db_session.commit()
 
-    updated = update_department(department.id, DepartmentUpdate(name="Operacoes"), db=db_session, actor=admin)
+    updated = update_department(department.id, DepartmentUpdate(name="Operacoes", cost_center="CC-OPS"), db=db_session, actor=admin)
     assert updated.name == "Operacoes"
+    assert updated.cost_center == "CC-OPS"
     update_audit = db_session.query(AuditLog).filter(AuditLog.action == "department_updated", AuditLog.entity_id == department.id).one()
     assert update_audit.log_metadata["changes"] == {
         "name": {"before": "Financeiro", "after": "Operacoes"},
+        "cost_center": {"before": "CC-FIN", "after": "CC-OPS"},
     }
 
     result = delete_department(department.id, db=db_session, actor=admin)
     assert result == {"status": "deleted"}
     delete_audit = db_session.query(AuditLog).filter(AuditLog.action == "department_deleted", AuditLog.entity_id == department.id).one()
-    assert delete_audit.log_metadata == {"name": "Operacoes"}
+    assert delete_audit.log_metadata == {"name": "Operacoes", "cost_center": "CC-OPS"}
 
 
 def test_user_department_id_assignment_is_scoped_and_clearable(db_session: Session):
