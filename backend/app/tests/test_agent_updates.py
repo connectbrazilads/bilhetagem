@@ -119,6 +119,46 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     assert checksums.headers["content-disposition"] == "attachment; filename=SHA256SUMS-0.3.0.txt"
 
 
+def test_agent_releases_publish_actual_file_hash_when_manifest_is_stale(db_session: Session, monkeypatch, tmp_path: Path):
+    release_dir = tmp_path / "0.3.1"
+    release_dir.mkdir()
+    release_file = release_dir / "PrintBillingAgent.exe"
+    release_file.write_bytes(b"real-agent-binary")
+    (tmp_path / "manifest.json").write_text(
+        """
+        {
+          "versions": [
+            {
+              "version": "0.3.1",
+              "published_at": "2026-02-02T00:00:00Z",
+              "files": [
+                {
+                  "kind": "agent",
+                  "filename": "PrintBillingAgent.exe",
+                  "size_bytes": 999,
+                  "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    actor = User(username="stale-manifest-admin", full_name="Release Admin", role=UserRole.admin, is_active=True)
+    db_session.add(actor)
+    db_session.commit()
+
+    release = list_agent_releases(_=actor)[0]
+    checksums = download_agent_release_checksums(version="0.3.1", _=actor)
+
+    actual_sha = hashlib.sha256(b"real-agent-binary").hexdigest()
+    assert release.files[0].size_bytes == len(b"real-agent-binary")
+    assert release.files[0].sha256 == actual_sha
+    assert checksums.body.decode("utf-8") == f"{actual_sha}  PrintBillingAgent.exe\n"
+
+
 def test_agent_version_uses_newest_published_manifest_release(db_session: Session, monkeypatch, tmp_path: Path):
     old_release_dir = tmp_path / "0.3.0"
     old_release_dir.mkdir()

@@ -103,12 +103,14 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                 path = _release_file(version, filename)
                 if not path.exists():
                     continue
+                actual_sha256 = _sha256(path)
+                actual_size = path.stat().st_size
                 files.append(
                     AgentReleaseFileRead(
                         kind=str(raw_file.get("kind") or "agent"),
                         filename=filename,
-                        size_bytes=int(raw_file.get("size_bytes") or path.stat().st_size),
-                        sha256=str(raw_file.get("sha256") or _sha256(path)),
+                        size_bytes=actual_size,
+                        sha256=actual_sha256,
                         signature_status=raw_file.get("signature_status"),
                         signer_subject=raw_file.get("signer_subject"),
                         download_url=f"/agent/releases/{version}/download?filename={filename}",
