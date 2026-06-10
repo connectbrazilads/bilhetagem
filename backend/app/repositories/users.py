@@ -18,8 +18,16 @@ def get_or_create_department(db: Session, name: str | None, organization_id: int
     return department
 
 
+def resolve_department(db: Session, organization_id: int, department_id: int | None, department_name: str | None) -> Department | None:
+    if department_id is not None:
+        return db.query(Department).filter(Department.organization_id == organization_id, Department.id == department_id).first()
+    return get_or_create_department(db, department_name, organization_id)
+
+
 def create_user(db: Session, payload: UserCreate, organization_id: int) -> User:
-    department = get_or_create_department(db, payload.department_name, organization_id)
+    department = resolve_department(db, organization_id, payload.department_id, payload.department_name)
+    if payload.department_id is not None and department is None:
+        raise ValueError("Departamento nao encontrado")
     user = User(
         organization_id=organization_id,
         username=payload.username,

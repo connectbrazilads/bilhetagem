@@ -10,7 +10,7 @@ from app.models.audit_log import AuditLog
 from app.models.print_job import PrintJob
 from app.models.quota import Quota
 from app.models.user import User, UserRole
-from app.repositories.users import create_user
+from app.repositories.users import create_user, get_or_create_department, resolve_department
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.services.audit_service import write_audit
 
@@ -71,6 +71,9 @@ def create_user_endpoint(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Usuário já cadastrado") from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.put("/{user_id}", response_model=UserRead)
@@ -90,8 +93,13 @@ def update_user_endpoint(
         user.role = payload.role
     if payload.is_active is not None:
         user.is_active = payload.is_active
-    if payload.department_name is not None:
-        from app.repositories.users import get_or_create_department
+    fields_set = payload.model_fields_set
+    if "department_id" in fields_set:
+        department = resolve_department(db, actor.organization_id, payload.department_id, None)
+        if payload.department_id is not None and department is None:
+            raise HTTPException(status_code=404, detail="Departamento nao encontrado")
+        user.department = department
+    elif "department_name" in fields_set:
         user.department = get_or_create_department(db, payload.department_name, actor.organization_id)
     
     if payload.monthly_limit is not None or payload.monthly_balance is not None:

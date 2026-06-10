@@ -10,6 +10,7 @@ class UserCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=180)
     password: str | None = Field(default=None, min_length=8)
     role: UserRole = UserRole.user
+    department_id: int | None = None
     department_name: str | None = None
     monthly_limit: int = Field(default=500, ge=0)
     monthly_balance: float = Field(default=50.0, ge=0.0)
@@ -34,6 +35,7 @@ class UserRead(BaseModel):
 class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=180)
     role: UserRole | None = None
+    department_id: int | None = None
     department_name: str | None = None
     is_active: bool | None = None
     monthly_limit: int | None = Field(default=None, ge=0)

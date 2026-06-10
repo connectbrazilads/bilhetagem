@@ -17,10 +17,11 @@ from app.schemas.printer import PrinterAliasBind
 from app.api.routes.jobs import list_jobs
 from app.api.routes.departments import create_department, delete_department, list_departments, update_department
 from app.api.routes.printers import list_printers
-from app.api.routes.users import list_users
+from app.api.routes.users import create_user_endpoint, list_users, update_user_endpoint
 from app.core.security import hash_password
 from app.schemas.department import DepartmentCreate, DepartmentUpdate
 from app.schemas.auth import LoginRequest
+from app.schemas.user import UserCreate, UserUpdate
 from app.services.report_service import dashboard_metrics
 from app.services.snmp_service import SnmpPrinterStatus, poll_printers_once
 from app.services.ldap_service import sync_ldap_users, test_ldap_connection as check_ldap_connection
@@ -390,3 +391,41 @@ def test_department_admin_crud_is_scoped_and_protects_in_use_departments(db_sess
     db_session.commit()
     result = delete_department(department.id, db=db_session, actor=admin)
     assert result == {"status": "deleted"}
+
+
+def test_user_department_id_assignment_is_scoped_and_clearable(db_session: Session):
+    other_org = Organization(name="Cliente User Dept", slug="cliente-user-dept", is_active=True)
+    admin = User(username="user-dept-admin", full_name="User Dept Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add_all([other_org, admin])
+    db_session.flush()
+
+    department = Department(organization_id=1, name="Financeiro")
+    other_department = Department(organization_id=other_org.id, name="Financeiro")
+    db_session.add_all([department, other_department])
+    db_session.commit()
+
+    created = create_user_endpoint(
+        UserCreate(
+            username="com-depto",
+            full_name="Com Departamento",
+            department_id=department.id,
+            monthly_limit=500,
+            monthly_balance=50.0,
+        ),
+        db=db_session,
+        actor=admin,
+    )
+    assert created.department_id == department.id
+    assert created.department_name == "Financeiro"
+
+    with pytest.raises(HTTPException) as exc:
+        create_user_endpoint(
+            UserCreate(username="outro-depto", full_name="Outro Departamento", department_id=other_department.id),
+            db=db_session,
+            actor=admin,
+        )
+    assert exc.value.status_code == 404
+
+    cleared = update_user_endpoint(created.id, UserUpdate(department_id=None), db=db_session, actor=admin)
+    assert cleared.department_id is None
+    assert cleared.department_name is None

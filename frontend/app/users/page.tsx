@@ -12,6 +12,7 @@ type UserRow = {
   username: string;
   full_name: string;
   role: string;
+  department_id: number | null;
   department_name: string | null;
   is_active: boolean;
   monthly_limit: number | null;
@@ -28,7 +29,7 @@ type DepartmentRow = {
 const emptyForm = {
   username: "",
   full_name: "",
-  department_name: "",
+  department_id: "",
   monthly_limit: "500",
   monthly_balance: "50.00",
   is_active: true,
@@ -89,7 +90,7 @@ export default function UsersPage() {
           method: "PUT",
           body: JSON.stringify({
             full_name: form.full_name,
-            department_name: form.department_name || null,
+            department_id: form.department_id ? Number(form.department_id) : null,
             monthly_limit: Number(form.monthly_limit),
             monthly_balance: Number(form.monthly_balance),
             role: "user",
@@ -103,7 +104,7 @@ export default function UsersPage() {
           body: JSON.stringify({
             username: form.username,
             full_name: form.full_name,
-            department_name: form.department_name || null,
+            department_id: form.department_id ? Number(form.department_id) : null,
             monthly_limit: Number(form.monthly_limit),
             monthly_balance: Number(form.monthly_balance),
             role: "user",
@@ -122,7 +123,7 @@ export default function UsersPage() {
     setForm({
       username: user.username,
       full_name: user.full_name,
-      department_name: user.department_name ?? "",
+      department_id: user.department_id?.toString() ?? "",
       monthly_limit: String(user.monthly_limit ?? 500),
       monthly_balance: String(user.monthly_balance ?? 50.0),
       is_active: user.is_active,
@@ -234,12 +235,12 @@ export default function UsersPage() {
         />
         <select
           className="h-9 rounded-md border bg-white px-3 text-sm outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
-          value={form.department_name}
-          onChange={(event) => setForm({ ...form, department_name: event.target.value })}
+          value={form.department_id}
+          onChange={(event) => setForm({ ...form, department_id: event.target.value })}
         >
           <option value="">Sem departamento</option>
           {departments.map((department) => (
-            <option key={department.id} value={department.name}>
+            <option key={department.id} value={department.id}>
               {department.name}
             </option>
           ))}
