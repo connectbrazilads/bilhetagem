@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import getpass
+import argparse
 import json
 import os
 import shutil
@@ -70,33 +71,47 @@ def load_json(path: Path) -> dict:
         return {}
 
 
-def build_config(existing: dict, template: dict) -> dict:
-    print()
-    print("Configuracao do Agent")
-    print("Pressione Enter para manter o valor sugerido.")
+def build_config(existing: dict, template: dict, args: argparse.Namespace) -> dict:
+    if args.silent:
+        api_url = args.api_url or existing.get("PRINTBILLING_API_URL") or template.get("PRINTBILLING_API_URL", "")
+        username = args.username or existing.get("PRINTBILLING_AGENT_USER") or template.get("PRINTBILLING_AGENT_USER", "agent")
+        password = args.password or existing.get("PRINTBILLING_AGENT_PASSWORD") or template.get("PRINTBILLING_AGENT_PASSWORD", "")
+        default_username = args.default_username or existing.get("PRINTBILLING_DEFAULT_USERNAME") or template.get("PRINTBILLING_DEFAULT_USERNAME", "")
+        organization_slug = args.organization or existing.get("PRINTBILLING_ORGANIZATION_SLUG") or template.get("PRINTBILLING_ORGANIZATION_SLUG", "default")
+        if not api_url or not username or not password:
+            raise RuntimeError("Modo silencioso requer --api-url, --username e --password.")
+    else:
+        print()
+        print("Configuracao do Agent")
+        print("Pressione Enter para manter o valor sugerido.")
 
-    api_url = prompt_value(
-        "URL da API na VPS",
-        existing.get("PRINTBILLING_API_URL") or template.get("PRINTBILLING_API_URL", ""),
-    )
-    username = prompt_value(
-        "Usuario tecnico do agent",
-        existing.get("PRINTBILLING_AGENT_USER") or template.get("PRINTBILLING_AGENT_USER", "agent"),
-    )
-    password = prompt_value(
-        "Senha do usuario tecnico",
-        existing.get("PRINTBILLING_AGENT_PASSWORD") or template.get("PRINTBILLING_AGENT_PASSWORD", ""),
-        secret=True,
-    )
-    default_username = prompt_value(
-        "Usuario padrao deste PC, se o Windows nao informar",
-        existing.get("PRINTBILLING_DEFAULT_USERNAME") or template.get("PRINTBILLING_DEFAULT_USERNAME", ""),
-    )
+        api_url = prompt_value(
+            "URL da API na VPS",
+            existing.get("PRINTBILLING_API_URL") or template.get("PRINTBILLING_API_URL", ""),
+        )
+        username = prompt_value(
+            "Usuario tecnico do agent",
+            existing.get("PRINTBILLING_AGENT_USER") or template.get("PRINTBILLING_AGENT_USER", "agent"),
+        )
+        password = prompt_value(
+            "Senha do usuario tecnico",
+            existing.get("PRINTBILLING_AGENT_PASSWORD") or template.get("PRINTBILLING_AGENT_PASSWORD", ""),
+            secret=True,
+        )
+        organization_slug = prompt_value(
+            "Slug da empresa",
+            existing.get("PRINTBILLING_ORGANIZATION_SLUG") or template.get("PRINTBILLING_ORGANIZATION_SLUG", "default"),
+        )
+        default_username = prompt_value(
+            "Usuario padrao deste PC, se o Windows nao informar",
+            existing.get("PRINTBILLING_DEFAULT_USERNAME") or template.get("PRINTBILLING_DEFAULT_USERNAME", ""),
+        )
 
     return {
         "PRINTBILLING_API_URL": api_url.rstrip("/"),
         "PRINTBILLING_AGENT_USER": username,
         "PRINTBILLING_AGENT_PASSWORD": password,
+        "PRINTBILLING_ORGANIZATION_SLUG": organization_slug,
         "PRINTBILLING_CANCEL_BLOCKED": True,
         "PRINTBILLING_POLL_INTERVAL": int(existing.get("PRINTBILLING_POLL_INTERVAL") or template.get("PRINTBILLING_POLL_INTERVAL", 5)),
         "PRINTBILLING_DEFAULT_USERNAME": default_username,
@@ -105,6 +120,7 @@ def build_config(existing: dict, template: dict) -> dict:
         "PRINTBILLING_SNMP_TIMEOUT_SECONDS": float(existing.get("PRINTBILLING_SNMP_TIMEOUT_SECONDS") or template.get("PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2)),
         "PRINTBILLING_SNMP_RETRIES": int(existing.get("PRINTBILLING_SNMP_RETRIES") or template.get("PRINTBILLING_SNMP_RETRIES", 1)),
         "PRINTBILLING_USE_PRINT_EVENT_LOG": True,
+        "PRINTBILLING_AUTO_UPDATE": True,
     }
 
 
@@ -117,7 +133,7 @@ def stop_and_remove_existing_service(target_exe: Path) -> None:
     time.sleep(2)
 
 
-def install() -> None:
+def install(args: argparse.Namespace) -> None:
     if not is_admin():
         print("Solicitando permissao de Administrador...")
         relaunch_as_admin()
@@ -141,7 +157,7 @@ def install() -> None:
 
     template = load_json(bundled_template)
     existing = load_json(target_config)
-    config = build_config(existing, template)
+    config = build_config(existing, template, args)
     target_config.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
     print("Habilitando log operacional de impressao do Windows...")
@@ -161,15 +177,29 @@ def install() -> None:
     print("Faca uma impressao nova e confira se aparece no sistema.")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Instalador do PrintBilling Agent")
+    parser.add_argument("--silent", action="store_true", help="Instala sem prompts interativos")
+    parser.add_argument("--api-url", default="", help="URL da API na VPS")
+    parser.add_argument("--username", default="", help="Usuario tecnico do agent")
+    parser.add_argument("--password", default="", help="Senha do usuario tecnico")
+    parser.add_argument("--organization", default="", help="Slug da empresa")
+    parser.add_argument("--default-username", default="", help="Usuario padrao quando o Windows nao informar")
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     try:
-        install()
+        install(args)
     except Exception as exc:
         print()
         print(f"[ERRO] {exc}")
-        input("Pressione Enter para sair...")
+        if not args.silent:
+            input("Pressione Enter para sair...")
         raise
-    input("Pressione Enter para sair...")
+    if not args.silent:
+        input("Pressione Enter para sair...")
 
 
 if __name__ == "__main__":

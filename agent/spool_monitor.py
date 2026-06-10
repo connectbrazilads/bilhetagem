@@ -4,16 +4,20 @@ import json
 import logging
 import re
 import socket
+import subprocess
+import sys
 import time
 import uuid
 from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from dataclasses import replace
+from pathlib import Path
 
 from api_client import BillingApiClient, CapturedPrintJob
 from config import AgentConfig, config, get_app_dir
 from print_event_log import PrintEventLogReader
 from snmp_probe import fetch_snmp_status
+from version import AGENT_VERSION
 
 try:
     import win32con
@@ -48,6 +52,8 @@ class SpoolMonitor:
         self._paused_jobs: dict[str, tuple[str, int | None]] = {}
         self._last_snmp_poll = 0.0
         self._last_settings_poll = 0.0
+        self._last_update_check = 0.0
+        self._update_started = False
         self._server_safe_release_enabled = True
         self._event_log_reader = PrintEventLogReader(agent_config=self.config)
         self._agent_uid = self._load_agent_uid()
@@ -77,6 +83,7 @@ class SpoolMonitor:
             except Exception:
                 logger.exception("Falha ao processar Event Log de impressao")
             self._process_printer_statuses_if_due()
+            self._check_agent_update_if_due()
             self.sleep(self.config.poll_interval_seconds)
 
     def _should_process_spool_jobs(self) -> bool:
@@ -110,6 +117,51 @@ class SpoolMonitor:
             self._server_safe_release_enabled = safe_release_enabled
         except Exception:
             logger.exception("Falha ao buscar configuracoes do servidor")
+
+    def _check_agent_update_if_due(self) -> None:
+        if self._update_started or not self.config.auto_update_enabled:
+            return
+        now = time.monotonic()
+        if now - self._last_update_check < self.config.update_check_interval_seconds:
+            return
+        self._last_update_check = now
+        try:
+            info = self.api_client.get_agent_version_info(AGENT_VERSION)
+            if not info.get("update_available"):
+                return
+            latest_version = info.get("latest_version", "desconhecida")
+            logger.info("Atualizacao do agent disponivel: atual=%s nova=%s", AGENT_VERSION, latest_version)
+            update_bytes = self.api_client.download_agent_update()
+            update_path = get_app_dir() / "PrintBillingAgent.update.exe"
+            update_path.write_bytes(update_bytes)
+            logger.info("Atualizacao do agent baixada em %s", update_path)
+            if getattr(sys, "frozen", False):
+                self._schedule_self_update(update_path)
+            else:
+                logger.info("Ambiente de desenvolvimento detectado; atualizacao nao aplicada automaticamente")
+        except Exception:
+            logger.exception("Falha ao verificar/baixar atualizacao do agent")
+
+    def _schedule_self_update(self, update_path) -> None:
+        current_exe = Path(sys.executable)
+        script_path = get_app_dir() / "apply_agent_update.cmd"
+        script = "\r\n".join(
+            [
+                "@echo off",
+                "setlocal",
+                "timeout /t 3 /nobreak > nul",
+                "sc stop PrintBillingAgent > nul 2>&1",
+                "timeout /t 5 /nobreak > nul",
+                f'copy /Y "{update_path}" "{current_exe}" > nul',
+                "sc start PrintBillingAgent > nul 2>&1",
+                f'del "{update_path}" > nul 2>&1',
+                f'del "{script_path}" > nul 2>&1',
+            ]
+        )
+        script_path.write_text(script, encoding="utf-8")
+        subprocess.Popen(["cmd.exe", "/c", str(script_path)], close_fds=True)
+        self._update_started = True
+        logger.info("Atualizacao agendada; o servico sera reiniciado")
 
     def _enum_printers(self) -> Iterable[str]:
         flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS

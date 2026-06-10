@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     initial_admin_password: str = "admin12345"
     initial_agent_username: str = "agent"
     initial_agent_password: str = "agent12345"
+    agent_latest_version: str = "0.2.0"
+    agent_download_dir: str = "agent_downloads"
+    agent_download_filename: str = "PrintBillingAgent.exe"
 
     @field_validator("cors_origins", mode="before")
     @classmethod

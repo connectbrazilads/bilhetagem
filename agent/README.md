@@ -7,8 +7,11 @@ O agente deve ser instalado no servidor de impressao Windows ou em uma estacao q
 - `PRINTBILLING_API_URL`: URL da API, por exemplo `https://billing.empresa.local`
 - `PRINTBILLING_AGENT_USER`: usuario tecnico cadastrado na API
 - `PRINTBILLING_AGENT_PASSWORD`: senha do usuario tecnico
+- `PRINTBILLING_ORGANIZATION_SLUG`: slug da empresa no SaaS, por padrao `default`
 - `PRINTBILLING_CANCEL_BLOCKED`: `true` para cancelar trabalhos bloqueados
 - `PRINTBILLING_POLL_INTERVAL`: intervalo de varredura em segundos
+- `PRINTBILLING_AUTO_UPDATE`: `true` para permitir auto-update do agent
+- `PRINTBILLING_UPDATE_CHECK_INTERVAL`: intervalo de checagem de update em segundos
 
 ## Instalacao
 
@@ -40,3 +43,20 @@ Para remover:
 .\\.venv\\Scripts\\python service.py stop
 .\\.venv\\Scripts\\python service.py remove
 ```
+
+## Instalacao silenciosa
+
+```powershell
+.\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "agent12345" --organization default --default-username ""
+```
+
+## Auto-update
+
+O backend expoe:
+
+- `GET /agent/version?current_version=0.2.0`
+- `GET /agent/download`
+
+Para publicar uma nova versao na VPS, copie `PrintBillingAgent.exe` para a pasta configurada em
+`AGENT_DOWNLOAD_DIR` e ajuste `AGENT_LATEST_VERSION` no ambiente do backend. Por padrao, o backend
+procura `agent_downloads/PrintBillingAgent.exe`.

@@ -48,7 +48,11 @@ class BillingApiClient:
     def login(self) -> None:
         response = self.session.post(
             f"{self.config.api_base_url}/auth/login",
-            json={"username": self.config.api_username, "password": self.config.api_password},
+            json={
+                "username": self.config.api_username,
+                "password": self.config.api_password,
+                "organization_slug": self.config.organization_slug,
+            },
             timeout=10,
         )
         response.raise_for_status()
@@ -200,3 +204,39 @@ class BillingApiClient:
             )
         response.raise_for_status()
         return response.json()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    def get_agent_version_info(self, current_version: str) -> dict:
+        response = self.session.get(
+            f"{self.config.api_base_url}/agent/version",
+            params={"current_version": current_version},
+            headers={**self._headers()},
+            timeout=10,
+        )
+        if response.status_code == 401:
+            self._token = None
+            response = self.session.get(
+                f"{self.config.api_base_url}/agent/version",
+                params={"current_version": current_version},
+                headers={**self._headers()},
+                timeout=10,
+            )
+        response.raise_for_status()
+        return response.json()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    def download_agent_update(self) -> bytes:
+        response = self.session.get(
+            f"{self.config.api_base_url}/agent/download",
+            headers={**self._headers()},
+            timeout=120,
+        )
+        if response.status_code == 401:
+            self._token = None
+            response = self.session.get(
+                f"{self.config.api_base_url}/agent/download",
+                headers={**self._headers()},
+                timeout=120,
+            )
+        response.raise_for_status()
+        return response.content

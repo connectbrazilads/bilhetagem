@@ -41,6 +41,10 @@ class AgentConfig:
         "PRINTBILLING_AGENT_PASSWORD",
         file_config.get("PRINTBILLING_AGENT_PASSWORD", "change-me-agent-password")
     )
+    organization_slug: str | None = os.getenv(
+        "PRINTBILLING_ORGANIZATION_SLUG",
+        file_config.get("PRINTBILLING_ORGANIZATION_SLUG", "default")
+    ) or None
     poll_interval_seconds: int = int(
         os.getenv(
             "PRINTBILLING_POLL_INTERVAL",
@@ -85,6 +89,18 @@ class AgentConfig:
             file_config.get("PRINTBILLING_CANCEL_BLOCKED", True)
         )
     ).lower() == "true"
+    auto_update_enabled: bool = str(
+        os.getenv(
+            "PRINTBILLING_AUTO_UPDATE",
+            file_config.get("PRINTBILLING_AUTO_UPDATE", True)
+        )
+    ).lower() == "true"
+    update_check_interval_seconds: int = int(
+        os.getenv(
+            "PRINTBILLING_UPDATE_CHECK_INTERVAL",
+            file_config.get("PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600)
+        )
+    )
     spool_server: str | None = os.getenv(
         "PRINTBILLING_SPOOL_SERVER",
         file_config.get("PRINTBILLING_SPOOL_SERVER")
