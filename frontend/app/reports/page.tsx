@@ -5,7 +5,7 @@ import { Download, FileText, Mail, Printer, Search, Users } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
-import { apiFetch, API_URL } from "@/lib/api";
+import { apiFetch, API_URL, getCurrentRole } from "@/lib/api";
 
 type JobRow = {
   id: number;
@@ -101,6 +101,7 @@ export default function ReportsPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
@@ -146,6 +147,8 @@ export default function ReportsPage() {
   }
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    setIsAdmin(token ? getCurrentRole(token) === "admin" : false);
     loadFilterOptions();
     loadJobs();
     loadClosings();
@@ -180,6 +183,7 @@ export default function ReportsPage() {
   }
 
   async function generateClosing() {
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setClosingError(null);
@@ -195,6 +199,7 @@ export default function ReportsPage() {
   }
 
   async function sendClosingEmail(closing: MonthlyClosing) {
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setMailMessage(null);
@@ -216,6 +221,7 @@ export default function ReportsPage() {
   }
 
   async function sendDueEmail() {
+    if (!isAdmin) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     setMailMessage(null);
@@ -332,21 +338,23 @@ export default function ReportsPage() {
             <div className="text-sm font-semibold">Fechamentos mensais</div>
             <div className="text-xs text-muted-foreground">Snapshots comerciais congelados para cobranca e auditoria.</div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input className="w-24" type="number" value={closingYear} onChange={(event) => setClosingYear(event.target.value)} />
-            <select className="h-9 rounded-md border bg-white px-3 text-sm" value={closingMonth} onChange={(event) => setClosingMonth(event.target.value)}>
-              {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
-                <option key={month} value={month}>
-                  {String(month).padStart(2, "0")}
-                </option>
-              ))}
-            </select>
-            <Button onClick={generateClosing}>Gerar fechamento</Button>
-            <Button variant="outline" onClick={sendDueEmail} disabled={sendingEmailId === "due"}>
-              <Mail className="h-4 w-4" />
-              {sendingEmailId === "due" ? "Enviando..." : "Enviar devido"}
-            </Button>
-          </div>
+          {isAdmin ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input className="w-24" type="number" value={closingYear} onChange={(event) => setClosingYear(event.target.value)} />
+              <select className="h-9 rounded-md border bg-white px-3 text-sm" value={closingMonth} onChange={(event) => setClosingMonth(event.target.value)}>
+                {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                  <option key={month} value={month}>
+                    {String(month).padStart(2, "0")}
+                  </option>
+                ))}
+              </select>
+              <Button onClick={generateClosing}>Gerar fechamento</Button>
+              <Button variant="outline" onClick={sendDueEmail} disabled={sendingEmailId === "due"}>
+                <Mail className="h-4 w-4" />
+                {sendingEmailId === "due" ? "Enviando..." : "Enviar devido"}
+              </Button>
+            </div>
+          ) : null}
         </div>
         {closingError ? <div className="border-b border-red-200 bg-red-50 p-3 text-sm text-red-800">{closingError}</div> : null}
         {mailMessage ? (
@@ -384,10 +392,12 @@ export default function ReportsPage() {
                       <td className="p-4 text-muted-foreground">{new Date(closing.generated_at).toLocaleString("pt-BR")}</td>
                       <td className="p-4">
                         <div className="flex justify-end gap-2">
-                          <Button variant="outline" onClick={() => sendClosingEmail(closing)} disabled={sendingEmailId === closing.id}>
-                            <Mail className="h-4 w-4" />
-                            {sendingEmailId === closing.id ? "..." : "E-mail"}
-                          </Button>
+                          {isAdmin ? (
+                            <Button variant="outline" onClick={() => sendClosingEmail(closing)} disabled={sendingEmailId === closing.id}>
+                              <Mail className="h-4 w-4" />
+                              {sendingEmailId === closing.id ? "..." : "E-mail"}
+                            </Button>
+                          ) : null}
                           <Button variant="outline" onClick={() => downloadClosing(closing, "pdf")}>PDF</Button>
                           <Button onClick={() => downloadClosing(closing, "xlsx")}>Excel</Button>
                         </div>
