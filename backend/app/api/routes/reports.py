@@ -24,6 +24,7 @@ from app.services.email_service import send_due_monthly_report_email, send_month
 from app.services.monthly_closing_service import create_monthly_closing
 from app.services.report_export_service import monthly_closing_filename_base, render_monthly_closing_pdf, render_monthly_closing_xlsx
 from app.services.report_service import dashboard_metrics
+from app.services.audit_service import write_audit
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -55,7 +56,17 @@ def generate_monthly_closing(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> MonthlyClosing:
-    return create_monthly_closing(db, actor.organization_id, payload.year, payload.month)
+    closing = create_monthly_closing(db, actor.organization_id, payload.year, payload.month)
+    write_audit(
+        db,
+        action="monthly_closing_generated",
+        entity="monthly_closings",
+        entity_id=closing.id,
+        actor_user_id=actor.id,
+        metadata={"year": closing.year, "month": closing.month, "total_pages": closing.total_pages, "total_cost": closing.total_cost},
+    )
+    db.commit()
+    return closing
 
 
 @router.post("/monthly-closings/email-due", response_model=MonthlyClosingDueEmailRead)
@@ -64,7 +75,17 @@ def send_due_monthly_closing_email_endpoint(
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> dict:
     try:
-        return send_due_monthly_report_email(db, actor.organization_id)
+        result = send_due_monthly_report_email(db, actor.organization_id)
+        if result.get("sent"):
+            write_audit(
+                db,
+                action="monthly_closing_due_email_sent",
+                entity="monthly_closings",
+                actor_user_id=actor.id,
+                metadata={"period": result.get("period"), "recipients": result.get("recipients", []), "attachments": result.get("attachments", [])},
+            )
+            db.commit()
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -91,13 +112,23 @@ def send_monthly_closing_email_endpoint(
     closing = _closing_or_404(db, actor.organization_id, closing_id)
     payload = payload or MonthlyClosingEmailRequest()
     try:
-        return send_monthly_closing_email(
+        result = send_monthly_closing_email(
             db,
             closing,
             recipients=payload.recipients,
             include_pdf=payload.include_pdf,
             include_xlsx=payload.include_xlsx,
         )
+        write_audit(
+            db,
+            action="monthly_closing_email_sent",
+            entity="monthly_closings",
+            entity_id=closing.id,
+            actor_user_id=actor.id,
+            metadata={"recipients": result["recipients"], "attachments": result["attachments"]},
+        )
+        db.commit()
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -118,6 +149,15 @@ def export_monthly_closing(
 ) -> Response:
     closing = _closing_or_404(db, actor.organization_id, closing_id)
     filename_base = monthly_closing_filename_base(closing)
+    write_audit(
+        db,
+        action="monthly_closing_exported",
+        entity="monthly_closings",
+        entity_id=closing.id,
+        actor_user_id=actor.id,
+        metadata={"format": format},
+    )
+    db.commit()
 
     if format == "pdf":
         return Response(

@@ -4,12 +4,14 @@ from io import BytesIO
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
-from app.api.routes.reports import export_monthly_closing, export_report
+from app.api.routes.reports import export_monthly_closing, export_report, generate_monthly_closing
 from app.api.routes.settings import get_monthly_report_email_settings_endpoint, update_monthly_report_email_settings_endpoint
 from app.models.department import Department
+from app.models.audit_log import AuditLog
 from app.models.print_job import JobStatus, PrintJob
 from app.models.printer import Printer
 from app.schemas.settings import MonthlyReportEmailSettings
+from app.schemas.report import MonthlyClosingCreate
 from app.services.email_service import send_due_monthly_report_email, send_monthly_closing_email
 from app.models.user import User, UserRole
 from app.services.monthly_closing_service import create_monthly_closing
@@ -109,6 +111,8 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert workbook["Resumo"]["A12"].value == "Custo total"
     assert workbook["Resumo"]["B12"].value == 1.5
     assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_exported", AuditLog.entity_id == closing.id).one()
+    assert audit.log_metadata == {"format": "xlsx"}
 
 
 def test_monthly_closing_export_pdf(db_session: Session):
@@ -183,6 +187,22 @@ def test_monthly_report_email_settings_api(db_session: Session):
     assert updated.recipients == "financeiro@example.com; gestao@example.com"
     assert updated.day_of_month == 5
     assert updated.include_xlsx is False
+
+
+def test_generate_monthly_closing_endpoint_writes_audit(db_session: Session):
+    _seed_job_data(db_session)
+    actor = User(username="closing-audit-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    closing = generate_monthly_closing(MonthlyClosingCreate(year=2026, month=5), db=db_session, actor=actor)
+
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "monthly_closing_generated", AuditLog.entity_id == closing.id).one()
+    assert audit.actor_user_id == actor.id
+    assert audit.log_metadata["year"] == 2026
+    assert audit.log_metadata["month"] == 5
+    assert audit.log_metadata["total_pages"] == 14
+    assert audit.log_metadata["total_cost"] == 1.5
 
 
 def test_send_monthly_closing_email_with_attachments(db_session: Session, monkeypatch):
