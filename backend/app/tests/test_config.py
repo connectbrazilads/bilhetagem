@@ -98,3 +98,38 @@ def test_development_allows_default_secret_key():
     settings = Settings(environment="development", secret_key=DEFAULT_SECRET_KEY, _env_file=None)
 
     assert settings.secret_key == DEFAULT_SECRET_KEY
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("access_token_expire_minutes", 0),
+        ("default_monthly_quota", -1),
+        ("snmp_timeout_seconds", 0),
+        ("snmp_retries", -1),
+        ("smtp_port", 0),
+        ("monthly_report_email_scheduler_interval_seconds", 299),
+    ],
+)
+def test_rejects_invalid_operational_numeric_settings(field: str, value):
+    with pytest.raises(ValidationError):
+        Settings(**{field: value}, _env_file=None)
+
+
+def test_accepts_boundary_operational_numeric_settings():
+    settings = Settings(
+        access_token_expire_minutes=5,
+        default_monthly_quota=0,
+        snmp_timeout_seconds=0.1,
+        snmp_retries=0,
+        smtp_port=1,
+        monthly_report_email_scheduler_interval_seconds=300,
+        _env_file=None,
+    )
+
+    assert settings.access_token_expire_minutes == 5
+    assert settings.default_monthly_quota == 0
+    assert settings.snmp_timeout_seconds == 0.1
+    assert settings.snmp_retries == 0
+    assert settings.smtp_port == 1
+    assert settings.monthly_report_email_scheduler_interval_seconds == 300

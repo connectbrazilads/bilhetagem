@@ -15,16 +15,16 @@ class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
     secret_key: str = Field(default=DEFAULT_SECRET_KEY, min_length=16)
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    access_token_expire_minutes: int = Field(default=60, ge=5, le=1440)
     cors_origins: Union[str, list[str]] = ["http://localhost:3000"]
-    default_monthly_quota: int = 500
+    default_monthly_quota: int = Field(default=500, ge=0, le=1_000_000)
     auto_create_users: bool = True
     auto_create_printers: bool = True
     safe_release_enabled: bool = True
     web_print_max_upload_mb: int = Field(default=50, ge=1, le=512)
     snmp_community: str = "public"
-    snmp_timeout_seconds: float = 2.0
-    snmp_retries: int = 1
+    snmp_timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
+    snmp_retries: int = Field(default=1, ge=0, le=5)
     backend_snmp_poller_enabled: bool = False
     initial_admin_username: str = "admin"
     initial_admin_password: str = ""
@@ -35,13 +35,13 @@ class Settings(BaseSettings):
     agent_download_filename: str = "PrintBillingAgent.exe"
     agent_release_manifest_filename: str = "manifest.json"
     smtp_host: str = ""
-    smtp_port: int = 587
+    smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from_email: str = "no-reply@printbilling.local"
     smtp_use_tls: bool = True
     monthly_report_email_scheduler_enabled: bool = True
-    monthly_report_email_scheduler_interval_seconds: int = 3600
+    monthly_report_email_scheduler_interval_seconds: int = Field(default=3600, ge=300, le=86400)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
