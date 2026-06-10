@@ -5,6 +5,7 @@ import getpass
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -169,6 +170,13 @@ def normalize_api_url(value: str) -> str:
     return cleaned
 
 
+def normalize_organization_slug(value: str) -> str:
+    cleaned = normalize_text(value).lower()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*[a-z0-9]", cleaned):
+        raise RuntimeError("Slug da empresa invalido. Use apenas letras, numeros e hifens, sem espacos.")
+    return cleaned
+
+
 def build_config(existing: dict, template: dict, args: argparse.Namespace) -> dict:
     if args.silent:
         api_url = pick_arg_or_existing(args.api_url, existing, "PRINTBILLING_API_URL", "")
@@ -233,11 +241,11 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
     api_url = normalize_api_url(api_url)
     username = normalize_text(username)
     password = normalize_text(password)
-    organization_slug = normalize_text(organization_slug)
+    organization_slug = normalize_organization_slug(organization_slug)
     default_username = normalize_text(default_username)
     spool_server = normalize_text(spool_server)
     log_level = as_log_level(log_level)
-    if not username or not password or not organization_slug:
+    if not username or not password:
         raise RuntimeError("Configuracao do agent requer API URL, usuario, senha e slug da empresa.")
     if is_unsafe_agent_password(password):
         raise RuntimeError("Senha do usuario tecnico do agent e insegura. Gere uma senha exclusiva para esta empresa.")

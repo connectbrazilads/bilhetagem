@@ -100,6 +100,39 @@ def test_silent_install_rejects_api_url_without_http_scheme():
         raise AssertionError("Instalador nao deve aceitar URL sem http ou https")
 
 
+def test_silent_install_normalizes_organization_slug():
+    config = build_config(
+        {},
+        {},
+        args(
+            api_url="https://billing.example.com",
+            username="agent",
+            password="secret",
+            organization=" Cliente-A ",
+        ),
+    )
+
+    assert config["PRINTBILLING_ORGANIZATION_SLUG"] == "cliente-a"
+
+
+def test_silent_install_rejects_invalid_organization_slug():
+    try:
+        build_config(
+            {},
+            {},
+            args(
+                api_url="https://billing.example.com",
+                username="agent",
+                password="secret",
+                organization="cliente a",
+            ),
+        )
+    except RuntimeError as exc:
+        assert "Slug da empresa invalido" in str(exc)
+    else:
+        raise AssertionError("Instalador nao deve aceitar slug com espacos")
+
+
 def test_silent_reinstall_preserves_capture_and_update_flags():
     existing = {
         "PRINTBILLING_API_URL": "https://billing.example.com",
