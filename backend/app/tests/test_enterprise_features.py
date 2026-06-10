@@ -5,10 +5,15 @@ from sqlalchemy.orm import Session
 from app.models.printer import Printer
 from app.models.print_agent import PrintAgent
 from app.models.printer_alias import PrinterAlias
+from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.print_job import JobStatus, PrintJob
 from app.models.quota import Quota
 from app.api.routes.printers import merge_printer_endpoint
+from app.api.routes.jobs import list_jobs
+from app.api.routes.printers import list_printers
+from app.api.routes.users import list_users
+from app.services.report_service import dashboard_metrics
 from app.services.snmp_service import SnmpPrinterStatus, poll_printers_once
 from app.services.ldap_service import sync_ldap_users, test_ldap_connection as check_ldap_connection
 from app.api.routes.jobs import get_pdf_page_count
@@ -178,3 +183,61 @@ def test_merge_printer_moves_jobs_and_aliases(db_session: Session):
     assert moved_job.printer_id == target.id
     assert moved_job.printer_alias_id == alias.id
     assert moved_alias.printer_id == target.id
+
+
+def test_organization_scope_isolates_core_views(db_session: Session):
+    other_org = Organization(name="Cliente B", slug="cliente-b", is_active=True)
+    db_session.add(other_org)
+    db_session.flush()
+
+    org_one_admin = User(username="org1-admin", full_name="Org 1 Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    org_one_user = User(username="org1-user", full_name="Org 1 User", role=UserRole.user, is_active=True, organization_id=1)
+    org_two_user = User(username="org2-user", full_name="Org 2 User", role=UserRole.user, is_active=True, organization_id=other_org.id)
+    org_one_printer = Printer(name="Org 1 Printer", is_color=False, organization_id=1)
+    org_two_printer = Printer(name="Org 2 Printer", is_color=False, organization_id=other_org.id)
+    db_session.add_all([org_one_admin, org_one_user, org_two_user, org_one_printer, org_two_printer])
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            PrintJob(
+                organization_id=1,
+                user_id=org_one_user.id,
+                printer_id=org_one_printer.id,
+                pages=3,
+                is_color=False,
+                cost=0.15,
+                status=JobStatus.authorized,
+                submitted_at=datetime.now(timezone.utc),
+            ),
+            PrintJob(
+                organization_id=other_org.id,
+                user_id=org_two_user.id,
+                printer_id=org_two_printer.id,
+                pages=7,
+                is_color=False,
+                cost=0.35,
+                status=JobStatus.authorized,
+                submitted_at=datetime.now(timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    users = list_users(db=db_session, _=org_one_admin)
+    printers = list_printers(db=db_session, actor=org_one_admin)
+    jobs = list_jobs(
+        user_id=None,
+        department_id=None,
+        printer_id=None,
+        date_from=None,
+        date_to=None,
+        db=db_session,
+        actor=org_one_admin,
+    )
+    metrics = dashboard_metrics(db_session, organization_id=1)
+
+    assert {user.username for user in users} == {"org1-admin", "org1-user"}
+    assert [printer.name for printer in printers] == ["Org 1 Printer"]
+    assert [job.username for job in jobs] == ["org1-user"]
+    assert metrics["pages_month"] == 3

@@ -8,17 +8,22 @@ from app.models.printer_alias import PrinterAlias
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate, PrintJobDecision
 from app.services.audit_service import write_audit
+from app.services.organization_service import get_or_create_default_organization
 from app.services.quota_service import can_consume, get_or_create_current_quota
 
 
-def _resolve_user(db: Session, username: str, auto_create_users: bool) -> User:
+def _resolve_organization_id(db: Session, organization_id: int | None) -> int:
+    return organization_id or get_or_create_default_organization(db).id
+
+
+def _resolve_user(db: Session, username: str, auto_create_users: bool, organization_id: int) -> User:
     username = _normalize_username(username)
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(User.organization_id == organization_id, User.username == username).first()
     if user:
         return user
     if not auto_create_users:
         raise ValueError(f"Usuario '{username}' nao cadastrado")
-    user = User(username=username, full_name=username, role=UserRole.user, is_active=True)
+    user = User(organization_id=organization_id, username=username, full_name=username, role=UserRole.user, is_active=True)
     db.add(user)
     db.flush()
     return user
@@ -33,13 +38,13 @@ def _normalize_username(username: str) -> str:
     return normalized.strip().lower() or "unknown"
 
 
-def _resolve_printer(db: Session, printer_name: str, is_color: bool) -> Printer:
-    printer = db.query(Printer).filter(Printer.name == printer_name).first()
+def _resolve_printer(db: Session, printer_name: str, is_color: bool, organization_id: int) -> Printer:
+    printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.name == printer_name).first()
     if printer:
         return printer
     if not settings.auto_create_printers:
         raise ValueError(f"Impressora '{printer_name}' nao cadastrada")
-    printer = Printer(name=printer_name, is_color=is_color)
+    printer = Printer(organization_id=organization_id, name=printer_name, is_color=is_color)
     db.add(printer)
     db.flush()
     return printer
@@ -58,15 +63,15 @@ def _clean_optional(value: str | None) -> str | None:
     return cleaned or None
 
 
-def _upsert_agent(db: Session, payload: PrintJobCreate) -> PrintAgent | None:
+def _upsert_agent(db: Session, payload: PrintJobCreate, organization_id: int) -> PrintAgent | None:
     agent_uid = _clean_optional(payload.agent_uid)
     if not agent_uid:
         return None
     from datetime import datetime, timezone
 
-    agent = db.query(PrintAgent).filter(PrintAgent.agent_uid == agent_uid).first()
+    agent = db.query(PrintAgent).filter(PrintAgent.organization_id == organization_id, PrintAgent.agent_uid == agent_uid).first()
     if not agent:
-        agent = PrintAgent(agent_uid=agent_uid)
+        agent = PrintAgent(organization_id=organization_id, agent_uid=agent_uid)
         db.add(agent)
         db.flush()
     agent.computer_name = _clean_optional(payload.computer_name)
@@ -74,16 +79,16 @@ def _upsert_agent(db: Session, payload: PrintJobCreate) -> PrintAgent | None:
     return agent
 
 
-def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAgent | None) -> Printer | None:
+def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAgent | None, organization_id: int) -> Printer | None:
     serial = _clean_optional(payload.printer_serial)
     if serial:
-        printer = db.query(Printer).filter(Printer.serial_number == serial).first()
+        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.serial_number == serial).first()
         if printer:
             return printer
 
     ip_address = _clean_optional(payload.printer_ip_address)
     if ip_address:
-        printer = db.query(Printer).filter(Printer.ip_address == ip_address).first()
+        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.ip_address == ip_address).first()
         if printer:
             return printer
 
@@ -91,7 +96,11 @@ def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAge
     if agent and queue_name:
         alias = (
             db.query(PrinterAlias)
-            .filter(PrinterAlias.agent_id == agent.id, PrinterAlias.queue_name == queue_name)
+            .filter(
+                PrinterAlias.organization_id == organization_id,
+                PrinterAlias.agent_id == agent.id,
+                PrinterAlias.queue_name == queue_name,
+            )
             .first()
         )
         if alias and alias.printer:
@@ -101,27 +110,31 @@ def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAge
     if fingerprint:
         alias = (
             db.query(PrinterAlias)
-            .filter(PrinterAlias.fingerprint == fingerprint, PrinterAlias.printer_id.isnot(None))
+            .filter(
+                PrinterAlias.organization_id == organization_id,
+                PrinterAlias.fingerprint == fingerprint,
+                PrinterAlias.printer_id.isnot(None),
+            )
             .first()
         )
         if alias and alias.printer:
             return alias.printer
 
-    return db.query(Printer).filter(Printer.name == payload.printer_name).first()
+    return db.query(Printer).filter(Printer.organization_id == organization_id, Printer.name == payload.printer_name).first()
 
 
-def _resolve_printer_for_job(db: Session, payload: PrintJobCreate, agent: PrintAgent | None) -> Printer:
-    printer = _find_existing_printer(db, payload, agent)
+def _resolve_printer_for_job(db: Session, payload: PrintJobCreate, agent: PrintAgent | None, organization_id: int) -> Printer:
+    printer = _find_existing_printer(db, payload, agent, organization_id)
     if printer:
         if payload.printer_serial and not printer.serial_number:
             printer.serial_number = payload.printer_serial
         if payload.printer_ip_address and not printer.ip_address:
             printer.ip_address = payload.printer_ip_address
         return printer
-    return _resolve_printer(db, payload.printer_name, payload.is_color)
+    return _resolve_printer(db, payload.printer_name, payload.is_color, organization_id)
 
 
-def _upsert_printer_alias(db: Session, payload: PrintJobCreate, agent: PrintAgent | None, printer: Printer) -> PrinterAlias | None:
+def _upsert_printer_alias(db: Session, payload: PrintJobCreate, agent: PrintAgent | None, printer: Printer, organization_id: int) -> PrinterAlias | None:
     queue_name = _clean_optional(payload.queue_name) or payload.printer_name
     if not queue_name:
         return None
@@ -131,17 +144,21 @@ def _upsert_printer_alias(db: Session, payload: PrintJobCreate, agent: PrintAgen
     if agent:
         alias = (
             db.query(PrinterAlias)
-            .filter(PrinterAlias.agent_id == agent.id, PrinterAlias.queue_name == queue_name)
+            .filter(
+                PrinterAlias.organization_id == organization_id,
+                PrinterAlias.agent_id == agent.id,
+                PrinterAlias.queue_name == queue_name,
+            )
             .first()
         )
     if alias is None and not agent and payload.printer_fingerprint:
         alias = (
             db.query(PrinterAlias)
-            .filter(PrinterAlias.fingerprint == payload.printer_fingerprint)
+            .filter(PrinterAlias.organization_id == organization_id, PrinterAlias.fingerprint == payload.printer_fingerprint)
             .first()
         )
     if alias is None:
-        alias = PrinterAlias(agent_id=agent.id if agent else None, queue_name=queue_name)
+        alias = PrinterAlias(organization_id=organization_id, agent_id=agent.id if agent else None, queue_name=queue_name)
         db.add(alias)
         db.flush()
 
@@ -159,14 +176,15 @@ def _upsert_printer_alias(db: Session, payload: PrintJobCreate, agent: PrintAgen
     return alias
 
 
-def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision:
+def register_print_job(db: Session, payload: PrintJobCreate, organization_id: int | None = None) -> PrintJobDecision:
     from app.services.settings_service import get_system_settings_dict
-    sys_settings = get_system_settings_dict(db)
+    organization_id = _resolve_organization_id(db, organization_id)
+    sys_settings = get_system_settings_dict(db, organization_id)
 
-    user = _resolve_user(db, payload.username, sys_settings["auto_create_users"])
-    agent = _upsert_agent(db, payload)
-    printer = _resolve_printer_for_job(db, payload, agent)
-    alias = _upsert_printer_alias(db, payload, agent, printer)
+    user = _resolve_user(db, payload.username, sys_settings["auto_create_users"], organization_id)
+    agent = _upsert_agent(db, payload, organization_id)
+    printer = _resolve_printer_for_job(db, payload, agent, organization_id)
+    alias = _upsert_printer_alias(db, payload, agent, printer, organization_id)
     quota = get_or_create_current_quota(db, user, payload.submitted_at)
     is_print_event_log_job = bool(payload.external_job_id and payload.external_job_id.startswith("eventlog:"))
 
@@ -175,6 +193,7 @@ def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision
             db.query(PrintJob)
             .filter(
                 PrintJob.printer_id == printer.id,
+                PrintJob.organization_id == organization_id,
                 PrintJob.external_job_id == payload.external_job_id,
             )
             .order_by(PrintJob.id.desc())
@@ -197,10 +216,12 @@ def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision
     import sqlalchemy as sa
     pending_cost = db.query(sa.func.sum(PrintJob.cost)).filter(
         PrintJob.user_id == user.id,
+        PrintJob.organization_id == organization_id,
         PrintJob.status == JobStatus.pending_release
     ).scalar() or 0.0
     pending_pages = db.query(sa.func.sum(PrintJob.pages)).filter(
         PrintJob.user_id == user.id,
+        PrintJob.organization_id == organization_id,
         PrintJob.status == JobStatus.pending_release
     ).scalar() or 0
 
@@ -232,6 +253,7 @@ def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision
             quota.used_balance += cost
 
     job = PrintJob(
+        organization_id=organization_id,
         user_id=user.id,
         printer_id=printer.id,
         printer_alias_id=alias.id if alias else None,
@@ -262,6 +284,7 @@ def register_print_job(db: Session, payload: PrintJobCreate) -> PrintJobDecision
             "cost": cost,
             "remaining_balance": quota.remaining_balance,
         },
+        organization_id=organization_id,
     )
     db.commit()
     db.refresh(job)

@@ -15,18 +15,18 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 @router.get("", response_model=GeneralSettings)
 def get_general_settings(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    actor: User = Depends(require_roles(UserRole.admin)),
 ) -> GeneralSettings:
-    return GeneralSettings(**get_system_settings_dict(db))
+    return GeneralSettings(**get_system_settings_dict(db, actor.organization_id))
 
 
 @router.put("", response_model=GeneralSettings)
 def update_general_settings(
     payload: GeneralSettings,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    actor: User = Depends(require_roles(UserRole.admin)),
 ) -> GeneralSettings:
-    updated = update_system_settings(db, payload.model_dump())
+    updated = update_system_settings(db, payload.model_dump(), actor.organization_id)
     return GeneralSettings(**updated)
 
 @router.post("/ldap/test")
@@ -56,7 +56,8 @@ def sync_ldap_endpoint(
             server=payload.server,
             bind_dn=payload.bind_dn,
             bind_password=payload.bind_password,
-            search_base=payload.search_base
+            search_base=payload.search_base,
+            organization_id=actor.organization_id,
         )
         write_audit(
             db,

@@ -4,14 +4,17 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from app.services.organization_service import get_or_create_default_organization
 
 
 def ensure_user(db: Session, *, username: str, password: str, role: UserRole, full_name: str) -> None:
-    user = db.query(User).filter(User.username == username).first()
+    organization = get_or_create_default_organization(db)
+    user = db.query(User).filter(User.organization_id == organization.id, User.username == username).first()
     if user:
         return
     db.add(
         User(
+            organization_id=organization.id,
             username=username,
             full_name=full_name,
             password_hash=hash_password(password),

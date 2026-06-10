@@ -20,6 +20,7 @@ class PrintJob(Base):
     __table_args__ = (Index("ix_print_jobs_submitted_at", "submitted_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), default=1, nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     printer_id: Mapped[int] = mapped_column(ForeignKey("printers.id"), nullable=False)
     printer_alias_id: Mapped[int | None] = mapped_column(ForeignKey("printer_aliases.id"), nullable=True)

@@ -29,12 +29,15 @@ def test_ldap_connection(server: str, bind_dn: str, bind_password: str) -> bool:
         
     return True
 
-def sync_ldap_users(db: Session, server: str, bind_dn: str, bind_password: str, search_base: str) -> dict:
+def sync_ldap_users(db: Session, server: str, bind_dn: str, bind_password: str, search_base: str, organization_id: int | None = None) -> dict:
     """
     Synchronizes users and departments from mock LDAP data into the database.
     """
     # First, test the connection
     test_ldap_connection(server, bind_dn, bind_password)
+    if organization_id is None:
+        from app.services.organization_service import get_or_create_default_organization
+        organization_id = get_or_create_default_organization(db).id
     
     sync_count = 0
     new_users = 0
@@ -47,9 +50,9 @@ def sync_ldap_users(db: Session, server: str, bind_dn: str, bind_password: str, 
         dept_name = item["department"]
         # Resolve department
         if dept_name not in dept_cache:
-            dept = db.query(Department).filter(Department.name == dept_name).first()
+            dept = db.query(Department).filter(Department.organization_id == organization_id, Department.name == dept_name).first()
             if not dept:
-                dept = Department(name=dept_name)
+                dept = Department(organization_id=organization_id, name=dept_name)
                 db.add(dept)
                 db.flush()
             dept_cache[dept_name] = dept.id
@@ -57,9 +60,10 @@ def sync_ldap_users(db: Session, server: str, bind_dn: str, bind_password: str, 
         dept_id = dept_cache[dept_name]
         
         # Check if user exists
-        user = db.query(User).filter(User.username == item["username"]).first()
+        user = db.query(User).filter(User.organization_id == organization_id, User.username == item["username"]).first()
         if not user:
             user = User(
+                organization_id=organization_id,
                 username=item["username"],
                 full_name=item["full_name"],
                 password_hash=hash_password("ldap12345"),

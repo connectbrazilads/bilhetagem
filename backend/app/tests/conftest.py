@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import app.models  # noqa: F401
 from app.models.base import Base
+from app.services.organization_service import get_or_create_default_organization
 
 
 @pytest.fixture()
@@ -20,6 +21,8 @@ def db_session() -> Session:
     TestingSessionLocal = sessionmaker(bind=engine)
     Base.metadata.create_all(engine)
     session = TestingSessionLocal()
+    get_or_create_default_organization(session)
+    session.commit()
     try:
         yield session
     finally:

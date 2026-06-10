@@ -39,7 +39,7 @@ def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> list[UserRead]:
-    users = db.query(User).order_by(User.username).all()
+    users = db.query(User).filter(User.organization_id == _.organization_id).order_by(User.username).all()
     return [_read_user(user, db) for user in users]
 
 
@@ -50,10 +50,11 @@ def create_user_endpoint(
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> UserRead:
     try:
-        user = create_user(db, payload)
+        user = create_user(db, payload, actor.organization_id)
         now = datetime.now(timezone.utc)
         quota = Quota(
             user_id=user.id,
+            organization_id=actor.organization_id,
             year=now.year,
             month=now.month,
             monthly_limit=payload.monthly_limit,
@@ -78,7 +79,7 @@ def update_user_endpoint(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> UserRead:
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.organization_id == actor.organization_id, User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     
@@ -90,7 +91,7 @@ def update_user_endpoint(
         user.is_active = payload.is_active
     if payload.department_name is not None:
         from app.repositories.users import get_or_create_department
-        user.department = get_or_create_department(db, payload.department_name)
+        user.department = get_or_create_department(db, payload.department_name, actor.organization_id)
     
     if payload.monthly_limit is not None or payload.monthly_balance is not None:
         from app.services.quota_service import get_or_create_current_quota
@@ -112,7 +113,7 @@ def delete_user_endpoint(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> dict[str, str | int]:
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.organization_id == actor.organization_id, User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario nao encontrado")
     if user.id == actor.id:
@@ -120,8 +121,8 @@ def delete_user_endpoint(
     if user.username.lower() in {"admin", "agent"}:
         raise HTTPException(status_code=400, detail="Usuario tecnico nao pode ser excluido")
 
-    deleted_jobs = db.query(PrintJob).filter(PrintJob.user_id == user.id).delete(synchronize_session=False)
-    db.query(AuditLog).filter(AuditLog.actor_user_id == user.id).update(
+    deleted_jobs = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.user_id == user.id).delete(synchronize_session=False)
+    db.query(AuditLog).filter(AuditLog.organization_id == actor.organization_id, AuditLog.actor_user_id == user.id).update(
         {AuditLog.actor_user_id: None},
         synchronize_session=False,
     )

@@ -19,9 +19,15 @@ router = APIRouter(prefix="/printers", tags=["printers"])
 @router.get("", response_model=list[PrinterRead])
 def list_printers(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> list[Printer]:
-    return db.query(Printer).options(selectinload(Printer.aliases)).order_by(Printer.name).all()
+    return (
+        db.query(Printer)
+        .options(selectinload(Printer.aliases))
+        .filter(Printer.organization_id == actor.organization_id)
+        .order_by(Printer.name)
+        .all()
+    )
 
 
 @router.post("", response_model=PrinterRead, status_code=status.HTTP_201_CREATED)
@@ -31,7 +37,7 @@ def create_printer_endpoint(
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> Printer:
     try:
-        printer = create_printer(db, payload)
+        printer = create_printer(db, payload, actor.organization_id)
         write_audit(db, action="printer_created", entity="printers", entity_id=printer.id, actor_user_id=actor.id)
         db.commit()
         db.refresh(printer)
@@ -48,7 +54,7 @@ def update_printer_endpoint(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> Printer:
-    printer = db.query(Printer).filter(Printer.id == printer_id).first()
+    printer = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == printer_id).first()
     if not printer:
         raise HTTPException(status_code=404, detail="Impressora nao encontrada")
     
@@ -78,9 +84,9 @@ def update_printer_status_endpoint(
     printer_id: int,
     payload: PrinterStatusUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    actor: User = Depends(require_roles(UserRole.admin)),
 ) -> Printer:
-    printer = db.query(Printer).filter(Printer.id == printer_id).first()
+    printer = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == printer_id).first()
     if not printer:
         raise HTTPException(status_code=404, detail="Impressora nao encontrada")
 
@@ -100,11 +106,11 @@ def delete_printer_endpoint(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> dict[str, str | int]:
-    printer = db.query(Printer).filter(Printer.id == printer_id).first()
+    printer = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == printer_id).first()
     if not printer:
         raise HTTPException(status_code=404, detail="Impressora nao encontrada")
 
-    jobs = db.query(PrintJob).filter(PrintJob.printer_id == printer.id).all()
+    jobs = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.printer_id == printer.id).all()
     deleted_jobs = len(jobs)
     for job in jobs:
         if job.status not in (JobStatus.authorized, JobStatus.released):
@@ -124,7 +130,7 @@ def delete_printer_endpoint(
 
     for job in jobs:
         db.delete(job)
-    db.query(PrinterAlias).filter(PrinterAlias.printer_id == printer.id).delete(synchronize_session=False)
+    db.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.printer_id == printer.id).delete(synchronize_session=False)
     write_audit(
         db,
         action="printer_deleted",
@@ -148,28 +154,29 @@ def merge_printer_endpoint(
     if source_printer_id == target_printer_id:
         raise HTTPException(status_code=400, detail="Impressoras devem ser diferentes")
 
-    source = db.query(Printer).filter(Printer.id == source_printer_id).first()
-    target = db.query(Printer).filter(Printer.id == target_printer_id).first()
+    source = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == source_printer_id).first()
+    target = db.query(Printer).filter(Printer.organization_id == actor.organization_id, Printer.id == target_printer_id).first()
     if not source or not target:
         raise HTTPException(status_code=404, detail="Impressora nao encontrada")
 
-    moved_jobs = db.query(PrintJob).filter(PrintJob.printer_id == source.id).update(
+    moved_jobs = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.printer_id == source.id).update(
         {PrintJob.printer_id: target.id},
         synchronize_session=False,
     )
     moved_aliases = 0
-    for alias in db.query(PrinterAlias).filter(PrinterAlias.printer_id == source.id).all():
+    for alias in db.query(PrinterAlias).filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.printer_id == source.id).all():
         duplicate_alias = (
             db.query(PrinterAlias)
             .filter(
                 PrinterAlias.printer_id == target.id,
+                PrinterAlias.organization_id == actor.organization_id,
                 PrinterAlias.agent_id == alias.agent_id,
                 PrinterAlias.queue_name == alias.queue_name,
             )
             .first()
         )
         if duplicate_alias:
-            db.query(PrintJob).filter(PrintJob.printer_alias_id == alias.id).update(
+            db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, PrintJob.printer_alias_id == alias.id).update(
                 {PrintJob.printer_alias_id: duplicate_alias.id},
                 synchronize_session=False,
             )

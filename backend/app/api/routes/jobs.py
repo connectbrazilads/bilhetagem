@@ -29,9 +29,9 @@ def list_jobs(
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> list[PrintJobRead]:
-    query = db.query(PrintJob).join(User).join(Printer)
+    query = db.query(PrintJob).join(User).join(Printer).filter(PrintJob.organization_id == actor.organization_id)
     if user_id:
         query = query.filter(PrintJob.user_id == user_id)
     if department_id:
@@ -67,10 +67,10 @@ def list_jobs(
 def create_job(
     payload: PrintJobCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> PrintJobDecision:
     try:
-        return register_print_job(db, payload)
+        return register_print_job(db, payload, current_user.organization_id)
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -80,7 +80,7 @@ def create_job(
 def get_agent_actions(
     job_keys: str = Query(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     actions = {}
     if not job_keys:
@@ -94,7 +94,12 @@ def get_agent_actions(
         job = (
             db.query(PrintJob)
             .join(Printer)
-            .filter(Printer.name == printer_name, PrintJob.external_job_id == ext_id)
+            .filter(
+                PrintJob.organization_id == current_user.organization_id,
+                Printer.organization_id == current_user.organization_id,
+                Printer.name == printer_name,
+                PrintJob.external_job_id == ext_id,
+            )
             .order_by(PrintJob.id.desc())
             .first()
         )
@@ -116,7 +121,7 @@ def release_job(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PrintJobDecision:
-    job = db.query(PrintJob).filter(PrintJob.id == job_id).first()
+    job = db.query(PrintJob).filter(PrintJob.organization_id == current_user.organization_id, PrintJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho não encontrado")
         
@@ -130,7 +135,7 @@ def release_job(
     from app.services.settings_service import get_system_settings_dict
     
     quota = get_or_create_current_quota(db, job.user, job.submitted_at)
-    sys_settings = get_system_settings_dict(db)
+    sys_settings = get_system_settings_dict(db, current_user.organization_id)
     blocking_enabled = sys_settings["blocking_enabled"]
     
     authorized_pages = can_consume(quota, job.pages)
@@ -170,7 +175,7 @@ def cancel_job(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    job = db.query(PrintJob).filter(PrintJob.id == job_id).first()
+    job = db.query(PrintJob).filter(PrintJob.organization_id == current_user.organization_id, PrintJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho não encontrado")
         
@@ -210,7 +215,7 @@ def web_print_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> PrintJobDecision:
     # 1. Resolve printer
-    printer = db.query(Printer).filter(Printer.id == printer_id).first()
+    printer = db.query(Printer).filter(Printer.organization_id == current_user.organization_id, Printer.id == printer_id).first()
     if not printer:
         raise HTTPException(status_code=404, detail="Impressora não encontrada")
         
@@ -238,7 +243,7 @@ def web_print_endpoint(
     )
     
     try:
-        decision = register_print_job(db, payload)
+        decision = register_print_job(db, payload, current_user.organization_id)
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -251,7 +256,7 @@ def web_print_endpoint(
                 f.write(file_content)
             
             # Update the external_job_id to map to the file
-            job = db.query(PrintJob).filter(PrintJob.id == decision.job_id).first()
+            job = db.query(PrintJob).filter(PrintJob.organization_id == current_user.organization_id, PrintJob.id == decision.job_id).first()
             if job:
                 job.external_job_id = f"webprint_{decision.job_id}"
                 db.commit()
@@ -264,7 +269,7 @@ def web_print_endpoint(
 @router.get("/agent-web-prints")
 def get_agent_web_prints(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     # Query all released web-prints that are not yet printed
     # Web print jobs have external_job_id pattern: webprint_{job_id}
@@ -272,6 +277,8 @@ def get_agent_web_prints(
         db.query(PrintJob)
         .join(Printer)
         .filter(
+            PrintJob.organization_id == current_user.organization_id,
+            Printer.organization_id == current_user.organization_id,
             PrintJob.status.in_([JobStatus.released, JobStatus.authorized]),
             PrintJob.external_job_id.like("webprint_%"),
             ~PrintJob.external_job_id.like("webprint_printed_%")
@@ -295,9 +302,9 @@ def get_agent_web_prints(
 def download_web_print_file(
     job_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> FileResponse:
-    job = db.query(PrintJob).filter(PrintJob.id == job_id).first()
+    job = db.query(PrintJob).filter(PrintJob.organization_id == current_user.organization_id, PrintJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho de impressão não encontrado")
         
@@ -316,9 +323,9 @@ def download_web_print_file(
 def confirm_web_printed(
     job_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
-    job = db.query(PrintJob).filter(PrintJob.id == job_id).first()
+    job = db.query(PrintJob).filter(PrintJob.organization_id == current_user.organization_id, PrintJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho não encontrado")
         

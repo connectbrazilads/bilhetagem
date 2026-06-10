@@ -27,9 +27,15 @@ def _read_quota(quota: Quota) -> QuotaRead:
 @router.get("", response_model=list[QuotaRead])
 def list_quotas(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> list[QuotaRead]:
-    quotas = db.query(Quota).join(User).order_by(Quota.year.desc(), Quota.month.desc(), User.username).all()
+    quotas = (
+        db.query(Quota)
+        .join(User)
+        .filter(Quota.organization_id == actor.organization_id, User.organization_id == actor.organization_id)
+        .order_by(Quota.year.desc(), Quota.month.desc(), User.username)
+        .all()
+    )
     return [_read_quota(quota) for quota in quotas]
 
 
@@ -40,7 +46,7 @@ def update_quota(
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> QuotaRead:
-    quota = db.get(Quota, quota_id)
+    quota = db.query(Quota).filter(Quota.organization_id == actor.organization_id, Quota.id == quota_id).first()
     if not quota:
         raise HTTPException(status_code=404, detail="Cota não encontrada")
     quota.monthly_limit = payload.monthly_limit

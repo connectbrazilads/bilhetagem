@@ -20,9 +20,9 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 @router.get("", response_model=DashboardMetrics)
 def get_reports(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> dict:
-    return dashboard_metrics(db)
+    return dashboard_metrics(db, actor.organization_id)
 
 
 @router.get("/export")
@@ -31,9 +31,9 @@ def export_report(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> Response:
-    query = db.query(PrintJob).order_by(PrintJob.submitted_at.desc())
+    query = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id).order_by(PrintJob.submitted_at.desc())
     if date_from:
         query = query.filter(PrintJob.submitted_at >= date_from)
     if date_to:

@@ -12,8 +12,12 @@ from app.schemas.settings import GeneralSettings
 
 
 def test_general_settings_api(db_session: Session):
+    actor = User(username="admin-settings", full_name="Admin", role=UserRole.admin, is_active=True)
+    db_session.add(actor)
+    db_session.commit()
+
     # 1. GET initial settings (should return defaults)
-    res = get_general_settings(db=db_session)
+    res = get_general_settings(db=db_session, actor=actor)
     assert res.blocking_enabled is True
     assert res.show_balance is True
     assert res.default_monthly_quota == 500
@@ -26,13 +30,13 @@ def test_general_settings_api(db_session: Session):
         show_balance=False,
         safe_release_enabled=True
     )
-    res_updated = update_general_settings(payload=updated_payload, db=db_session)
+    res_updated = update_general_settings(payload=updated_payload, db=db_session, actor=actor)
     assert res_updated.blocking_enabled is False
     assert res_updated.show_balance is False
     assert res_updated.default_monthly_quota == 200
 
     # 3. GET to verify persistence
-    res_verified = get_general_settings(db=db_session)
+    res_verified = get_general_settings(db=db_session, actor=actor)
     assert res_verified.blocking_enabled is False
     assert res_verified.show_balance is False
 

@@ -11,19 +11,30 @@ def get_or_create_current_quota(db: Session, user: User, moment: datetime | None
     moment = moment or datetime.now(timezone.utc)
     quota = (
         db.query(Quota)
-        .filter(Quota.user_id == user.id, Quota.year == moment.year, Quota.month == moment.month)
+        .filter(
+            Quota.organization_id == user.organization_id,
+            Quota.user_id == user.id,
+            Quota.year == moment.year,
+            Quota.month == moment.month,
+        )
         .with_for_update()
         .first()
     )
     if quota:
         return quota
 
-    latest_quota = db.query(Quota).filter(Quota.user_id == user.id).order_by(Quota.id.desc()).first()
+    latest_quota = (
+        db.query(Quota)
+        .filter(Quota.organization_id == user.organization_id, Quota.user_id == user.id)
+        .order_by(Quota.id.desc())
+        .first()
+    )
     from app.services.settings_service import get_system_settings_dict
-    sys_settings = get_system_settings_dict(db)
+    sys_settings = get_system_settings_dict(db, user.organization_id)
     monthly_limit = latest_quota.monthly_limit if latest_quota else sys_settings["default_monthly_quota"]
     monthly_balance = latest_quota.monthly_balance if latest_quota else 50.0
     quota = Quota(
+        organization_id=user.organization_id,
         user_id=user.id,
         year=moment.year,
         month=moment.month,

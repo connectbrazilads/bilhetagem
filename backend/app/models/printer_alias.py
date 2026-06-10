@@ -14,6 +14,7 @@ class PrinterAlias(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), default=1, nullable=False)
     printer_id: Mapped[int | None] = mapped_column(ForeignKey("printers.id"), nullable=True)
     agent_id: Mapped[int | None] = mapped_column(ForeignKey("print_agents.id"), nullable=True)
     queue_name: Mapped[str] = mapped_column(String(180), nullable=False)
