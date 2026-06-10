@@ -67,6 +67,18 @@ def _csv_safe(value) -> str:
     return text
 
 
+def _date_filename_part(value: datetime | None, fallback: str) -> str:
+    if not value:
+        return fallback
+    return value.date().isoformat()
+
+
+def _audit_export_filename(date_from: datetime | None, date_to: datetime | None) -> str:
+    if not date_from and not date_to:
+        return "auditoria.csv"
+    return f"auditoria-{_date_filename_part(date_from, 'inicio')}-{_date_filename_part(date_to, 'hoje')}.csv"
+
+
 @router.get("", response_model=list[AuditLogRead])
 def list_audit_logs(
     action: str | None = Query(default=None, max_length=80),
@@ -170,5 +182,5 @@ def export_audit_logs(
     return Response(
         content=output.getvalue(),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": 'attachment; filename="auditoria.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="{_audit_export_filename(date_from, date_to)}"'},
     )

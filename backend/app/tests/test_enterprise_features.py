@@ -2238,6 +2238,7 @@ def test_audit_log_filters_by_date_and_exports_csv(db_session: Session):
     assert "KONICA" in body
     assert "antigo" not in body
     assert "audit_logs_exported" not in body
+    assert response.headers["content-disposition"] == 'attachment; filename="auditoria-2026-02-01-2026-02-28.csv"'
 
     audit = db_session.query(AuditLog).filter(AuditLog.action == "audit_logs_exported").one()
     assert audit.actor_user_id == admin.id
