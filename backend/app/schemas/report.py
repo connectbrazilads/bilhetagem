@@ -127,6 +127,10 @@ class MonthlyClosingTotalsSnapshot(BaseModel):
     blocked_pages: int = 0
     blocked_cost: float = 0.0
     total_cost: float = 0.0
+    cost_per_page: float = 0.0
+    mono_page_share_percent: float = 0.0
+    color_page_share_percent: float = 0.0
+    saved_page_share_percent: float = 0.0
     released_jobs: int = 0
 
 

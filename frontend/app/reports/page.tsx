@@ -64,6 +64,10 @@ type MonthlyClosing = {
       pending_pages?: number;
       pending_cost?: number;
       blocked_cost?: number;
+      cost_per_page?: number;
+      mono_page_share_percent?: number;
+      color_page_share_percent?: number;
+      saved_page_share_percent?: number;
     };
     by_user?: ClosingSnapshotRow[];
     by_department?: ClosingSnapshotRow[];
@@ -334,6 +338,7 @@ export default function ReportsPage() {
       }
     );
   }, [closings]);
+  const closingAverageCost = closingSummary.pages > 0 ? closingSummary.cost / closingSummary.pages : 0;
   const costCenters = useMemo(
     () => Array.from(new Set(departments.map((department) => department.cost_center).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b)),
     [departments]
@@ -411,11 +416,12 @@ export default function ReportsPage() {
       </Surface>
 
       {closings.length > 0 ? (
-        <div className="mb-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="mb-4 grid gap-3 md:grid-cols-3 xl:grid-cols-7">
           <ClosingMetric label="Fechamentos" value={closingSummary.count} detail="Snapshots gerados" icon={CalendarCheck} />
           <ClosingMetric label="Ultimo periodo" value={closingSummary.latestPeriod} detail="Base para cobranca" icon={FileText} />
           <ClosingMetric label="Paginas fechadas" value={closingSummary.pages} detail="Volume cobravel congelado" icon={Printer} />
           <ClosingMetric label="Custo fechado" value={`R$ ${closingSummary.cost.toFixed(2)}`} detail="Total faturavel" icon={FileText} />
+          <ClosingMetric label="Custo medio" value={`R$ ${closingAverageCost.toFixed(2)}`} detail="Por pagina fechada" icon={FileText} />
           <ClosingMetric label="Paginas salvas" value={closingSummary.savedPages} detail="Bloqueios e cancelamentos" icon={FileText} tone="success" />
           <ClosingMetric label="Pendencias" value={closingSummary.pendingJobs} detail="Jobs aguardando acao" icon={FileText} tone={closingSummary.pendingJobs > 0 ? "warn" : "neutral"} />
         </div>
@@ -502,6 +508,9 @@ export default function ReportsPage() {
                           <span>R$ {(closing.snapshot.totals?.pending_cost ?? 0).toFixed(2)} pendente</span>
                           <span>{closing.blocked_jobs.toLocaleString("pt-BR")} bloqueado(s)</span>
                           <span>R$ {(closing.snapshot.totals?.blocked_cost ?? 0).toFixed(2)} bloqueado estimado</span>
+                          <span>R$ {(closing.snapshot.totals?.cost_per_page ?? 0).toFixed(2)}/pag. medio</span>
+                          <span>{(closing.snapshot.totals?.color_page_share_percent ?? 0).toFixed(1)}% coloridas</span>
+                          <span>{(closing.snapshot.totals?.saved_page_share_percent ?? 0).toFixed(1)}% salvas</span>
                         </div>
                         <div className="grid gap-4 lg:grid-cols-5">
                           <SnapshotList title="Top usuarios" rows={closing.snapshot.by_user ?? []} />

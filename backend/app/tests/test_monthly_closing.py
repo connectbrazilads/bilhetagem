@@ -119,6 +119,10 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert closing.snapshot["totals"]["pending_pages"] == 5
     assert closing.snapshot["totals"]["pending_cost"] == 1.25
     assert closing.snapshot["totals"]["blocked_cost"] == 0.75
+    assert closing.snapshot["totals"]["cost_per_page"] == 0.11
+    assert closing.snapshot["totals"]["mono_page_share_percent"] == 71.4
+    assert closing.snapshot["totals"]["color_page_share_percent"] == 28.6
+    assert closing.snapshot["totals"]["saved_page_share_percent"] == 17.6
     assert closing.snapshot["by_user"][0]["name"] == "Ana Financeiro"
     assert closing.snapshot["by_cost_center"][0]["name"] == "CC-FIN"
     assert closing.snapshot["by_cost_center"][0]["pages"] == 14
@@ -196,6 +200,9 @@ def test_monthly_closing_freezes_commercial_snapshot(db_session: Session):
     assert validated_closing.snapshot.totals.released_jobs == 1
     assert validated_closing.snapshot.totals.pending_cost == 1.25
     assert validated_closing.snapshot.totals.blocked_cost == 0.75
+    assert validated_closing.snapshot.totals.cost_per_page == 0.11
+    assert validated_closing.snapshot.totals.color_page_share_percent == 28.6
+    assert validated_closing.snapshot.totals.saved_page_share_percent == 17.6
     assert validated_closing.snapshot.by_policy[0].name == "Bloquear colorido"
     assert validated_closing.snapshot.by_policy[0].blocked_cost == 0.75
     assert validated_closing.snapshot.by_cost_center[0].name == "CC-FIN"
@@ -289,14 +296,22 @@ def test_monthly_closing_export_xlsx(db_session: Session):
     assert workbook["Resumo"]["B15"].value == 0.75
     assert workbook["Resumo"]["A16"].value == "Custo total"
     assert workbook["Resumo"]["B16"].value == 1.5
-    assert workbook["Resumo"]["A20"].value == "Plano"
-    assert workbook["Resumo"]["B20"].value == "Enterprise"
-    assert workbook["Resumo"]["A21"].value == "Status comercial"
-    assert workbook["Resumo"]["B21"].value == "Em dia"
-    assert workbook["Resumo"]["A22"].value == "Limite contratado de impressoras"
-    assert workbook["Resumo"]["B22"].value == 3
-    assert workbook["Resumo"]["A25"].value == "Uso do contrato de impressoras (%)"
-    assert workbook["Resumo"]["B25"].value == 33.3
+    assert workbook["Resumo"]["A17"].value == "Custo medio por pagina"
+    assert workbook["Resumo"]["B17"].value == 0.11
+    assert workbook["Resumo"]["A18"].value == "Paginas P&B (%)"
+    assert workbook["Resumo"]["B18"].value == 71.4
+    assert workbook["Resumo"]["A19"].value == "Paginas coloridas (%)"
+    assert workbook["Resumo"]["B19"].value == 28.6
+    assert workbook["Resumo"]["A20"].value == "Paginas salvas (%)"
+    assert workbook["Resumo"]["B20"].value == 17.6
+    assert workbook["Resumo"]["A24"].value == "Plano"
+    assert workbook["Resumo"]["B24"].value == "Enterprise"
+    assert workbook["Resumo"]["A25"].value == "Status comercial"
+    assert workbook["Resumo"]["B25"].value == "Em dia"
+    assert workbook["Resumo"]["A26"].value == "Limite contratado de impressoras"
+    assert workbook["Resumo"]["B26"].value == 3
+    assert workbook["Resumo"]["A29"].value == "Uso do contrato de impressoras (%)"
+    assert workbook["Resumo"]["B29"].value == 33.3
     assert workbook["Impressoras"]["A2"].value == "KONICA_FECHAMENTO"
     assert workbook["Impressoras"]["G1"].value == "Custo/Pag."
     assert workbook["Impressoras"]["G2"].value == 0.11

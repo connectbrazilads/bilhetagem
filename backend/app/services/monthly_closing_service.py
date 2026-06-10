@@ -205,6 +205,10 @@ def build_monthly_snapshot(db: Session, organization_id: int, year: int, month: 
     totals["total_cost"] = _round_money(totals["total_cost"])
     totals["pending_cost"] = _round_money(totals["pending_cost"])
     totals["blocked_cost"] = _round_money(totals["blocked_cost"])
+    totals["cost_per_page"] = _cost_per_page(totals["total_cost"], totals["total_pages"])
+    totals["mono_page_share_percent"] = _percent_share(totals["mono_pages"], totals["total_pages"])
+    totals["color_page_share_percent"] = _percent_share(totals["color_pages"], totals["total_pages"])
+    totals["saved_page_share_percent"] = _percent_share(totals["blocked_pages"], totals["total_pages"] + totals["blocked_pages"])
     return {
         "organization": {
             "id": organization_id,

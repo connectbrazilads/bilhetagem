@@ -264,9 +264,9 @@ def render_monthly_closing_pdf(closing: MonthlyClosing) -> bytes:
     col_w = (PAGE_WIDTH - 100) / 4
     totals = closing.snapshot.get("totals", {}) if closing.snapshot else {}
     _draw_metric(pdf, 40, y, col_w, "Paginas cobraveis", str(closing.total_pages), f"{closing.billable_jobs} trab. | {totals.get('released_jobs', 0)} liberado(s)")
-    _draw_metric(pdf, 50 + col_w, y, col_w, "Custo total", _money(closing.total_cost), f"Pend.: {_money(float(totals.get('pending_cost', 0)))}")
-    _draw_metric(pdf, 60 + col_w * 2, y, col_w, "Coloridas", str(closing.color_pages), f"P&B: {closing.mono_pages}")
-    _draw_metric(pdf, 70 + col_w * 3, y, col_w, "Paginas salvas", str(closing.blocked_pages), f"{closing.blocked_jobs} bloq. | {_money(float(totals.get('blocked_cost', 0)))}")
+    _draw_metric(pdf, 50 + col_w, y, col_w, "Custo total", _money(closing.total_cost), f"Medio: {_money(float(totals.get('cost_per_page', 0)))}/pag.")
+    _draw_metric(pdf, 60 + col_w * 2, y, col_w, "Coloridas", str(closing.color_pages), f"{float(totals.get('color_page_share_percent', 0)):.1f}% | P&B: {closing.mono_pages}")
+    _draw_metric(pdf, 70 + col_w * 3, y, col_w, "Paginas salvas", str(closing.blocked_pages), f"{float(totals.get('saved_page_share_percent', 0)):.1f}% | {_money(float(totals.get('blocked_cost', 0)))}")
     y -= 92
 
     eco = closing.snapshot.get("eco", {})
@@ -414,6 +414,10 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
     summary.append(["Paginas salvas", closing.blocked_pages])
     summary.append(["Custo bloqueado estimado", closing.snapshot.get("totals", {}).get("blocked_cost", 0)])
     summary.append(["Custo total", closing.total_cost])
+    summary.append(["Custo medio por pagina", closing.snapshot.get("totals", {}).get("cost_per_page", 0)])
+    summary.append(["Paginas P&B (%)", closing.snapshot.get("totals", {}).get("mono_page_share_percent", 0)])
+    summary.append(["Paginas coloridas (%)", closing.snapshot.get("totals", {}).get("color_page_share_percent", 0)])
+    summary.append(["Paginas salvas (%)", closing.snapshot.get("totals", {}).get("saved_page_share_percent", 0)])
     eco = closing.snapshot.get("eco", {})
     summary.append(["CO2 evitado (g)", eco.get("co2_saved_g", 0)])
     summary.append(["Agua preservada (L)", eco.get("water_saved_l", 0)])
@@ -426,7 +430,7 @@ def render_monthly_closing_xlsx(closing: MonthlyClosing) -> bytes:
         summary.append(["Impressoras ativas", contract.get("active_printers_count", 0)])
         summary.append(["Uso do contrato de impressoras (%)", contract.get("printer_usage_percent", 0.0)])
         summary.append(["Status do limite de impressoras", _xlsx_safe(contract.get("printer_limit_status", "unlimited"))])
-    for cell in ("B9", "B15", "B16"):
+    for cell in ("B9", "B15", "B16", "B17"):
         summary[cell].number_format = '"R$" #,##0.00'
     _style_sheet(summary)
 
