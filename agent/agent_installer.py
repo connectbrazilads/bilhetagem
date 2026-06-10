@@ -17,6 +17,14 @@ INSTALL_DIR = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Print
 AGENT_EXE_NAME = "PrintBillingAgent.exe"
 CONFIG_NAME = "config.json"
 EVENT_LOG_CHANNEL = "Microsoft-Windows-PrintService/Operational"
+UNSAFE_AGENT_PASSWORDS = {
+    "",
+    "agent",
+    "agent12345",
+    "admin12345",
+    "change-me-agent-password",
+    "change-me-admin-password",
+}
 
 
 def app_source_dir() -> Path:
@@ -139,6 +147,10 @@ def normalize_text(value) -> str:
     return str(value or "").strip()
 
 
+def is_unsafe_agent_password(value: str) -> bool:
+    return normalize_text(value).lower() in UNSAFE_AGENT_PASSWORDS
+
+
 def build_config(existing: dict, template: dict, args: argparse.Namespace) -> dict:
     if args.silent:
         api_url = pick_arg_or_existing(args.api_url, existing, "PRINTBILLING_API_URL", "")
@@ -201,6 +213,8 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
     spool_server = normalize_text(spool_server)
     if not api_url or not username or not password or not organization_slug:
         raise RuntimeError("Configuracao do agent requer API URL, usuario, senha e slug da empresa.")
+    if is_unsafe_agent_password(password):
+        raise RuntimeError("Senha do usuario tecnico do agent e insegura. Gere uma senha exclusiva para esta empresa.")
 
     return {
         "PRINTBILLING_API_URL": api_url.rstrip("/"),

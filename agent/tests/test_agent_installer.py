@@ -267,3 +267,37 @@ def test_silent_new_install_ignores_template_credentials_for_required_fields():
         assert "--organization" in str(exc)
     else:
         raise AssertionError("Instalacao silenciosa nova nao deve usar credenciais do template")
+
+
+def test_silent_install_rejects_known_unsafe_agent_password():
+    try:
+        build_config(
+            {},
+            {},
+            args(
+                api_url="https://billing.example.com",
+                username="agent",
+                password="agent12345",
+                organization="cliente-a",
+            ),
+        )
+    except RuntimeError as exc:
+        assert "senha exclusiva" in str(exc).lower()
+    else:
+        raise AssertionError("Instalacao silenciosa nova nao deve aceitar senha padrao do agent")
+
+
+def test_silent_reinstall_rejects_existing_unsafe_agent_password():
+    existing = {
+        "PRINTBILLING_API_URL": "https://billing.example.com",
+        "PRINTBILLING_AGENT_USER": "agent",
+        "PRINTBILLING_AGENT_PASSWORD": "change-me-agent-password",
+        "PRINTBILLING_ORGANIZATION_SLUG": "cliente-a",
+    }
+
+    try:
+        build_config(existing, {}, args())
+    except RuntimeError as exc:
+        assert "senha exclusiva" in str(exc).lower()
+    else:
+        raise AssertionError("Reinstalacao silenciosa nao deve preservar senha placeholder")
