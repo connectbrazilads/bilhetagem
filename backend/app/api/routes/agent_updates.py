@@ -480,6 +480,14 @@ def _agent_health_alerts(
             alerts.append(recent_error_alert)
     if agent.event_log_enabled is False:
         alerts.append(AgentHealthAlertRead(code="event_log_disabled", severity="warning", message="Event Log de impressao desativado no agent"))
+    if agent.local_admin is False:
+        alerts.append(
+            AgentHealthAlertRead(
+                code="local_admin_missing",
+                severity="warning",
+                message="Agent sem privilegio administrativo local; acoes remotas e controle de filas podem falhar",
+            )
+        )
     if agent.last_seen_at and not present_aliases:
         alerts.append(AgentHealthAlertRead(code="no_queues", severity="warning", message="Nenhuma fila local detectada no ultimo heartbeat"))
     if stale_queues:
@@ -615,6 +623,7 @@ def _agent_to_read(
         capture_mode=agent.capture_mode,
         event_log_enabled=agent.event_log_enabled,
         auto_update_enabled=agent.auto_update_enabled,
+        local_admin=agent.local_admin,
         last_error=agent.last_error,
         last_seen_at=agent.last_seen_at,
         created_at=agent.created_at,
@@ -899,6 +908,7 @@ def agent_heartbeat(
     agent.capture_mode = _clean_optional(payload.capture_mode)
     agent.event_log_enabled = payload.event_log_enabled
     agent.auto_update_enabled = payload.auto_update_enabled
+    agent.local_admin = payload.local_admin
     agent.last_error = _clean_optional(payload.last_error)
     agent.last_seen_at = now
 

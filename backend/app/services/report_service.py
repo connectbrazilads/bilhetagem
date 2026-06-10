@@ -121,7 +121,7 @@ def _agent_has_operational_alert(
 ) -> bool:
     if not _agent_is_online(agent, now):
         return True
-    if agent.last_error or agent.event_log_enabled is False:
+    if agent.last_error or agent.event_log_enabled is False or agent.local_admin is False:
         return True
     if is_newer_version(latest_agent_version, agent.version):
         return True

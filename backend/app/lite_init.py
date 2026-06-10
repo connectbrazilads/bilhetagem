@@ -97,6 +97,8 @@ def _ensure_lite_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN event_log_enabled BOOLEAN")
         if "auto_update_enabled" not in agent_columns:
             conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN auto_update_enabled BOOLEAN")
+        if "local_admin" not in agent_columns:
+            conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN local_admin BOOLEAN")
         if "last_error" not in agent_columns:
             conn.exec_driver_sql("ALTER TABLE print_agents ADD COLUMN last_error VARCHAR(500)")
         queue_actions_count = conn.exec_driver_sql(

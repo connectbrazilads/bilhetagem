@@ -61,6 +61,7 @@ type AgentRow = {
   capture_mode: string | null;
   event_log_enabled: boolean | null;
   auto_update_enabled: boolean | null;
+  local_admin: boolean | null;
   last_error: string | null;
   last_seen_at: string | null;
   created_at: string;
@@ -401,6 +402,7 @@ export default function AgentsPage() {
         (agentStatusFilter === "alerts" && agent.health_alerts.length > 0) ||
         (agentStatusFilter === "outdated" && hasAlert(agent, "outdated_version")) ||
         (agentStatusFilter === "auto-update-off" && hasAlert(agent, "auto_update_disabled")) ||
+        (agentStatusFilter === "local-admin-missing" && hasAlert(agent, "local_admin_missing")) ||
         (agentStatusFilter === "unbound" && hasAlert(agent, "unbound_queues")) ||
         (agentStatusFilter === "identity-conflict" && hasAlert(agent, "hardware_identity_conflict")) ||
         (agentStatusFilter === "generic" && hasAlert(agent, "generic_queue_names")) ||
@@ -495,6 +497,7 @@ export default function AgentsPage() {
             <option value="alerts">Com alertas</option>
             <option value="outdated">Versao desatualizada</option>
             <option value="auto-update-off">Auto-update desligado</option>
+            <option value="local-admin-missing">Sem admin local</option>
             <option value="unbound">Filas sem vinculo</option>
             <option value="identity-conflict">Conflito fisico</option>
             <option value="generic">Filas genericas</option>
@@ -722,6 +725,36 @@ export default function AgentsPage() {
                     Ultimo contato
                   </div>
                   <div className="mt-1 text-sm font-semibold">{formatDate(selectedAgent.last_seen_at)}</div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-md bg-muted/50 p-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                    <MonitorCog className="h-4 w-4" />
+                    Permissao local
+                  </div>
+                  <div className={`mt-1 text-sm font-semibold ${selectedAgent.local_admin === false ? "text-amber-700" : ""}`}>
+                    {selectedAgent.local_admin === null ? "Nao informado" : selectedAgent.local_admin ? "Administrador" : "Sem administrador"}
+                  </div>
+                </div>
+                <div className="rounded-md bg-muted/50 p-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                    <Activity className="h-4 w-4" />
+                    Event Log
+                  </div>
+                  <div className={`mt-1 text-sm font-semibold ${selectedAgent.event_log_enabled === false ? "text-amber-700" : ""}`}>
+                    {selectedAgent.event_log_enabled === null ? "Nao informado" : selectedAgent.event_log_enabled ? "Ativo" : "Desativado"}
+                  </div>
+                </div>
+                <div className="rounded-md bg-muted/50 p-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                    <RefreshCw className="h-4 w-4" />
+                    Auto-update
+                  </div>
+                  <div className={`mt-1 text-sm font-semibold ${selectedAgent.auto_update_enabled === false ? "text-amber-700" : ""}`}>
+                    {selectedAgent.auto_update_enabled === null ? "Nao informado" : selectedAgent.auto_update_enabled ? "Ativo" : "Desativado"}
+                  </div>
                 </div>
               </div>
 

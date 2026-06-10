@@ -105,6 +105,33 @@ def test_agent_update_rejects_malformed_sha_before_download(monkeypatch, tmp_pat
     assert "Servidor informou SHA256 invalido" in monitor._last_error
 
 
+def test_agent_heartbeat_reports_local_admin_state(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
+    monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)
+
+    class FakeApiClient:
+        def __init__(self):
+            self.payload = None
+
+        def send_heartbeat(self, payload: dict) -> dict:
+            self.payload = payload
+            return {"id": 1}
+
+    api_client = FakeApiClient()
+    monitor = SpoolMonitor(
+        api_client,
+        agent_config=AgentConfig(heartbeat_interval_seconds=10),
+        sleep=lambda _: None,
+    )
+    monkeypatch.setattr(monitor, "_enum_printers", lambda: [])
+    monkeypatch.setattr(monitor, "_is_local_admin", lambda: False)
+
+    monitor._send_heartbeat_if_due()
+
+    assert api_client.payload is not None
+    assert api_client.payload["local_admin"] is False
+
+
 def test_queue_action_processing_continues_after_malformed_action(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
     monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)

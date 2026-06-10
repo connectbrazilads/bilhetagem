@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import uuid
+import ctypes
 from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from dataclasses import replace
@@ -134,6 +135,16 @@ class SpoolMonitor:
     def _heartbeat_os_user(self) -> str | None:
         return self._active_windows_username() or self._clean_username(os.getenv("USERNAME"))
 
+    @staticmethod
+    def _is_local_admin() -> bool | None:
+        if os.name != "nt":
+            return None
+        try:
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            logger.debug("Nao foi possivel identificar privilegio administrativo local", exc_info=True)
+            return None
+
     def _send_heartbeat_if_due(self) -> None:
         now = time.monotonic()
         if now - self._last_heartbeat < self.config.heartbeat_interval_seconds:
@@ -168,6 +179,7 @@ class SpoolMonitor:
             "capture_mode": "event_log" if self.config.use_print_event_log else "spool",
             "event_log_enabled": self.config.use_print_event_log,
             "auto_update_enabled": self.config.auto_update_enabled,
+            "local_admin": self._is_local_admin(),
             "last_error": self._last_error,
             "queues": queues,
             "logs": self._diagnostic_logs[-50:],

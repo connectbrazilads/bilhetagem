@@ -755,6 +755,7 @@ def test_agent_health_alerts_report_operational_issues(db_session: Session, monk
             version="0.2.0",
             capture_mode="spool",
             event_log_enabled=False,
+            local_admin=False,
             last_error="Falha ao ler fila",
             queues=[
                 {
@@ -772,8 +773,9 @@ def test_agent_health_alerts_report_operational_issues(db_session: Session, monk
     )
 
     alert_codes = {alert.code for alert in response.health_alerts}
-    assert {"last_error", "event_log_disabled", "unbound_queues", "generic_queue_names", "outdated_version"}.issubset(alert_codes)
+    assert {"last_error", "event_log_disabled", "local_admin_missing", "unbound_queues", "generic_queue_names", "outdated_version"}.issubset(alert_codes)
     assert "offline" not in alert_codes
+    assert response.local_admin is False
 
 
 def test_outdated_agent_with_disabled_auto_update_is_actionable(db_session: Session, monkeypatch):

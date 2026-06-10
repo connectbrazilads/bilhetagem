@@ -77,6 +77,7 @@ class AgentHeartbeatPayload(BaseModel):
     capture_mode: str | None = Field(default=None, max_length=40)
     event_log_enabled: bool | None = None
     auto_update_enabled: bool | None = None
+    local_admin: bool | None = None
     last_error: str | None = Field(default=None, max_length=500)
     queues: list[AgentQueuePayload] = Field(default_factory=list, max_length=200)
     logs: list[AgentLogPayload] = Field(default_factory=list, max_length=50)
@@ -192,6 +193,7 @@ class PrintAgentRead(BaseModel):
     capture_mode: str | None
     event_log_enabled: bool | None
     auto_update_enabled: bool | None
+    local_admin: bool | None
     last_error: str | None
     last_seen_at: datetime | None
     created_at: datetime
