@@ -296,7 +296,7 @@ export default function AuditPage() {
                     <td className="whitespace-nowrap p-4 text-muted-foreground">{new Date(log.created_at).toLocaleString("pt-BR")}</td>
                     <td className="p-4 font-medium">{log.actor_username || "Sistema"}</td>
                     <td className="p-4">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${auditActionClass(log.action)}`} title={log.action}>
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${auditActionClass(log.action, log.metadata)}`} title={log.action}>
                         {auditActionLabel(log.action)}
                       </span>
                     </td>
@@ -390,6 +390,8 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 function isCriticalAuditAction(action: string) {
   return (
+    action.includes("failed") ||
+    action.includes("error") ||
     action.startsWith("organization_") ||
     action.startsWith("agent_queue_action_") ||
     action.startsWith("agent_release_") ||
@@ -413,8 +415,9 @@ function entityLabel(entity: string) {
   return humanizeKey(entity);
 }
 
-function auditActionClass(action: string) {
-  if (action.includes("deleted") || action.includes("blocked") || action.includes("cancelled")) {
+function auditActionClass(action: string, metadata?: Record<string, unknown>) {
+  const status = typeof metadata?.status === "string" ? metadata.status : "";
+  if (status === "failed" || action.includes("failed") || action.includes("error") || action.includes("deleted") || action.includes("blocked") || action.includes("cancelled")) {
     return "border-red-200 bg-red-50 text-red-700";
   }
   if (action.includes("updated") || action.includes("reordered") || action.includes("settings")) {
@@ -423,7 +426,7 @@ function auditActionClass(action: string) {
   if (action.includes("exported") || action.includes("generated") || action.includes("sent")) {
     return "border-blue-200 bg-blue-50 text-blue-700";
   }
-  if (action.includes("created") || action.includes("authorized") || action.includes("released") || action.includes("confirmed")) {
+  if (status === "succeeded" || action.includes("created") || action.includes("authorized") || action.includes("released") || action.includes("confirmed")) {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
   return "border-slate-200 bg-slate-100 text-slate-700";
