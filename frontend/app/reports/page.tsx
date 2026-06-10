@@ -11,10 +11,13 @@ type JobRow = {
   id: number;
   username: string;
   user_full_name: string | null;
+  department_id?: number | null;
+  department_name?: string | null;
   printer_name: string;
   document_name: string | null;
   pages: number;
   is_color: boolean;
+  cost: number;
   status: string;
   reason: string | null;
   submitted_at: string;
@@ -234,11 +237,12 @@ export default function ReportsPage() {
       (acc, job) => {
         acc.jobs += 1;
         acc.pages += job.pages;
+        acc.cost += job.cost;
         acc.users.add(job.user_full_name || job.username);
         acc.printers.add(job.printer_name);
         return acc;
       },
-      { jobs: 0, pages: 0, users: new Set<string>(), printers: new Set<string>() }
+      { jobs: 0, pages: 0, cost: 0, users: new Set<string>(), printers: new Set<string>() }
     );
   }, [jobs]);
 
@@ -261,11 +265,12 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-4">
+      <div className="mb-4 grid gap-4 md:grid-cols-5">
         <Summary label="Trabalhos" value={summary.jobs} icon={FileText} />
         <Summary label="Paginas" value={summary.pages} icon={Printer} />
         <Summary label="Usuarios" value={summary.users.size} icon={Users} />
         <Summary label="Impressoras" value={summary.printers.size} icon={Printer} />
+        <Summary label="Custo" value={`R$ ${summary.cost.toFixed(2)}`} icon={FileText} />
       </div>
 
       <Surface className="mb-4 grid gap-3 p-4 md:grid-cols-[1fr_1fr_1fr_180px_auto]">
@@ -388,10 +393,12 @@ export default function ReportsPage() {
                 <tr>
                   <th className="p-4">Data</th>
                   <th className="p-4">Usuario</th>
+                  <th className="p-4">Departamento</th>
                   <th className="p-4">Impressora</th>
                   <th className="p-4">Origem</th>
                   <th className="p-4">Documento</th>
                   <th className="p-4 text-right">Paginas</th>
+                  <th className="p-4 text-right">Custo</th>
                   <th className="p-4">Tipo</th>
                   <th className="p-4">Status</th>
                 </tr>
@@ -401,6 +408,7 @@ export default function ReportsPage() {
                   <tr key={job.id} className="border-t bg-white transition-colors hover:bg-muted/30">
                     <td className="whitespace-nowrap p-4 text-muted-foreground">{new Date(job.submitted_at).toLocaleString("pt-BR")}</td>
                     <td className="whitespace-nowrap p-4 font-semibold">{job.user_full_name || job.username}</td>
+                    <td className="whitespace-nowrap p-4 text-muted-foreground">{job.department_name || "Sem departamento"}</td>
                     <td className="whitespace-nowrap p-4">{job.printer_name}</td>
                     <td className="min-w-[180px] p-4 text-xs text-muted-foreground">
                       <div>{job.computer_name ?? "-"}</div>
@@ -410,6 +418,7 @@ export default function ReportsPage() {
                       {job.document_name ?? "N/A"}
                     </td>
                     <td className="whitespace-nowrap p-4 text-right font-semibold">{job.pages} pag.</td>
+                    <td className="whitespace-nowrap p-4 text-right font-semibold">R$ {job.cost.toFixed(2)}</td>
                     <td className="p-4">
                       <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${job.is_color ? "border-purple-200 bg-purple-50 text-purple-700" : "border-slate-200 bg-slate-100 text-slate-700"}`}>
                         {job.is_color ? "Colorido" : "P&B"}
@@ -448,7 +457,8 @@ function statusLabel(status: string) {
   return "Bloqueada";
 }
 
-function Summary({ label, value, icon: Icon }: { label: string; value: number; icon: typeof FileText }) {
+function Summary({ label, value, icon: Icon }: { label: string; value: number | string; icon: typeof FileText }) {
+  const displayValue = typeof value === "number" ? value.toLocaleString("pt-BR") : value;
   return (
     <Surface className="p-5">
       <div className="flex items-center justify-between">
@@ -457,7 +467,7 @@ function Summary({ label, value, icon: Icon }: { label: string; value: number; i
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-3 text-3xl font-semibold">{value.toLocaleString("pt-BR")}</div>
+      <div className="mt-3 text-3xl font-semibold">{displayValue}</div>
     </Surface>
   );
 }

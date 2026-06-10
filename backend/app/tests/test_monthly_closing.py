@@ -154,6 +154,8 @@ def test_report_export_applies_department_filter(db_session: Session):
     exported_users = [row[1].value for row in sheet.iter_rows(min_row=2)]
     assert set(exported_users) == {"Ana Financeiro"}
     assert len(exported_users) == 4
+    assert sheet["C2"].value == "Financeiro"
+    assert sheet["I2"].value in {0.5, 1.0, 0.75, 4.95}
 
 
 def test_monthly_report_email_settings_api(db_session: Session):

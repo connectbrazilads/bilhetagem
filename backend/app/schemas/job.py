@@ -38,9 +38,12 @@ class PrintJobRead(BaseModel):
     id: int
     username: str
     user_full_name: str | None = None
+    department_id: int | None = None
+    department_name: str | None = None
     printer_name: str
     pages: int
     is_color: bool
+    cost: float
     status: JobStatus
     reason: str | None
     submitted_at: datetime

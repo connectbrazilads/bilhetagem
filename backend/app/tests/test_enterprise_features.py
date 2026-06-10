@@ -321,6 +321,9 @@ def test_organization_scope_isolates_core_views(db_session: Session):
     assert org_user_read.department_name == "Financeiro"
     assert [printer.name for printer in printers] == ["Org 1 Printer"]
     assert [job.username for job in jobs] == ["org1-user"]
+    assert jobs[0].department_id == org_one_department.id
+    assert jobs[0].department_name == "Financeiro"
+    assert jobs[0].cost == 0.15
     assert metrics["pages_month"] == 3
 
 
