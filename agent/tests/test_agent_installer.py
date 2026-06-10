@@ -51,6 +51,26 @@ def test_silent_install_can_clear_existing_default_username():
     assert config["PRINTBILLING_DEFAULT_USERNAME"] == ""
 
 
+def test_silent_install_trims_text_values_before_writing_config():
+    config = build_config(
+        {},
+        {},
+        args(
+            api_url=" https://billing.example.com/ ",
+            username=" agent ",
+            password=" secret ",
+            organization=" cliente-a ",
+            default_username=" DIEGO LCD ",
+        ),
+    )
+
+    assert config["PRINTBILLING_API_URL"] == "https://billing.example.com"
+    assert config["PRINTBILLING_AGENT_USER"] == "agent"
+    assert config["PRINTBILLING_AGENT_PASSWORD"] == "secret"
+    assert config["PRINTBILLING_ORGANIZATION_SLUG"] == "cliente-a"
+    assert config["PRINTBILLING_DEFAULT_USERNAME"] == "DIEGO LCD"
+
+
 def test_silent_reinstall_preserves_capture_and_update_flags():
     existing = {
         "PRINTBILLING_API_URL": "https://billing.example.com",

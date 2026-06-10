@@ -97,6 +97,10 @@ def as_bool(value) -> bool:
     return str(value).strip().lower() in {"true", "1", "yes", "sim"}
 
 
+def normalize_text(value) -> str:
+    return str(value or "").strip()
+
+
 def build_config(existing: dict, template: dict, args: argparse.Namespace) -> dict:
     if args.silent:
         api_url = pick_arg_or_existing(args.api_url, existing, "PRINTBILLING_API_URL", "")
@@ -139,6 +143,14 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             "Usuario padrao deste PC, se o Windows nao informar",
             existing.get("PRINTBILLING_DEFAULT_USERNAME") or template.get("PRINTBILLING_DEFAULT_USERNAME", ""),
         )
+
+    api_url = normalize_text(api_url)
+    username = normalize_text(username)
+    password = normalize_text(password)
+    organization_slug = normalize_text(organization_slug)
+    default_username = normalize_text(default_username)
+    if not api_url or not username or not password or not organization_slug:
+        raise RuntimeError("Configuracao do agent requer API URL, usuario, senha e slug da empresa.")
 
     return {
         "PRINTBILLING_API_URL": api_url.rstrip("/"),
