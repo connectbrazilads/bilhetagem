@@ -60,6 +60,23 @@ def _job_status_label(status: JobStatus | str) -> str:
     return labels.get(value, value)
 
 
+def _job_policy_action_label(action: str | None) -> str:
+    labels = {
+        "allow": "Excecao",
+        "block": "Bloqueio",
+        "require_release": "Liberacao",
+        "force_mono": "Cobrar P&B",
+    }
+    return labels.get(action or "", "")
+
+
+def _job_policy_summary(job: PrintJob) -> str:
+    if not job.policy_name:
+        return ""
+    action = _job_policy_action_label(job.policy_action)
+    return f"{action}: {job.policy_name}" if action else job.policy_name
+
+
 def summarize_print_jobs(jobs: list[PrintJob]) -> dict[str, float | int]:
     billable_statuses = {JobStatus.authorized, JobStatus.released}
     saved_statuses = {JobStatus.blocked, JobStatus.cancelled}
@@ -216,7 +233,7 @@ def render_print_jobs_pdf(jobs: list[PrintJob], title: str = "Relatorio de impre
     pdf.drawString(215, y - 10, "Impressora")
     pdf.drawString(335, y - 10, "Documento")
     pdf.drawRightString(475, y - 10, "Pag.")
-    pdf.drawString(490, y - 10, "Status")
+    pdf.drawString(490, y - 10, "Status/Politica")
     y -= 24
     pdf.setFont("Helvetica", 7)
 
@@ -238,7 +255,11 @@ def render_print_jobs_pdf(jobs: list[PrintJob], title: str = "Relatorio de impre
         pdf.drawString(215, y, printer_name)
         pdf.drawString(335, y, document_name)
         pdf.drawRightString(475, y, str(job.pages))
-        pdf.drawString(490, y, _truncate(_job_status_label(job.status), 16))
+        status_policy = _job_status_label(job.status)
+        policy_summary = _job_policy_summary(job)
+        if policy_summary:
+            status_policy = f"{status_policy} | {policy_summary}"
+        pdf.drawString(490, y, _truncate(status_policy, 24))
         y -= 14
 
     pdf.setFillColor(MUTED)
@@ -306,7 +327,7 @@ def render_print_jobs_xlsx(jobs: list[PrintJob]) -> bytes:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Impressoes"
-    sheet.append(["Data", "Usuario", "Departamento", "Impressora", "Documento", "Paginas", "Cor", "Status", "Custo", "Politica"])
+    sheet.append(["Data", "Usuario", "Departamento", "Impressora", "Documento", "Paginas", "Cor", "Status", "Custo", "Politica", "Acao Politica", "Motivo"])
     for job in jobs:
         sheet.append(
             [
@@ -320,6 +341,8 @@ def render_print_jobs_xlsx(jobs: list[PrintJob]) -> bytes:
                 _job_status_label(job.status),
                 job.cost,
                 job.policy_name or "",
+                _job_policy_action_label(job.policy_action),
+                job.reason or "",
             ]
         )
     for row in sheet.iter_rows(min_row=2, min_col=9, max_col=9):

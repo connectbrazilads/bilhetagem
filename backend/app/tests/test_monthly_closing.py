@@ -34,6 +34,9 @@ def _seed_job_data(db_session: Session) -> tuple[User, Printer]:
             is_color=False,
             cost=0.50,
             status=JobStatus.authorized,
+            reason="Cobrado como P&B pela politica: Cobrar colorido como PB",
+            policy_name="Cobrar colorido como PB",
+            policy_action="force_mono",
             submitted_at=datetime(2026, 5, 10, 10, tzinfo=timezone.utc),
         ),
         PrintJob(
@@ -163,6 +166,9 @@ def test_report_export_applies_department_filter(db_session: Session):
     assert len(exported_users) == 4
     assert sheet["C2"].value == "Financeiro"
     assert sheet["I2"].value in {0.5, 1.0, 0.75, 4.95}
+    assert sheet["J5"].value == "Cobrar colorido como PB"
+    assert sheet["K5"].value == "Cobrar P&B"
+    assert sheet["L5"].value == "Cobrado como P&B pela politica: Cobrar colorido como PB"
     assert workbook["Resumo"]["A8"].value == "Custo filtrado"
     assert workbook["Resumo"]["B8"].value == 6.45
 
