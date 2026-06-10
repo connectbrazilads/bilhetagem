@@ -265,6 +265,7 @@ def export_report(
                 "date_from": date_from.isoformat() if date_from else None,
                 "date_to": date_to.isoformat() if date_to else None,
             },
+            "filter_summary": filter_summary,
         },
     )
     db.commit()

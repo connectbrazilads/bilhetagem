@@ -234,6 +234,7 @@ def test_report_export_applies_department_filter(db_session: Session):
     assert audit.log_metadata["format"] == "xlsx"
     assert audit.log_metadata["rows"] == 4
     assert audit.log_metadata["filters"]["department_id"] == user.department_id
+    assert audit.log_metadata["filter_summary"] == {"Departamento": "Financeiro"}
 
 
 def test_report_export_pdf_uses_commercial_renderer_and_audit(db_session: Session):
