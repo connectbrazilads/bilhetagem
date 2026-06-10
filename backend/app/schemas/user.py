@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.user import UserRole
 
@@ -14,6 +14,13 @@ class UserCreate(BaseModel):
     department_name: str | None = None
     monthly_limit: int = Field(default=500, ge=0)
     monthly_balance: float = Field(default=50.0, ge=0.0)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def normalize_username(cls, value):
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
 
 
 class UserRead(BaseModel):

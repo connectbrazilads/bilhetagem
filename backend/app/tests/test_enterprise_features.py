@@ -5,6 +5,7 @@ import pytest
 from fastapi import HTTPException
 from openpyxl import load_workbook
 from pydantic import ValidationError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
@@ -2260,6 +2261,32 @@ def test_user_department_id_assignment_is_scoped_and_clearable(db_session: Sessi
     cleared = update_user_endpoint(created.id, UserUpdate(department_id=None), db=db_session, actor=admin)
     assert cleared.department_id is None
     assert cleared.department_name is None
+
+
+def test_user_creation_normalizes_username_and_rejects_case_duplicate(db_session: Session):
+    admin = User(username="user-normalize-admin", full_name="User Normalize Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.commit()
+
+    created = create_user_endpoint(
+        UserCreate(username=" DIEGO.LCD ", full_name="Diego LCD"),
+        db=db_session,
+        actor=admin,
+    )
+
+    assert created.username == "diego.lcd"
+    assert db_session.query(User).filter(User.organization_id == admin.organization_id, User.username == "diego.lcd").count() == 1
+
+    with pytest.raises(HTTPException) as exc:
+        create_user_endpoint(
+            UserCreate(username="diego.LCD", full_name="Diego Duplicado"),
+            db=db_session,
+            actor=admin,
+        )
+
+    assert exc.value.status_code == 409
+    db_session.rollback()
+    assert db_session.query(User).filter(User.organization_id == admin.organization_id, func.lower(User.username) == "diego.lcd").count() == 1
 
 
 def test_user_update_audit_includes_changed_fields(db_session: Session):

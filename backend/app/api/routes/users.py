@@ -104,6 +104,8 @@ def create_user_endpoint(
         raise HTTPException(status_code=409, detail="Usuário já cadastrado") from exc
     except ValueError as exc:
         db.rollback()
+        if str(exc) == "Usuario ja cadastrado":
+            raise HTTPException(status_code=409, detail="Usuário já cadastrado") from exc
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 

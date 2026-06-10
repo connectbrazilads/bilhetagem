@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
@@ -28,6 +29,13 @@ def create_user(db: Session, payload: UserCreate, organization_id: int) -> User:
     department = resolve_department(db, organization_id, payload.department_id, payload.department_name)
     if payload.department_id is not None and department is None:
         raise ValueError("Departamento nao encontrado")
+    existing = (
+        db.query(User)
+        .filter(User.organization_id == organization_id, func.lower(User.username) == payload.username.lower())
+        .first()
+    )
+    if existing:
+        raise ValueError("Usuario ja cadastrado")
     user = User(
         organization_id=organization_id,
         username=payload.username,
