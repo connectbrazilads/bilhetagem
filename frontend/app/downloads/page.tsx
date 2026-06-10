@@ -23,6 +23,7 @@ type AgentRelease = {
   published_at: string | null;
   notes: string | null;
   checksums_url: string | null;
+  checksums_sha256: string | null;
   signature_status: string;
   signature_summary: string;
   files: ReleaseFile[];
@@ -243,9 +244,16 @@ export default function DownloadsPage() {
     window.setTimeout(() => setCopiedCommand(null), 1800);
   }
 
-  async function copySha(file: ReleaseFile) {
+  async function copySha(file: ReleaseFile, releaseVersion: string) {
     await navigator.clipboard.writeText(file.sha256);
-    setCopiedSha(file.filename);
+    setCopiedSha(`${releaseVersion}:${file.filename}`);
+    window.setTimeout(() => setCopiedSha(null), 1800);
+  }
+
+  async function copyChecksumsSha(release: AgentRelease) {
+    if (!release.checksums_sha256) return;
+    await navigator.clipboard.writeText(release.checksums_sha256);
+    setCopiedSha(`${release.version}:SHA256SUMS`);
     window.setTimeout(() => setCopiedSha(null), 1800);
   }
 
@@ -543,6 +551,21 @@ export default function DownloadsPage() {
                           <Download className="h-3.5 w-3.5" />
                           Checksums
                         </Button>
+                        {release.checksums_sha256 ? (
+                          <div className="mt-2 flex max-w-[220px] items-center gap-2">
+                            <span className="truncate font-mono text-[11px] text-muted-foreground" title={release.checksums_sha256}>
+                              {release.checksums_sha256}
+                            </span>
+                            <Button
+                              variant="outline"
+                              className="h-7 shrink-0 px-2 text-xs"
+                              onClick={() => copyChecksumsSha(release)}
+                              title="Copiar SHA256 do SHA256SUMS"
+                            >
+                              {copiedSha === `${release.version}:SHA256SUMS` ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            </Button>
+                          </div>
+                        ) : null}
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2 font-medium">
@@ -574,9 +597,9 @@ export default function DownloadsPage() {
                           <span className="truncate font-mono text-xs" title={file.sha256}>
                             {file.sha256}
                           </span>
-                          <Button variant="outline" className="h-7 shrink-0 px-2 text-xs" onClick={() => copySha(file)} title="Copiar SHA256">
-                            {copiedSha === file.filename ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                            {copiedSha === file.filename ? "Copiado" : "Copiar"}
+                          <Button variant="outline" className="h-7 shrink-0 px-2 text-xs" onClick={() => copySha(file, release.version)} title="Copiar SHA256">
+                            {copiedSha === `${release.version}:${file.filename}` ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            {copiedSha === `${release.version}:${file.filename}` ? "Copiado" : "Copiar"}
                           </Button>
                         </div>
                       </td>

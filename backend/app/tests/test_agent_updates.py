@@ -115,6 +115,9 @@ def test_agent_releases_fall_back_to_legacy_file_when_manifest_is_invalid(db_ses
     assert [release.version for release in releases] == ["0.2.0"]
     assert releases[0].signature_status == "unsigned"
     assert releases[0].files[0].sha256 == hashlib.sha256(b"legacy-agent").hexdigest()
+    assert releases[0].checksums_sha256 == hashlib.sha256(
+        f"{releases[0].files[0].sha256}  PrintBillingAgent.exe\n".encode("utf-8")
+    ).hexdigest()
     assert published_agent_update_version() == "0.2.0"
     assert version.update_available is True
     assert version.sha256 == hashlib.sha256(b"legacy-agent").hexdigest()
@@ -159,6 +162,7 @@ def test_agent_releases_ignore_manifest_entries_without_safe_filename(db_session
     assert [release.version for release in releases] == ["0.4.0", "0.3.0"]
     assert releases[0].files == []
     assert releases[0].signature_status == "empty"
+    assert releases[0].checksums_sha256 is None
     assert releases[1].channel == "123"
     assert releases[1].notes is None
     assert releases[1].files[0].signature_status == "456"
@@ -307,6 +311,7 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     body = checksums.body.decode("utf-8")
     assert "PrintBillingAgent.exe" in body
     assert "PrintBillingAgentInstaller.exe" in body
+    assert releases[0].checksums_sha256 == hashlib.sha256(checksums.body).hexdigest()
     assert checksums.headers["content-disposition"] == "attachment; filename=SHA256SUMS-0.3.0.txt"
 
 

@@ -84,7 +84,7 @@ Get-AuthenticodeSignature .\PrintBillingAgentInstaller.exe
 Get-AuthenticodeSignature .\PrintBillingAgent.exe
 ```
 
-O hash deve bater com `SHA256SUMS.txt` e com o hash exibido na tela Downloads.
+O hash deve bater com `SHA256SUMS.txt` e com o hash exibido na tela Downloads. A tela tambem mostra o SHA256 do proprio `SHA256SUMS`, permitindo conferir se o indice de checksums baixado e o mesmo anunciado pelo backend.
 
 Valide automaticamente:
 

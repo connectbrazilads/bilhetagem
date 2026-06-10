@@ -242,6 +242,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                     published_at=_manifest_str(raw_release.get("published_at")),
                     notes=_manifest_str(raw_release.get("notes")),
                     checksums_url=f"/agent/releases/{version}/checksums",
+                    checksums_sha256=_release_checksums_sha256_for_files(files),
                     signature_status=signature_status,
                     signature_summary=signature_summary,
                     files=files,
@@ -252,23 +253,25 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
     path = _agent_file()
     legacy_size = _publishable_file_size(path)
     if legacy_size is not None:
+        files = [
+            AgentReleaseFileRead(
+                kind="agent",
+                filename=path.name,
+                size_bytes=legacy_size,
+                sha256=_sha256(path),
+                signature_status=None,
+                signer_subject=None,
+                download_url="/agent/download",
+            )
+        ]
         releases.append(
             AgentReleaseRead(
                 version=settings.agent_latest_version,
                 checksums_url=f"/agent/releases/{settings.agent_latest_version}/checksums",
+                checksums_sha256=_release_checksums_sha256_for_files(files),
                 signature_status="unsigned",
                 signature_summary="Artefato legado sem assinatura registrada no manifest",
-                files=[
-                    AgentReleaseFileRead(
-                        kind="agent",
-                        filename=path.name,
-                        size_bytes=legacy_size,
-                        sha256=_sha256(path),
-                        signature_status=None,
-                        signer_subject=None,
-                        download_url="/agent/download",
-                    )
-                ],
+                files=files,
             )
         )
     return releases
@@ -296,9 +299,18 @@ def _release_or_404(version: str) -> AgentReleaseRead:
     return release
 
 
-def _release_checksums_text(release: AgentReleaseRead) -> str:
-    lines = [f"{file.sha256}  {file.filename}" for file in sorted(release.files, key=lambda item: item.filename.lower())]
+def _release_checksums_text_for_files(files: list[AgentReleaseFileRead]) -> str:
+    lines = [f"{file.sha256}  {file.filename}" for file in sorted(files, key=lambda item: item.filename.lower())]
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _release_checksums_sha256_for_files(files: list[AgentReleaseFileRead]) -> str | None:
+    content = _release_checksums_text_for_files(files)
+    return hashlib.sha256(content.encode("utf-8")).hexdigest() if content else None
+
+
+def _release_checksums_text(release: AgentReleaseRead) -> str:
+    return _release_checksums_text_for_files(release.files)
 
 
 def _clean_optional(value: str | None) -> str | None:
