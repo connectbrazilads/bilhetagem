@@ -87,12 +87,34 @@ def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAge
         printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.serial_number == serial).first()
         if printer:
             return printer
+        alias = (
+            db.query(PrinterAlias)
+            .filter(
+                PrinterAlias.organization_id == organization_id,
+                PrinterAlias.serial_number == serial,
+                PrinterAlias.printer_id.isnot(None),
+            )
+            .first()
+        )
+        if alias and alias.printer:
+            return alias.printer
 
     ip_address = _clean_optional(payload.printer_ip_address)
     if ip_address:
         printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.ip_address == ip_address).first()
         if printer:
             return printer
+        alias = (
+            db.query(PrinterAlias)
+            .filter(
+                PrinterAlias.organization_id == organization_id,
+                PrinterAlias.ip_address == ip_address,
+                PrinterAlias.printer_id.isnot(None),
+            )
+            .first()
+        )
+        if alias and alias.printer:
+            return alias.printer
 
     queue_name = _clean_optional(payload.queue_name) or payload.printer_name
     if agent and queue_name:
@@ -102,6 +124,20 @@ def _find_existing_printer(db: Session, payload: PrintJobCreate, agent: PrintAge
                 PrinterAlias.organization_id == organization_id,
                 PrinterAlias.agent_id == agent.id,
                 PrinterAlias.queue_name == queue_name,
+            )
+            .first()
+        )
+        if alias and alias.printer:
+            return alias.printer
+
+    device_id = _clean_optional(payload.printer_device_id)
+    if device_id:
+        alias = (
+            db.query(PrinterAlias)
+            .filter(
+                PrinterAlias.organization_id == organization_id,
+                PrinterAlias.device_id == device_id,
+                PrinterAlias.printer_id.isnot(None),
             )
             .first()
         )

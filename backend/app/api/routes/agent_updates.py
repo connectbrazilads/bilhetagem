@@ -22,6 +22,7 @@ from app.schemas.agent import (
     AgentHeartbeatPayload,
     AgentHealthAlertRead,
     AgentLogRead,
+    AgentQueuePayload,
     AgentQueueBulkActionCreate,
     AgentReleaseFileRead,
     AgentReleaseRead,
@@ -387,6 +388,65 @@ def _bind_successful_queue_action(db: Session, action: AgentQueueAction) -> None
             alias.printer_id = None
 
 
+def _find_bound_printer_alias(
+    db: Session,
+    organization_id: int,
+    *,
+    serial_number: str | None = None,
+    ip_address: str | None = None,
+    device_id: str | None = None,
+    fingerprint: str | None = None,
+) -> PrinterAlias | None:
+    filters = [
+        (PrinterAlias.serial_number, serial_number),
+        (PrinterAlias.ip_address, ip_address),
+        (PrinterAlias.device_id, device_id),
+        (PrinterAlias.fingerprint, fingerprint),
+    ]
+    for column, value in filters:
+        cleaned = _clean_optional(value)
+        if not cleaned:
+            continue
+        alias = (
+            db.query(PrinterAlias)
+            .filter(
+                PrinterAlias.organization_id == organization_id,
+                column == cleaned,
+                PrinterAlias.printer_id.isnot(None),
+            )
+            .first()
+        )
+        if alias:
+            return alias
+    return None
+
+
+def _find_printer_for_queue_metadata(db: Session, organization_id: int, queue: AgentQueuePayload) -> Printer | None:
+    serial_number = _clean_optional(queue.serial_number)
+    if serial_number:
+        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.serial_number == serial_number).first()
+        if printer:
+            return printer
+
+    ip_address = _clean_optional(queue.ip_address)
+    if ip_address:
+        printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.ip_address == ip_address).first()
+        if printer:
+            return printer
+
+    alias = _find_bound_printer_alias(
+        db,
+        organization_id,
+        serial_number=serial_number,
+        ip_address=ip_address,
+        device_id=queue.device_id,
+        fingerprint=queue.fingerprint,
+    )
+    if alias and alias.printer:
+        return alias.printer
+    return None
+
+
 def _validate_queue_action_payload(
     db: Session,
     payload: AgentQueueActionCreate,
@@ -562,6 +622,10 @@ def agent_heartbeat(
         alias.device_id = _clean_optional(queue.device_id)
         alias.fingerprint = _clean_optional(queue.fingerprint)
         alias.last_seen_at = now
+        if alias.printer_id is None:
+            printer = _find_printer_for_queue_metadata(db, actor.organization_id, queue)
+            if printer:
+                alias.printer_id = printer.id
 
     _store_agent_logs(db, agent, payload, now)
     db.commit()

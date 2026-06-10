@@ -200,6 +200,46 @@ def test_jobs_with_different_queue_names_share_same_physical_printer(db_session:
     assert len(printer.aliases) == 2
 
 
+def test_usb_job_uses_known_alias_device_id_instead_of_creating_queue_printer(db_session: Session):
+    printer = Printer(organization_id=1, name="BROTHER DCP-T420W", is_color=False)
+    alias = PrinterAlias(
+        organization_id=1,
+        printer=printer,
+        queue_name="Brother USB",
+        connection_type="usb",
+        device_id="USBPRINT\\BROTHERDCP-T420W\\7&ABC",
+    )
+    db_session.add_all([printer, alias])
+    db_session.commit()
+
+    register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="diego",
+            printer_name="USER",
+            pages=2,
+            is_color=False,
+            external_job_id="eventlog:usb-device-id",
+            agent_uid="agent-usb-job",
+            computer_name="PC-USB",
+            queue_name="USER",
+            printer_port_name="USB001",
+            printer_driver_name="Brother Driver",
+            printer_connection_type="usb",
+            printer_device_id="USBPRINT\\BROTHERDCP-T420W\\7&ABC",
+            printer_fingerprint="usb:pc-usb|usbprint\\brotherdcp-t420w\\7&abc",
+        ),
+    )
+
+    assert db_session.query(Printer).count() == 1
+    job = db_session.query(PrintJob).one()
+    assert job.printer_id == printer.id
+    assert job.printer_alias_id != alias.id
+    assert job.queue_name == "USER"
+    user_alias = db_session.query(PrinterAlias).filter(PrinterAlias.queue_name == "USER").one()
+    assert user_alias.printer_id == printer.id
+
+
 def test_merge_printer_moves_jobs_and_aliases(db_session: Session):
     actor = User(username="admin", full_name="Admin", role=UserRole.admin, is_active=True)
     user = User(username="diego", full_name="Diego", role=UserRole.user, is_active=True)

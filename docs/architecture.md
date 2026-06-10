@@ -43,6 +43,8 @@ O agent envia metadados da fila quando disponiveis:
 - IP extraido da porta TCP/IP;
 - identificador WMI/USB quando existir.
 
+A API usa esses metadados para reduzir duplicidade de impressoras. Trabalhos e heartbeats tentam resolver a impressora fisica por numero de serie, IP, alias ja vinculado, `device_id` USB/WMI e fingerprint antes de criar ou manter uma fila solta. Assim, dois PCs podem usar nomes locais diferentes para a mesma impressora sem gerar equipamentos duplicados nos relatorios.
+
 ## Seguranca
 
 - JWT Bearer para API.

@@ -158,6 +158,80 @@ def test_agent_heartbeat_creates_agent_and_local_queues(db_session: Session):
     assert response.aliases[0].ip_address == "192.168.1.125"
 
 
+def test_agent_heartbeat_auto_binds_queue_to_known_physical_printer(db_session: Session):
+    actor = User(username="agent-bind", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(
+        organization_id=1,
+        name="KONICA FISICA",
+        ip_address="192.168.1.125",
+        serial_number="SN-AUTO-123",
+        is_color=True,
+    )
+    db_session.add_all([actor, printer])
+    db_session.commit()
+
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-bind-auto",
+            computer_name="PC-BIND",
+            queues=[
+                {
+                    "queue_name": "Konica Financeiro",
+                    "driver_name": "KONICA Driver",
+                    "port_name": "IP_192.168.1.125",
+                    "connection_type": "network",
+                    "ip_address": "192.168.1.125",
+                    "serial_number": "SN-AUTO-123",
+                    "fingerprint": "serial:sn-auto-123",
+                }
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert response.aliases[0].printer_id == printer.id
+    assert "unbound_queues" not in {alert.code for alert in response.health_alerts}
+
+
+def test_agent_heartbeat_auto_binds_usb_queue_by_known_device_id(db_session: Session):
+    actor = User(username="agent-usb-bind", full_name="Agent", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="BROTHER USB FISICA", is_color=False)
+    known_agent = PrinterAlias(
+        organization_id=1,
+        printer=printer,
+        queue_name="Brother USB",
+        connection_type="usb",
+        device_id="USBPRINT\\BROTHERDCP-T420W\\7&ABC",
+    )
+    db_session.add_all([actor, printer, known_agent])
+    db_session.commit()
+
+    response = agent_heartbeat(
+        payload=AgentHeartbeatPayload(
+            agent_uid="pc-usb-bind",
+            computer_name="PC-USB",
+            queues=[
+                {
+                    "queue_name": "USER",
+                    "driver_name": "Brother Driver",
+                    "port_name": "USB001",
+                    "connection_type": "usb",
+                    "device_id": "USBPRINT\\BROTHERDCP-T420W\\7&ABC",
+                    "fingerprint": "usb:pc-usb|usbprint\\brotherdcp-t420w\\7&abc",
+                }
+            ],
+        ),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert response.aliases[0].printer_id == printer.id
+    assert db_session.query(Printer).count() == 1
+
+
 def test_agent_health_alerts_report_operational_issues(db_session: Session, monkeypatch):
     monkeypatch.setattr(settings, "agent_latest_version", "0.3.0")
     actor = User(username="agent-alerts", full_name="Agent Alerts", role=UserRole.admin, is_active=True, organization_id=1)
