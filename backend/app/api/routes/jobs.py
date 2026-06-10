@@ -17,6 +17,7 @@ from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.schemas.job import PrintJobCreate, PrintJobDecision, PrintJobRead
 from app.services.print_job_service import register_print_job
+from app.services.settings_service import get_system_settings_dict
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -208,6 +209,15 @@ def get_pdf_page_count(file_content: bytes) -> int:
     return 1
 
 
+def _web_print_enabled(db: Session, organization_id: int) -> bool:
+    return bool(get_system_settings_dict(db, organization_id)["web_print_enabled"])
+
+
+def _ensure_web_print_enabled(db: Session, organization_id: int) -> None:
+    if not _web_print_enabled(db, organization_id):
+        raise HTTPException(status_code=403, detail="Modulo Web Print desativado")
+
+
 @router.post("/web-print", response_model=PrintJobDecision)
 def web_print_endpoint(
     file: UploadFile = File(...),
@@ -216,6 +226,8 @@ def web_print_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PrintJobDecision:
+    _ensure_web_print_enabled(db, current_user.organization_id)
+
     # 1. Resolve printer
     printer = db.query(Printer).filter(Printer.organization_id == current_user.organization_id, Printer.id == printer_id).first()
     if not printer:
@@ -273,6 +285,9 @@ def get_agent_web_prints(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
+    if not _web_print_enabled(db, current_user.organization_id):
+        return []
+
     # Query all released web-prints that are not yet printed
     # Web print jobs have external_job_id pattern: webprint_{job_id}
     jobs = (
@@ -306,6 +321,8 @@ def download_web_print_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> FileResponse:
+    _ensure_web_print_enabled(db, current_user.organization_id)
+
     job = db.query(PrintJob).filter(PrintJob.organization_id == current_user.organization_id, PrintJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho de impressão não encontrado")
@@ -327,6 +344,8 @@ def confirm_web_printed(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    _ensure_web_print_enabled(db, current_user.organization_id)
+
     job = db.query(PrintJob).filter(PrintJob.organization_id == current_user.organization_id, PrintJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho não encontrado")

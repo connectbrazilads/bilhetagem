@@ -1,10 +1,14 @@
 from datetime import datetime, timezone
+import pytest
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 
+from app.api.routes.jobs import get_agent_web_prints, web_print_endpoint
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 from app.models.print_job import PrintJob, JobStatus
 from app.models.quota import Quota
+from app.services.settings_service import update_system_settings
 from app.services.print_job_service import register_print_job
 from app.schemas.job import PrintJobCreate
 from app.api.routes.settings import get_general_settings, update_general_settings
@@ -20,6 +24,7 @@ def test_general_settings_api(db_session: Session):
     res = get_general_settings(db=db_session, actor=actor)
     assert res.blocking_enabled is True
     assert res.show_balance is True
+    assert res.web_print_enabled is True
     assert res.default_monthly_quota == 500
 
     # 2. PUT updated settings
@@ -28,17 +33,33 @@ def test_general_settings_api(db_session: Session):
         auto_create_users=False,
         blocking_enabled=False,
         show_balance=False,
-        safe_release_enabled=True
+        safe_release_enabled=True,
+        web_print_enabled=False,
     )
     res_updated = update_general_settings(payload=updated_payload, db=db_session, actor=actor)
     assert res_updated.blocking_enabled is False
     assert res_updated.show_balance is False
+    assert res_updated.web_print_enabled is False
     assert res_updated.default_monthly_quota == 200
 
     # 3. GET to verify persistence
     res_verified = get_general_settings(db=db_session, actor=actor)
     assert res_verified.blocking_enabled is False
     assert res_verified.show_balance is False
+    assert res_verified.web_print_enabled is False
+
+
+def test_web_print_module_can_be_disabled(db_session: Session):
+    actor = User(username="admin-webprint-settings", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    update_system_settings(db_session, {"web_print_enabled": False}, actor.organization_id)
+
+    with pytest.raises(HTTPException) as exc:
+        web_print_endpoint(file=None, printer_id=999, is_color=False, db=db_session, current_user=actor)
+    assert exc.value.status_code == 403
+    assert get_agent_web_prints(db=db_session, current_user=actor) == []
 
 
 def test_blocking_disabled_behavior(db_session: Session):

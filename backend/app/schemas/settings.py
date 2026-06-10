@@ -13,6 +13,7 @@ class GeneralSettings(BaseModel):
     blocking_enabled: bool = Field(default=True)
     show_balance: bool = Field(default=True)
     safe_release_enabled: bool = Field(default=True)
+    web_print_enabled: bool = Field(default=True)
 
 
 class MonthlyReportEmailSettings(BaseModel):

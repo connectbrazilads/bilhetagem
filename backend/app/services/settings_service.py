@@ -38,6 +38,7 @@ def get_system_settings_dict(db: Session, organization_id: int | None = None) ->
         "blocking_enabled": _parse_bool(settings_dict.get("blocking_enabled", None), True),
         "show_balance": _parse_bool(settings_dict.get("show_balance", None), True),
         "safe_release_enabled": _parse_bool(settings_dict.get("safe_release_enabled", None), settings.safe_release_enabled),
+        "web_print_enabled": _parse_bool(settings_dict.get("web_print_enabled", None), True),
     }
 
 

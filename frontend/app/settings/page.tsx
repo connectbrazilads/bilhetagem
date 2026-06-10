@@ -29,6 +29,7 @@ export default function SettingsPage() {
   const [blockingEnabled, setBlockingEnabled] = useState(true);
   const [showBalance, setShowBalance] = useState(true);
   const [safeReleaseEnabled, setSafeReleaseEnabled] = useState(true);
+  const [webPrintEnabled, setWebPrintEnabled] = useState(true);
   const [monthlyEmailEnabled, setMonthlyEmailEnabled] = useState(false);
   const [monthlyEmailRecipients, setMonthlyEmailRecipients] = useState("");
   const [monthlyEmailDay, setMonthlyEmailDay] = useState(1);
@@ -59,6 +60,7 @@ export default function SettingsPage() {
         blocking_enabled: boolean;
         show_balance: boolean;
         safe_release_enabled: boolean;
+        web_print_enabled: boolean;
       }>("/settings", token)
         .then((data) => {
           setDefaultQuota(data.default_monthly_quota);
@@ -66,6 +68,7 @@ export default function SettingsPage() {
           setBlockingEnabled(data.blocking_enabled);
           setShowBalance(data.show_balance);
           setSafeReleaseEnabled(data.safe_release_enabled);
+          setWebPrintEnabled(data.web_print_enabled);
         })
         .catch((err) => console.error("Erro ao buscar configuracoes no servidor:", err));
 
@@ -127,6 +130,7 @@ export default function SettingsPage() {
           blocking_enabled: blockingEnabled,
           show_balance: showBalance,
           safe_release_enabled: safeReleaseEnabled,
+          web_print_enabled: webPrintEnabled,
         }),
       });
       await apiFetch("/settings/monthly-report-email", token, {
@@ -299,6 +303,7 @@ export default function SettingsPage() {
             <ToggleRow id="blockingEnabled" checked={blockingEnabled} onChange={setBlockingEnabled} label="Habilitar bloqueio por cota ou saldo insuficiente" />
             <ToggleRow id="showBalance" checked={showBalance} onChange={setShowBalance} label="Exibir saldo mensal nas telas" />
             <ToggleRow id="safeRelease" checked={safeReleaseEnabled} onChange={setSafeReleaseEnabled} label="Habilitar liberacao segura Follow-Me" />
+            <ToggleRow id="webPrintEnabled" checked={webPrintEnabled} onChange={setWebPrintEnabled} label="Habilitar modulo Web Print" />
           </div>
         </Surface>
 
@@ -384,83 +389,89 @@ export default function SettingsPage() {
       </div>
 
       <Surface className="mt-6 p-5">
-        <details>
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-                <UploadCloud className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">Modulo Web Print</h2>
-                <p className="text-xs text-muted-foreground">Envio manual de PDF pelo navegador, para uso eventual.</p>
-              </div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <UploadCloud className="h-5 w-5" />
             </div>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">Opcional</span>
-          </summary>
+            <div>
+              <h2 className="text-lg font-semibold">Modulo Web Print</h2>
+              <p className="text-xs text-muted-foreground">Envio manual de PDF pelo navegador, para uso eventual.</p>
+            </div>
+          </div>
+          <ToggleRow id="webPrintEnabledInline" checked={webPrintEnabled} onChange={setWebPrintEnabled} label="Ativo" />
+        </div>
 
-          <form onSubmit={submitWebPrint} className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Impressora
-              <select
-                value={selectedPrinterId}
-                onChange={(event) => {
-                  setSelectedPrinterId(event.target.value);
-                  const printer = printers.find((item) => item.id.toString() === event.target.value);
-                  if (printer && !printer.is_color) setIsColorPrint(false);
-                }}
-                className="h-9 w-full rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
-                required
-              >
-                <option value="" disabled>
-                  Selecione uma impressora
-                </option>
-                {printers.map((printer) => (
-                  <option key={printer.id} value={printer.id}>
-                    {printer.name} {printer.is_color ? "(colorida)" : "(P&B)"}
+        {webPrintEnabled ? (
+          <>
+            <form onSubmit={submitWebPrint} className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                Impressora
+                <select
+                  value={selectedPrinterId}
+                  onChange={(event) => {
+                    setSelectedPrinterId(event.target.value);
+                    const printer = printers.find((item) => item.id.toString() === event.target.value);
+                    if (printer && !printer.is_color) setIsColorPrint(false);
+                  }}
+                  className="h-9 w-full rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+                  required
+                >
+                  <option value="" disabled>
+                    Selecione uma impressora
                   </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Documento PDF
-              <input
-                id="settings-web-print-file"
-                type="file"
-                accept=".pdf"
-                onChange={(event) => setFileToPrint(event.target.files?.[0] || null)}
-                className="h-9 w-full rounded-md border bg-white px-3 py-1 text-sm text-foreground outline-none file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-2.5 file:py-0.5 file:text-xs file:font-semibold file:text-primary-foreground"
-                required
-              />
-            </label>
-
-            <div className="flex items-center gap-3">
-              <label className={`flex items-center gap-2 whitespace-nowrap text-sm font-medium ${selectedPrinter && !selectedPrinter.is_color ? "opacity-50" : ""}`}>
-                <input
-                  type="checkbox"
-                  className="h-4 w-4"
-                  checked={isColorPrint}
-                  disabled={!selectedPrinter?.is_color}
-                  onChange={(event) => setIsColorPrint(event.target.checked)}
-                />
-                Colorida
+                  {printers.map((printer) => (
+                    <option key={printer.id} value={printer.id}>
+                      {printer.name} {printer.is_color ? "(colorida)" : "(P&B)"}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <Button type="submit" disabled={webPrintLoading || !fileToPrint}>
-                {webPrintLoading ? "Enviando..." : "Enviar"}
-              </Button>
-            </div>
-          </form>
 
-          {webPrintStatus ? (
-            <div
-              className={`mt-4 rounded-md border p-3 text-sm font-semibold ${
-                webPrintStatus.type === "success" ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"
-              }`}
-            >
-              {webPrintStatus.text}
-            </div>
-          ) : null}
-        </details>
+              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                Documento PDF
+                <input
+                  id="settings-web-print-file"
+                  type="file"
+                  accept=".pdf"
+                  onChange={(event) => setFileToPrint(event.target.files?.[0] || null)}
+                  className="h-9 w-full rounded-md border bg-white px-3 py-1 text-sm text-foreground outline-none file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-2.5 file:py-0.5 file:text-xs file:font-semibold file:text-primary-foreground"
+                  required
+                />
+              </label>
+
+              <div className="flex items-center gap-3">
+                <label className={`flex items-center gap-2 whitespace-nowrap text-sm font-medium ${selectedPrinter && !selectedPrinter.is_color ? "opacity-50" : ""}`}>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={isColorPrint}
+                    disabled={!selectedPrinter?.is_color}
+                    onChange={(event) => setIsColorPrint(event.target.checked)}
+                  />
+                  Colorida
+                </label>
+                <Button type="submit" disabled={webPrintLoading || !fileToPrint}>
+                  {webPrintLoading ? "Enviando..." : "Enviar"}
+                </Button>
+              </div>
+            </form>
+
+            {webPrintStatus ? (
+              <div
+                className={`mt-4 rounded-md border p-3 text-sm font-semibold ${
+                  webPrintStatus.type === "success" ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"
+                }`}
+              >
+                {webPrintStatus.text}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="mt-4 rounded-md border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+            Web Print desativado para esta empresa. Salve as configuracoes para aplicar tambem na API e no agent.
+          </div>
+        )}
       </Surface>
     </ProtectedPage>
   );
