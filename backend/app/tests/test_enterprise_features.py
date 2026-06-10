@@ -473,6 +473,35 @@ def test_updating_organization_writes_changed_fields_to_audit(db_session: Sessio
     assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 1
 
 
+def test_admin_cannot_deactivate_own_organization(db_session: Session):
+    tenant_org = Organization(name="Cliente Lockout", slug="cliente-lockout", is_active=True)
+    db_session.add(tenant_org)
+    db_session.flush()
+    tenant_admin = User(
+        username="lockout-admin",
+        full_name="Lockout Admin",
+        role=UserRole.admin,
+        is_active=True,
+        organization_id=tenant_org.id,
+    )
+    db_session.add(tenant_admin)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        update_organization(
+            tenant_org.id,
+            OrganizationUpdate(is_active=False),
+            db=db_session,
+            actor=tenant_admin,
+        )
+    assert exc.value.status_code == 400
+
+    db_session.rollback()
+    unchanged = db_session.query(Organization).filter(Organization.id == tenant_org.id).one()
+    assert unchanged.is_active is True
+    assert db_session.query(AuditLog).filter(AuditLog.action == "organization_updated").count() == 0
+
+
 def test_organization_list_includes_scoped_usage_counts(db_session: Session):
     other_org = Organization(name="Cliente Usage", slug="cliente-usage", is_active=True)
     admin = User(username="usage-admin", full_name="Usage Admin", role=UserRole.admin, is_active=True, organization_id=1)

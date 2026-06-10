@@ -154,6 +154,8 @@ def update_organization(
     organization = db.query(Organization).filter(Organization.id == organization_id).first()
     if not organization:
         raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+    if payload.is_active is False and organization.id == actor.organization_id:
+        raise HTTPException(status_code=400, detail="Nao e possivel desativar a empresa em uso pelo usuario logado")
 
     before = {"name": organization.name, "is_active": organization.is_active}
     if payload.name is not None:

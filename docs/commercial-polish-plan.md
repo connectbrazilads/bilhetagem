@@ -60,6 +60,7 @@ Criterios de aceite:
 - Usuario de uma empresa nao enxerga usuarios, impressoras, jobs ou relatorios de outra empresa.
 - Agent cadastrado em uma empresa nao envia job para outra.
 - Empresa inativa nao consegue emitir novos tokens de login ou agent.
+- Admin nao consegue desativar a propria empresa e se trancar fora do painel.
 - Login sem slug de empresa nao seleciona uma empresa arbitraria quando ha usuarios iguais em clientes diferentes.
 - Dados atuais continuam acessiveis na empresa padrao apos migration.
 - Testes cobrindo isolamento de pelo menos usuarios, impressoras, jobs e relatorios.
