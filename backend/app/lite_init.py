@@ -54,7 +54,21 @@ def _ensure_lite_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE organizations ADD COLUMN billing_status VARCHAR(40) NOT NULL DEFAULT 'trial'")
         if "contracted_printer_limit" not in organization_columns:
             conn.exec_driver_sql("ALTER TABLE organizations ADD COLUMN contracted_printer_limit INTEGER NOT NULL DEFAULT 0")
-        for table_name in ("departments", "printers", "users", "quotas", "print_jobs", "audit_logs", "print_agents", "printer_aliases", "system_settings"):
+        for table_name in (
+            "departments",
+            "printers",
+            "users",
+            "quotas",
+            "print_jobs",
+            "audit_logs",
+            "print_agents",
+            "printer_aliases",
+            "system_settings",
+            "agent_queue_actions",
+            "print_policies",
+            "monthly_closings",
+            "agent_logs",
+        ):
             exists = conn.exec_driver_sql(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?",
                 (table_name,),
