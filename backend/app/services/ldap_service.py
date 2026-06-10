@@ -2,7 +2,6 @@ import logging
 from sqlalchemy.orm import Session
 from app.models.user import User, UserRole
 from app.models.department import Department
-from app.core.security import hash_password
 from app.services.quota_service import get_or_create_current_quota
 
 logger = logging.getLogger("ldap_service")
@@ -66,7 +65,7 @@ def sync_ldap_users(db: Session, server: str, bind_dn: str, bind_password: str, 
                 organization_id=organization_id,
                 username=item["username"],
                 full_name=item["full_name"],
-                password_hash=hash_password("ldap12345"),
+                password_hash=None,
                 role=UserRole.user,
                 department_id=dept_id,
                 is_active=True

@@ -158,6 +158,8 @@ def test_ldap_user_and_department_sync(db_session: Session):
     usernames = {u.username for u in users}
     assert "ana.silva" in usernames
     assert "pedro.santos" in usernames
+    synced_user = db_session.query(User).filter(User.username == "ana.silva").one()
+    assert synced_user.password_hash is None
     
     # Verify quotas were initialized
     quota = db_session.query(Quota).filter(Quota.user_id == users[0].id).first()
