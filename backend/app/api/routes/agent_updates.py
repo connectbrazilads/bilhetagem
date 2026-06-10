@@ -154,16 +154,15 @@ def _release_sort_key(release: AgentReleaseRead) -> tuple[str, tuple[int, ...]]:
 
 def _latest_agent_release_file() -> tuple[AgentReleaseRead, AgentReleaseFileRead] | None:
     for release in _load_release_manifest():
-        if release.version != settings.agent_latest_version:
-            continue
-        for file in release.files:
-            if file.kind == "agent":
-                return release, file
-    for release in _load_release_manifest():
         for file in release.files:
             if file.kind == "agent":
                 return release, file
     return None
+
+
+def _published_agent_version() -> str:
+    latest = _latest_agent_release_file()
+    return latest[0].version if latest else settings.agent_latest_version
 
 
 def _release_or_404(version: str) -> AgentReleaseRead:
@@ -311,8 +310,9 @@ def _agent_health_alerts(agent: PrintAgent, is_online: bool) -> list[AgentHealth
         sample = ", ".join(unbound_queues[:3])
         suffix = f": {sample}" if sample else ""
         alerts.append(AgentHealthAlertRead(code="unbound_queues", severity="warning", message=f"{count} fila(s) sem vinculo com impressora fisica{suffix}"))
-    if _is_newer(settings.agent_latest_version, agent.version):
-        alerts.append(AgentHealthAlertRead(code="outdated_version", severity="info", message=f"Agent abaixo da versao publicada {settings.agent_latest_version}"))
+    latest_version = _published_agent_version()
+    if _is_newer(latest_version, agent.version):
+        alerts.append(AgentHealthAlertRead(code="outdated_version", severity="info", message=f"Agent abaixo da versao publicada {latest_version}"))
 
     return alerts
 
@@ -506,9 +506,10 @@ def agent_version(
 ) -> AgentVersionRead:
     latest = _latest_agent_release_file()
     file_exists = latest is not None
+    published_version = latest[0].version if latest else settings.agent_latest_version
     return AgentVersionRead(
-        latest_version=settings.agent_latest_version,
-        update_available=file_exists and _is_newer(settings.agent_latest_version, current_version),
+        latest_version=published_version,
+        update_available=file_exists and _is_newer(published_version, current_version),
         mandatory=False,
         download_url="/agent/download" if file_exists else None,
         sha256=latest[1].sha256 if latest else None,

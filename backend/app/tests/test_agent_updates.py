@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 from starlette.requests import Request
@@ -116,6 +117,53 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     assert "PrintBillingAgent.exe" in body
     assert "PrintBillingAgentInstaller.exe" in body
     assert checksums.headers["content-disposition"] == "attachment; filename=SHA256SUMS-0.3.0.txt"
+
+
+def test_agent_version_uses_newest_published_manifest_release(db_session: Session, monkeypatch, tmp_path: Path):
+    old_release_dir = tmp_path / "0.3.0"
+    old_release_dir.mkdir()
+    (old_release_dir / "PrintBillingAgent.exe").write_bytes(b"agent-v3")
+    latest_release_dir = tmp_path / "0.4.0"
+    latest_release_dir.mkdir()
+    latest_file = latest_release_dir / "PrintBillingAgent.exe"
+    latest_file.write_bytes(b"agent-v4")
+    (tmp_path / "manifest.json").write_text(
+        """
+        {
+          "versions": [
+            {
+              "version": "0.3.0",
+              "published_at": "2026-03-01T00:00:00Z",
+              "files": [{"kind": "agent", "filename": "PrintBillingAgent.exe"}]
+            },
+            {
+              "version": "0.4.0",
+              "published_at": "2026-04-01T00:00:00Z",
+              "files": [{"kind": "agent", "filename": "PrintBillingAgent.exe"}]
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_latest_version", "0.2.0")
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+    actor = User(username="manifest-admin", full_name="Manifest Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    version = agent_version(current_version="0.3.0", _=actor)
+    heartbeat = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-manifest-version", version="0.3.0"),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert version.latest_version == "0.4.0"
+    assert version.update_available is True
+    assert version.sha256 == hashlib.sha256(b"agent-v4").hexdigest()
+    assert any(alert.code == "outdated_version" and "0.4.0" in alert.message for alert in heartbeat.health_alerts)
 
 
 def test_deployment_organizations_are_scoped_for_download_commands(db_session: Session):
