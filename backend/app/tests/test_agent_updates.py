@@ -1360,6 +1360,58 @@ def test_remote_queue_action_lifecycle(db_session: Session):
     assert "bulk" not in result_audit.log_metadata
 
 
+def test_create_or_restore_queue_rejects_inactive_printer(db_session: Session):
+    actor = User(username="queue-inactive-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(
+        organization_id=1,
+        name="KONICA INATIVA",
+        ip_address="192.168.1.150",
+        is_color=True,
+        is_active=False,
+    )
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-queue-inactive", computer_name="PC-INACTIVE"),
+        request=_request("10.0.0.50"),
+        db=db_session,
+        actor=actor,
+    )
+
+    with pytest.raises(HTTPException) as create_exc:
+        create_queue_action(
+            agent_id=agent.id,
+            payload=AgentQueueActionCreate(
+                action_type=AgentQueueActionType.create_queue,
+                queue_name="KONICA_INATIVA",
+                printer_id=printer.id,
+                driver_name="KONICA Driver",
+                ip_address="192.168.1.150",
+            ),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert create_exc.value.status_code == 409
+
+    with pytest.raises(HTTPException) as restore_exc:
+        create_queue_action(
+            agent_id=agent.id,
+            payload=AgentQueueActionCreate(
+                action_type=AgentQueueActionType.restore_queue,
+                queue_name="KONICA_INATIVA",
+                printer_id=printer.id,
+                driver_name="KONICA Driver",
+                ip_address="192.168.1.150",
+            ),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert restore_exc.value.status_code == 409
+    assert poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor) == []
+
+
 def test_pending_queue_action_can_be_cancelled_by_admin(db_session: Session):
     actor = User(username="queue-cancel-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="KONICA CANCEL", ip_address="192.168.1.140", is_color=True)
@@ -1869,6 +1921,42 @@ def test_bulk_queue_action_can_target_selected_agents(db_session: Session):
 
     assert {action.agent_id for action in actions} == {agent_a.id, agent_c.id}
     assert poll_queue_actions(agent_uid=agent_b.agent_uid, db=db_session, actor=actor) == []
+
+
+def test_bulk_create_queue_action_rejects_inactive_printer(db_session: Session):
+    actor = User(username="bulk-inactive", full_name="Bulk Inactive", role=UserRole.admin, is_active=True, organization_id=1)
+    printer = Printer(
+        organization_id=1,
+        name="KONICA_BULK_INATIVA",
+        ip_address="192.168.1.128",
+        is_color=True,
+        is_active=False,
+    )
+    db_session.add_all([actor, printer])
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="bulk-inactive-agent", computer_name="PC-BULK-INACTIVE"),
+        request=_request("10.0.0.28"),
+        db=db_session,
+        actor=actor,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        create_bulk_queue_actions(
+            payload=AgentQueueBulkActionCreate(
+                action_type=AgentQueueActionType.create_queue,
+                queue_name="KONICA_BULK_INATIVA",
+                printer_id=printer.id,
+                driver_name="KONICA Driver",
+                ip_address="192.168.1.128",
+                agent_ids=[agent.id],
+            ),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert exc.value.status_code == 409
+    assert poll_queue_actions(agent_uid=agent.agent_uid, db=db_session, actor=actor) == []
 
 
 def test_bulk_remove_queue_action_does_not_require_printer_or_driver(db_session: Session):

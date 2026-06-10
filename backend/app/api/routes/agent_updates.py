@@ -818,6 +818,11 @@ def _validate_queue_action_payload(
         printer = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.id == payload.printer_id).first()
         if not printer:
             raise HTTPException(status_code=404, detail="Impressora nao encontrada")
+        if (
+            payload.action_type in (AgentQueueActionType.create_queue, AgentQueueActionType.restore_queue)
+            and not printer.is_active
+        ):
+            raise HTTPException(status_code=409, detail="Impressora inativa nao pode receber criacao ou restauracao de fila")
     elif require_printer_for_create and payload.action_type in (AgentQueueActionType.create_queue, AgentQueueActionType.restore_queue):
         raise HTTPException(status_code=422, detail="Impressora fisica obrigatoria para criar ou restaurar fila em lote")
 
