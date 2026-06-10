@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, Download, FileArchive, RefreshCw, ShieldCheck, TerminalSquare } from "lucide-react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
+import { CalendarClock, Check, Copy, Download, FileArchive, PackageCheck, RefreshCw, ShieldCheck, TerminalSquare } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -49,6 +49,16 @@ function formatBytes(value: number) {
   if (value > 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
   if (value > 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${value} B`;
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return "Sem data";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Data invalida";
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function signatureClass(status: string | null) {
@@ -201,6 +211,13 @@ export default function DownloadsPage() {
   const latest = releases[0];
   const installerFile = latest?.files.find((file) => file.kind === "installer" || file.filename.toLowerCase().endsWith("installer.exe"));
   const msiFile = latest?.files.find((file) => file.kind === "msi" || file.filename.toLowerCase().endsWith(".msi"));
+  const latestTotalSize = latest?.files.reduce((total, file) => total + file.size_bytes, 0) ?? 0;
+  const latestInstallerCount = latest?.files.filter((file) => file.kind === "installer" || file.kind === "msi").length ?? 0;
+  const latestReadyArtifacts = [
+    installerFile ? "EXE" : null,
+    msiFile ? "MSI" : null,
+    latest?.checksums_url ? "SHA256" : null,
+  ].filter(Boolean);
   const selectedOrganization = organizations.find((organization) => organization.slug === deployOrg);
   const selectedOrganizationActive = organizations.length === 0 || selectedOrganization?.is_active === true;
   const unsafePassword = isUnsafeAgentPassword(deployPassword);
@@ -231,6 +248,35 @@ export default function DownloadsPage() {
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Atualizar
         </Button>
+      </div>
+
+      <div className="mb-6 grid gap-3 md:grid-cols-4">
+        <ReleaseSummaryCard
+          icon={PackageCheck}
+          label="Release atual"
+          value={latest?.version ?? "-"}
+          detail={latest ? `${latest.channel} | ${latest.files.length.toLocaleString("pt-BR")} arquivo(s)` : "Nenhum manifest publicado"}
+        />
+        <ReleaseSummaryCard
+          icon={ShieldCheck}
+          label="Distribuicao"
+          value={latest ? releaseSignatureLabel(latest.signature_status) : "-"}
+          detail={latest?.signature_summary ?? "Aguardando release"}
+          tone={latest?.signature_status === "signed" ? "ok" : latest?.signature_status === "mixed" ? "warn" : "neutral"}
+        />
+        <ReleaseSummaryCard
+          icon={Download}
+          label="Instaladores"
+          value={`${latestInstallerCount.toLocaleString("pt-BR")} pronto(s)`}
+          detail={latestReadyArtifacts.length > 0 ? latestReadyArtifacts.join(" | ") : "Sem EXE/MSI publicado"}
+          tone={latestInstallerCount > 0 && latest?.checksums_url ? "ok" : "warn"}
+        />
+        <ReleaseSummaryCard
+          icon={CalendarClock}
+          label="Publicacao"
+          value={formatDateTime(latest?.published_at ?? null)}
+          detail={latest ? `Pacote total: ${formatBytes(latestTotalSize)}` : "Sem arquivos"}
+        />
       </div>
 
       {isAdmin ? (
@@ -429,6 +475,42 @@ export default function DownloadsPage() {
         )}
       </Surface>
     </ProtectedPage>
+  );
+}
+
+function ReleaseSummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = "neutral",
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "neutral" | "ok" | "warn";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : "border-slate-200 bg-slate-100 text-slate-700";
+
+  return (
+    <Surface className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold uppercase text-muted-foreground">{label}</div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="text-xl font-bold">{value}</div>
+      <div className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={detail}>
+        {detail}
+      </div>
+    </Surface>
   );
 }
 
