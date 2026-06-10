@@ -227,6 +227,7 @@ export default function AgentsPage() {
   const [loading, setLoading] = useState(false);
   const [queueForm, setQueueForm] = useState({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
   const [bulkForm, setBulkForm] = useState({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
+  const [bulkActionType, setBulkActionType] = useState<QueueActionType>("create_queue");
   const [bulkScope, setBulkScope] = useState<"all" | "selected">("all");
   const [selectedBulkAgentIds, setSelectedBulkAgentIds] = useState<number[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -361,17 +362,17 @@ export default function AgentsPage() {
       const actions = await apiFetch<AgentQueueAction[]>("/agent/queue-actions/bulk", token, {
         method: "POST",
         body: JSON.stringify({
-          action_type: "create_queue",
+          action_type: bulkActionType,
           queue_name: bulkForm.queue_name,
-          printer_id: Number(bulkForm.printer_id),
-          driver_name: bulkForm.driver_name,
+          printer_id: bulkForm.printer_id ? Number(bulkForm.printer_id) : null,
+          driver_name: bulkForm.driver_name || null,
           ip_address: bulkForm.ip_address || null,
           port_name: bulkForm.port_name || null,
           apply_to_all: bulkScope === "all",
           agent_ids: bulkScope === "selected" ? selectedBulkAgentIds : [],
         }),
       });
-      setBulkMessage(`Fila enviada para ${actions.length} agent(s).`);
+      setBulkMessage(`${queueActionLabel(bulkActionType)} enviado para ${actions.length} agent(s).`);
       setBulkForm({ queue_name: "", driver_name: "", ip_address: "", port_name: "", printer_id: "" });
       setSelectedBulkAgentIds([]);
       setBulkScope("all");
@@ -435,7 +436,10 @@ export default function AgentsPage() {
   }, [agentSearch, agentStatusFilter, agents]);
   const canApplyBulkQueue =
     isAdmin &&
-    Boolean(bulkForm.queue_name && bulkForm.printer_id && bulkForm.driver_name && (bulkForm.ip_address || bulkForm.port_name)) &&
+    Boolean(
+      bulkForm.queue_name &&
+        (bulkActionType === "remove_queue" || (bulkForm.printer_id && bulkForm.driver_name && (bulkForm.ip_address || bulkForm.port_name))),
+    ) &&
     (bulkScope === "all" ? agents.length > 0 : selectedBulkAgentIds.length > 0);
 
   return (
@@ -537,8 +541,21 @@ export default function AgentsPage() {
             <TerminalSquare className="h-4 w-4 text-primary" />
             <div>
               <h2 className="text-sm font-bold">Aplicar fila gerenciada</h2>
-              <p className="text-xs text-muted-foreground">Cria a mesma fila padronizada em PCs selecionados ou em todos os agents da empresa.</p>
+              <p className="text-xs text-muted-foreground">Cria, restaura ou remove a mesma fila em PCs selecionados ou em todos os agents da empresa.</p>
             </div>
+          </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-xs font-semibold uppercase text-muted-foreground">Acao</span>
+            {(["create_queue", "restore_queue", "remove_queue"] as QueueActionType[]).map((actionType) => (
+              <button
+                key={actionType}
+                type="button"
+                className={`rounded-md border px-3 py-1.5 ${bulkActionType === actionType ? "border-primary bg-primary/10 text-primary" : "bg-white text-muted-foreground"}`}
+                onClick={() => setBulkActionType(actionType)}
+              >
+                {queueActionLabel(actionType)}
+              </button>
+            ))}
           </div>
           <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
             <span className="text-xs font-semibold uppercase text-muted-foreground">Escopo</span>
@@ -592,6 +609,7 @@ export default function AgentsPage() {
             <select
               className="h-9 rounded-md border bg-white px-3 text-sm"
               value={bulkForm.printer_id}
+              disabled={bulkActionType === "remove_queue"}
               onChange={(event) => {
                 const printer = printers.find((item) => item.id.toString() === event.target.value);
                 setBulkForm({
@@ -611,17 +629,28 @@ export default function AgentsPage() {
             <Input
               placeholder="Driver ja instalado"
               value={bulkForm.driver_name}
+              disabled={bulkActionType === "remove_queue"}
               onChange={(event) => setBulkForm({ ...bulkForm, driver_name: event.target.value })}
             />
-            <Input placeholder="IP" value={bulkForm.ip_address} onChange={(event) => setBulkForm({ ...bulkForm, ip_address: event.target.value })} />
-            <Input placeholder="Porta" value={bulkForm.port_name} onChange={(event) => setBulkForm({ ...bulkForm, port_name: event.target.value })} />
+            <Input
+              placeholder="IP"
+              value={bulkForm.ip_address}
+              disabled={bulkActionType === "remove_queue"}
+              onChange={(event) => setBulkForm({ ...bulkForm, ip_address: event.target.value })}
+            />
+            <Input
+              placeholder="Porta"
+              value={bulkForm.port_name}
+              disabled={bulkActionType === "remove_queue"}
+              onChange={(event) => setBulkForm({ ...bulkForm, port_name: event.target.value })}
+            />
             <Button
               type="button"
               onClick={createBulkQueueAction}
               disabled={!canApplyBulkQueue}
             >
-              <Plus className="h-4 w-4" />
-              Aplicar
+              {bulkActionType === "remove_queue" ? <Trash2 className="h-4 w-4" /> : bulkActionType === "restore_queue" ? <RefreshCw className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {queueActionLabel(bulkActionType)}
             </Button>
           </div>
           {bulkMessage ? <div className="mt-2 text-xs text-muted-foreground">{bulkMessage}</div> : null}

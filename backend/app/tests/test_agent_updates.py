@@ -1686,3 +1686,64 @@ def test_bulk_queue_action_can_target_selected_agents(db_session: Session):
 
     assert {action.agent_id for action in actions} == {agent_a.id, agent_c.id}
     assert poll_queue_actions(agent_uid=agent_b.agent_uid, db=db_session, actor=actor) == []
+
+
+def test_bulk_remove_queue_action_does_not_require_printer_or_driver(db_session: Session):
+    actor = User(username="bulk-remove", full_name="Bulk Remove", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    agent_a = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="bulk-remove-agent-1", computer_name="PC-REMOVE-1"),
+        request=_request("10.0.0.24"),
+        db=db_session,
+        actor=actor,
+    )
+    agent_b = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="bulk-remove-agent-2", computer_name="PC-REMOVE-2"),
+        request=_request("10.0.0.25"),
+        db=db_session,
+        actor=actor,
+    )
+
+    actions = create_bulk_queue_actions(
+        payload=AgentQueueBulkActionCreate(
+            action_type=AgentQueueActionType.remove_queue,
+            queue_name="FILA_ANTIGA",
+            agent_ids=[agent_a.id, agent_b.id],
+        ),
+        db=db_session,
+        actor=actor,
+    )
+
+    assert len(actions) == 2
+    assert {action.action_type for action in actions} == {AgentQueueActionType.remove_queue}
+    assert {action.queue_name for action in actions} == {"FILA_ANTIGA"}
+    assert {action.printer_id for action in actions} == {None}
+    assert {action.driver_name for action in actions} == {None}
+
+
+def test_bulk_restore_queue_action_requires_physical_printer(db_session: Session):
+    actor = User(username="bulk-restore-required", full_name="Bulk Restore", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="bulk-restore-required-agent", computer_name="PC-RESTORE-REQ"),
+        request=_request("10.0.0.26"),
+        db=db_session,
+        actor=actor,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        create_bulk_queue_actions(
+            payload=AgentQueueBulkActionCreate(
+                action_type=AgentQueueActionType.restore_queue,
+                queue_name="FILA_RESTAURAR",
+                driver_name="KONICA Driver",
+                ip_address="192.168.1.150",
+                agent_ids=[agent.id],
+            ),
+            db=db_session,
+            actor=actor,
+        )
+
+    assert exc.value.status_code == 422
