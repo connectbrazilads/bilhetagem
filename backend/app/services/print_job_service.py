@@ -78,6 +78,12 @@ def _identity_key(value: str | None) -> str | None:
     return cleaned.lower() if cleaned else None
 
 
+def _same_identity(left: str | None, right: str | None) -> bool:
+    left_key = _identity_key(left)
+    right_key = _identity_key(right)
+    return bool(left_key and right_key and left_key == right_key)
+
+
 def _find_printer_by_serial(db: Session, organization_id: int, serial_number: str | None) -> Printer | None:
     identity = _identity_key(serial_number)
     if not identity:
@@ -216,6 +222,8 @@ def _resolve_printer_for_job(
         if payload.printer_serial and not printer.serial_number:
             printer.serial_number = payload.printer_serial
         if payload.printer_ip_address and not printer.ip_address:
+            printer.ip_address = payload.printer_ip_address
+        elif payload.printer_ip_address and _same_identity(printer.serial_number, payload.printer_serial):
             printer.ip_address = payload.printer_ip_address
         return printer
     return _resolve_printer(db, payload.printer_name, payload.is_color, organization_id, sys_settings)

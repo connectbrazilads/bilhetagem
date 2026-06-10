@@ -270,6 +270,42 @@ def test_jobs_with_different_queue_names_share_same_physical_printer(db_session:
     assert len(printer.aliases) == 2
 
 
+def test_job_updates_printer_ip_when_serial_matches_existing_device(db_session: Session):
+    printer = Printer(
+        organization_id=1,
+        name="KONICA SERIAL IP",
+        is_color=True,
+        serial_number="SN-IP-001",
+        ip_address="192.168.1.10",
+    )
+    db_session.add(printer)
+    db_session.commit()
+
+    register_print_job(
+        db_session,
+        PrintJobCreate(
+            username="diego",
+            printer_name="KONICA NOVO IP",
+            pages=1,
+            is_color=False,
+            external_job_id="eventlog:serial-ip-change",
+            agent_uid="agent-serial-ip",
+            computer_name="PC-SERIAL-IP",
+            queue_name="KONICA NOVO IP",
+            printer_serial="sn-ip-001",
+            printer_ip_address="192.168.1.125",
+            printer_connection_type="network",
+            printer_fingerprint="serial:sn-ip-001",
+        ),
+    )
+
+    updated = db_session.get(Printer, printer.id)
+    job = db_session.query(PrintJob).one()
+    assert db_session.query(Printer).count() == 1
+    assert updated.ip_address == "192.168.1.125"
+    assert job.printer_id == printer.id
+
+
 def test_job_reuses_agent_alias_by_normalized_queue_name(db_session: Session):
     printer = Printer(organization_id=1, name="KONICA FINANCEIRO", is_color=True)
     agent = PrintAgent(organization_id=1, agent_uid="agent-normalized-queue", computer_name="PC-FIN")
