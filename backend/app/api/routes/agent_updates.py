@@ -44,6 +44,8 @@ from app.services.organization_service import DEFAULT_ORGANIZATION_SLUG
 router = APIRouter(prefix="/agent", tags=["agent"])
 QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
 RECENT_AGENT_LOG_ALERT_WINDOW = timedelta(minutes=15)
+AGENT_LOG_RETENTION = timedelta(days=7)
+AGENT_LOG_MAX_PER_AGENT = 200
 
 
 def _agent_file() -> Path:
@@ -349,18 +351,27 @@ def _store_agent_logs(db: Session, agent: PrintAgent, payload: AgentHeartbeatPay
                 received_at=received_at,
             )
         )
-    if not new_logs:
-        return
+    if new_logs:
+        db.add_all(new_logs)
+        db.flush()
+    _prune_agent_logs(db, agent, received_at)
 
-    db.add_all(new_logs)
-    db.flush()
+
+def _prune_agent_logs(db: Session, agent: PrintAgent, received_at: datetime) -> None:
+    cutoff = received_at - AGENT_LOG_RETENTION
+    db.query(AgentLog).filter(
+        AgentLog.organization_id == agent.organization_id,
+        AgentLog.agent_id == agent.id,
+        AgentLog.received_at < cutoff,
+    ).delete(synchronize_session=False)
+
     stale_ids = [
         row[0]
         for row in (
             db.query(AgentLog.id)
             .filter(AgentLog.organization_id == agent.organization_id, AgentLog.agent_id == agent.id)
             .order_by(AgentLog.occurred_at.desc(), AgentLog.id.desc())
-            .offset(200)
+            .offset(AGENT_LOG_MAX_PER_AGENT)
             .all()
         )
     ]

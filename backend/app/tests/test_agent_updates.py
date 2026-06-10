@@ -867,6 +867,69 @@ def test_agent_logs_are_pruned_per_agent(db_session: Session):
     assert detail.recent_logs[0].message == "evento 204"
 
 
+def test_agent_logs_are_pruned_by_age_per_agent(db_session: Session):
+    actor = User(username="agent-prune-age", full_name="Agent Prune Age", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="pc-prune-age", computer_name="PC-PRUNE-AGE"),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+    other_agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="pc-prune-age-other", computer_name="PC-PRUNE-AGE-OTHER"),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+    now = datetime.now(timezone.utc)
+    db_session.add_all(
+        [
+            AgentLog(
+                organization_id=1,
+                agent_id=agent.id,
+                level="info",
+                message="log antigo",
+                source="test",
+                occurred_at=now - timedelta(days=8),
+                received_at=now - timedelta(days=8),
+            ),
+            AgentLog(
+                organization_id=1,
+                agent_id=agent.id,
+                level="info",
+                message="log recente",
+                source="test",
+                occurred_at=now - timedelta(days=1),
+                received_at=now - timedelta(days=1),
+            ),
+            AgentLog(
+                organization_id=1,
+                agent_id=other_agent.id,
+                level="info",
+                message="log antigo outro agent",
+                source="test",
+                occurred_at=now - timedelta(days=8),
+                received_at=now - timedelta(days=8),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="pc-prune-age", computer_name="PC-PRUNE-AGE"),
+        request=_request(),
+        db=db_session,
+        actor=actor,
+    )
+
+    messages = [row[0] for row in db_session.query(AgentLog.message).filter(AgentLog.agent_id == agent.id).order_by(AgentLog.message).all()]
+    other_messages = [row[0] for row in db_session.query(AgentLog.message).filter(AgentLog.agent_id == other_agent.id).all()]
+    assert messages == ["log recente"]
+    assert other_messages == ["log antigo outro agent"]
+
+
 def test_list_agents_is_scoped_by_organization(db_session: Session):
     other_org = Organization(name="Outro Cliente", slug="outro-cliente", is_active=True)
     db_session.add(other_org)
