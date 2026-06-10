@@ -24,6 +24,22 @@ type JobRow = {
   policy_action?: string | null;
 };
 
+type UserRow = {
+  id: number;
+  username: string;
+  full_name: string;
+};
+
+type DepartmentRow = {
+  id: number;
+  name: string;
+};
+
+type PrinterRow = {
+  id: number;
+  name: string;
+};
+
 type MonthlyClosing = {
   id: number;
   year: number;
@@ -58,9 +74,13 @@ type MonthlyClosingDueEmailResult = MonthlyClosingEmailResult & {
 
 export default function ReportsPage() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [departments, setDepartments] = useState<DepartmentRow[]>([]);
+  const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userQuery, setUserQuery] = useState("");
-  const [printerQuery, setPrinterQuery] = useState("");
+  const [userId, setUserId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [printerId, setPrinterId] = useState("");
   const [dateQuery, setDateQuery] = useState("");
   const now = new Date();
   const [closingYear, setClosingYear] = useState(String(now.getFullYear()));
@@ -75,7 +95,8 @@ export default function ReportsPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const data = await apiFetch<JobRow[]>("/jobs", token);
+      const query = reportQueryParams();
+      const data = await apiFetch<JobRow[]>(`/jobs${query ? `?${query}` : ""}`, token);
       setJobs(data);
     } catch {
       setJobs([]);
@@ -90,15 +111,39 @@ export default function ReportsPage() {
     await apiFetch<MonthlyClosing[]>("/reports/monthly-closings", token).then(setClosings).catch(() => setClosings([]));
   }
 
+  async function loadFilterOptions() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    await Promise.all([
+      apiFetch<UserRow[]>("/users", token).then(setUsers).catch(() => setUsers([])),
+      apiFetch<DepartmentRow[]>("/departments", token).then(setDepartments).catch(() => setDepartments([])),
+      apiFetch<PrinterRow[]>("/printers", token).then(setPrinters).catch(() => setPrinters([])),
+    ]);
+  }
+
   useEffect(() => {
+    loadFilterOptions();
     loadJobs();
     loadClosings();
   }, []);
 
+  function reportQueryParams() {
+    const params = new URLSearchParams();
+    if (userId) params.set("user_id", userId);
+    if (departmentId) params.set("department_id", departmentId);
+    if (printerId) params.set("printer_id", printerId);
+    if (dateQuery) {
+      params.set("date_from", `${dateQuery}T00:00:00`);
+      params.set("date_to", `${dateQuery}T23:59:59`);
+    }
+    return params.toString();
+  }
+
   async function download(format: "pdf" | "xlsx") {
     const token = localStorage.getItem("token");
     if (!token) return;
-    const response = await fetch(`${API_URL}/reports/export?format=${format}`, {
+    const query = reportQueryParams();
+    const response = await fetch(`${API_URL}/reports/export?format=${format}${query ? `&${query}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const blob = await response.blob();
@@ -184,16 +229,8 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url);
   }
 
-  const filteredJobs = jobs.filter((job) => {
-    const userDisplayName = job.user_full_name || job.username;
-    const matchUser = `${job.username} ${userDisplayName}`.toLowerCase().includes(userQuery.toLowerCase());
-    const matchPrinter = `${job.printer_name} ${job.queue_name ?? ""} ${job.computer_name ?? ""}`.toLowerCase().includes(printerQuery.toLowerCase());
-    const matchDate = dateQuery ? job.submitted_at.startsWith(dateQuery) : true;
-    return matchUser && matchPrinter && matchDate;
-  });
-
   const summary = useMemo(() => {
-    return filteredJobs.reduce(
+    return jobs.reduce(
       (acc, job) => {
         acc.jobs += 1;
         acc.pages += job.pages;
@@ -203,7 +240,7 @@ export default function ReportsPage() {
       },
       { jobs: 0, pages: 0, users: new Set<string>(), printers: new Set<string>() }
     );
-  }, [filteredJobs]);
+  }, [jobs]);
 
   return (
     <ProtectedPage>
@@ -231,16 +268,36 @@ export default function ReportsPage() {
         <Summary label="Impressoras" value={summary.printers.size} icon={Printer} />
       </div>
 
-      <Surface className="mb-4 grid gap-3 p-4 md:grid-cols-[1fr_1fr_220px]">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder="Filtrar por usuario" value={userQuery} onChange={(event) => setUserQuery(event.target.value)} />
-        </div>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder="Filtrar por impressora" value={printerQuery} onChange={(event) => setPrinterQuery(event.target.value)} />
-        </div>
+      <Surface className="mb-4 grid gap-3 p-4 md:grid-cols-[1fr_1fr_1fr_180px_auto]">
+        <select className="h-9 rounded-md border bg-white px-3 text-sm" value={userId} onChange={(event) => setUserId(event.target.value)}>
+          <option value="">Todos usuarios</option>
+          {users.map((user) => (
+            <option key={user.id} value={user.id}>
+              {user.full_name || user.username}
+            </option>
+          ))}
+        </select>
+        <select className="h-9 rounded-md border bg-white px-3 text-sm" value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}>
+          <option value="">Todos departamentos</option>
+          {departments.map((department) => (
+            <option key={department.id} value={department.id}>
+              {department.name}
+            </option>
+          ))}
+        </select>
+        <select className="h-9 rounded-md border bg-white px-3 text-sm" value={printerId} onChange={(event) => setPrinterId(event.target.value)}>
+          <option value="">Todas impressoras</option>
+          {printers.map((printer) => (
+            <option key={printer.id} value={printer.id}>
+              {printer.name}
+            </option>
+          ))}
+        </select>
         <Input type="date" value={dateQuery} onChange={(event) => setDateQuery(event.target.value)} />
+        <Button onClick={loadJobs}>
+          <Search className="h-4 w-4" />
+          Filtrar
+        </Button>
       </Surface>
 
       <Surface className="mb-4 overflow-hidden">
@@ -318,11 +375,11 @@ export default function ReportsPage() {
 
       <Surface className="overflow-hidden">
         <div className="border-b bg-muted/30 p-4 text-sm font-semibold">
-          Historico recente <span className="text-muted-foreground">({filteredJobs.length})</span>
+          Historico recente <span className="text-muted-foreground">({jobs.length})</span>
         </div>
         {loading ? (
           <div className="p-8 text-center text-sm text-muted-foreground">Carregando historico...</div>
-        ) : filteredJobs.length === 0 ? (
+        ) : jobs.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">Nenhum trabalho encontrado.</div>
         ) : (
           <div className="overflow-x-auto">
@@ -340,7 +397,7 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredJobs.map((job) => (
+                {jobs.map((job) => (
                   <tr key={job.id} className="border-t bg-white transition-colors hover:bg-muted/30">
                     <td className="whitespace-nowrap p-4 text-muted-foreground">{new Date(job.submitted_at).toLocaleString("pt-BR")}</td>
                     <td className="whitespace-nowrap p-4 font-semibold">{job.user_full_name || job.username}</td>

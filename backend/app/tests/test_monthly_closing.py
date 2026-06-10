@@ -4,7 +4,7 @@ from io import BytesIO
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
-from app.api.routes.reports import export_monthly_closing
+from app.api.routes.reports import export_monthly_closing, export_report
 from app.api.routes.settings import get_monthly_report_email_settings_endpoint, update_monthly_report_email_settings_endpoint
 from app.models.department import Department
 from app.models.print_job import JobStatus, PrintJob
@@ -122,6 +122,38 @@ def test_monthly_closing_export_pdf(db_session: Session):
 
     assert response.media_type == "application/pdf"
     assert response.body.startswith(b"%PDF")
+
+
+def test_report_export_applies_department_filter(db_session: Session):
+    user, printer = _seed_job_data(db_session)
+    other_department = Department(organization_id=1, name="Juridico")
+    other_user = User(username="bia", full_name="Bia Juridico", role=UserRole.user, department=other_department, is_active=True, organization_id=1)
+    other_printer = Printer(organization_id=1, name="HP_JURIDICO", is_color=False, cost_mono=0.05, cost_color=0.25)
+    db_session.add_all([other_department, other_user, other_printer])
+    db_session.flush()
+    db_session.add(
+        PrintJob(
+            organization_id=1,
+            user_id=other_user.id,
+            printer_id=other_printer.id,
+            pages=2,
+            is_color=False,
+            cost=0.10,
+            status=JobStatus.authorized,
+            submitted_at=datetime(2026, 5, 13, 10, tzinfo=timezone.utc),
+        )
+    )
+    actor = User(username="report-filter-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+
+    response = export_report(format="xlsx", department_id=user.department_id, db=db_session, actor=actor)
+
+    workbook = load_workbook(BytesIO(response.body), data_only=True)
+    sheet = workbook.active
+    exported_users = [row[1].value for row in sheet.iter_rows(min_row=2)]
+    assert set(exported_users) == {"Ana Financeiro"}
+    assert len(exported_users) == 4
 
 
 def test_monthly_report_email_settings_api(db_session: Session):

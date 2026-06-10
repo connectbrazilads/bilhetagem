@@ -136,12 +136,21 @@ def export_monthly_closing(
 @router.get("/export")
 def export_report(
     format: str = Query(default="xlsx", pattern="^(xlsx|pdf)$"),
+    user_id: int | None = None,
+    department_id: int | None = None,
+    printer_id: int | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> Response:
     query = db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id).order_by(PrintJob.submitted_at.desc())
+    if user_id:
+        query = query.filter(PrintJob.user_id == user_id)
+    if department_id:
+        query = query.filter(PrintJob.user.has(User.department_id == department_id))
+    if printer_id:
+        query = query.filter(PrintJob.printer_id == printer_id)
     if date_from:
         query = query.filter(PrintJob.submitted_at >= date_from)
     if date_to:
