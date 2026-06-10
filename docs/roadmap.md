@@ -25,6 +25,8 @@
 - Instalador MSI assinado para o agente.
 - Observabilidade com metricas e traces.
 
+Plano detalhado de execucao: [`commercial-polish-plan.md`](commercial-polish-plan.md).
+
 ## Versao 2.0
 
 - Pull printing com liberacao segura.
@@ -43,3 +45,9 @@
 6. Separar configuracoes por empresa, incluindo Follow-Me, bloqueio, Web Print, LDAP e custos padrao.
 7. Adicionar plano comercial: limites por empresa, assinatura, status de cobranca e bloqueio administrativo.
 8. Adicionar observabilidade: logs por empresa, fila de eventos do agent e alertas de falha de captura.
+
+## Futuro fora da fase atual
+
+- Captura completa de copia e digitalizacao embarcada no painel da impressora.
+- Apps embarcados por fabricante/modelo.
+- Homologacao por linha de equipamentos MFP.
