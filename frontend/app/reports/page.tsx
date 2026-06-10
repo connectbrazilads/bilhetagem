@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Download, FileText, Mail, Printer, Search, Users } from "lucide-react";
+import { CalendarCheck, Download, FileText, Mail, Printer, Search, Users } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -302,6 +302,27 @@ export default function ReportsPage() {
       { jobs: 0, billableJobs: 0, pages: 0, savedPages: 0, cost: 0, users: new Set<string>(), printers: new Set<string>() }
     );
   }, [jobs]);
+  const closingSummary = useMemo(() => {
+    const latestClosing = closings[0];
+    return closings.reduce(
+      (acc, closing) => {
+        acc.count += 1;
+        acc.pages += closing.total_pages;
+        acc.cost += closing.total_cost;
+        acc.savedPages += closing.blocked_pages;
+        acc.pendingJobs += closing.pending_jobs;
+        return acc;
+      },
+      {
+        count: 0,
+        pages: 0,
+        cost: 0,
+        savedPages: 0,
+        pendingJobs: 0,
+        latestPeriod: latestClosing ? `${String(latestClosing.month).padStart(2, "0")}/${latestClosing.year}` : "-",
+      }
+    );
+  }, [closings]);
 
   return (
     <ProtectedPage>
@@ -365,6 +386,17 @@ export default function ReportsPage() {
           Filtrar
         </Button>
       </Surface>
+
+      {closings.length > 0 ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <ClosingMetric label="Fechamentos" value={closingSummary.count} detail="Snapshots gerados" icon={CalendarCheck} />
+          <ClosingMetric label="Ultimo periodo" value={closingSummary.latestPeriod} detail="Base para cobranca" icon={FileText} />
+          <ClosingMetric label="Paginas fechadas" value={closingSummary.pages} detail="Volume cobravel congelado" icon={Printer} />
+          <ClosingMetric label="Custo fechado" value={`R$ ${closingSummary.cost.toFixed(2)}`} detail="Total faturavel" icon={FileText} />
+          <ClosingMetric label="Paginas salvas" value={closingSummary.savedPages} detail="Bloqueios e cancelamentos" icon={FileText} tone="success" />
+          <ClosingMetric label="Pendencias" value={closingSummary.pendingJobs} detail="Jobs aguardando acao" icon={FileText} tone={closingSummary.pendingJobs > 0 ? "warn" : "neutral"} />
+        </div>
+      ) : null}
 
       <Surface className="mb-4 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 p-4">
@@ -621,6 +653,45 @@ function readError(err: { message?: string }) {
     if (parsed.detail) errorText = parsed.detail;
   } catch {}
   return errorText || "Erro desconhecido";
+}
+
+function ClosingMetric({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone = "neutral",
+}: {
+  label: string;
+  value: number | string;
+  detail: string;
+  icon: typeof FileText;
+  tone?: "neutral" | "success" | "warn";
+}) {
+  const displayValue = typeof value === "number" ? value.toLocaleString("pt-BR") : value;
+  const toneClass =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : "border-slate-200 bg-slate-100 text-slate-700";
+
+  return (
+    <Surface className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold uppercase text-muted-foreground">{label}</span>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="truncate text-2xl font-semibold" title={displayValue}>
+        {displayValue}
+      </div>
+      <div className="mt-1 truncate text-xs text-muted-foreground" title={detail}>
+        {detail}
+      </div>
+    </Surface>
+  );
 }
 
 function Summary({ label, value, icon: Icon }: { label: string; value: number | string; icon: typeof FileText }) {
