@@ -28,6 +28,7 @@ class AgentReleaseRead(BaseModel):
     channel: str = "stable"
     published_at: str | None = None
     notes: str | None = None
+    checksums_url: str | None = None
     files: list[AgentReleaseFileRead] = Field(default_factory=list)
 
 

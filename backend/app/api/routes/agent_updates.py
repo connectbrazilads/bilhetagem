@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, selectinload
 
@@ -116,6 +116,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
                     channel=str(raw_release.get("channel") or "stable"),
                     published_at=raw_release.get("published_at"),
                     notes=raw_release.get("notes"),
+                    checksums_url=f"/agent/releases/{version}/checksums",
                     files=files,
                 )
             )
@@ -126,6 +127,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
         releases.append(
             AgentReleaseRead(
                 version=settings.agent_latest_version,
+                checksums_url=f"/agent/releases/{settings.agent_latest_version}/checksums",
                 files=[
                     AgentReleaseFileRead(
                         kind="agent",
@@ -154,6 +156,19 @@ def _latest_agent_release_file() -> tuple[AgentReleaseRead, AgentReleaseFileRead
             if file.kind == "agent":
                 return release, file
     return None
+
+
+def _release_or_404(version: str) -> AgentReleaseRead:
+    releases = {release.version: release for release in _load_release_manifest()}
+    release = releases.get(version)
+    if not release:
+        raise HTTPException(status_code=404, detail="Versao nao encontrada")
+    return release
+
+
+def _release_checksums_text(release: AgentReleaseRead) -> str:
+    lines = [f"{file.sha256}  {file.filename}" for file in sorted(release.files, key=lambda item: item.filename.lower())]
+    return "\n".join(lines) + ("\n" if lines else "")
 
 
 def _clean_optional(value: str | None) -> str | None:
@@ -455,10 +470,7 @@ def download_agent_release_file(
 ) -> FileResponse:
     if not _is_safe_release_filename(filename):
         raise HTTPException(status_code=400, detail="Nome de arquivo invalido")
-    releases = {release.version: release for release in _load_release_manifest()}
-    release = releases.get(version)
-    if not release:
-        raise HTTPException(status_code=404, detail="Versao nao encontrada")
+    release = _release_or_404(version)
     file_entry = next((file for file in release.files if file.filename == filename), None)
     if not file_entry:
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado")
@@ -469,6 +481,19 @@ def download_agent_release_file(
         path=str(path),
         media_type="application/octet-stream",
         filename=filename,
+    )
+
+
+@router.get("/releases/{version}/checksums")
+def download_agent_release_checksums(
+    version: str,
+    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+) -> Response:
+    release = _release_or_404(version)
+    return Response(
+        content=_release_checksums_text(release),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=SHA256SUMS-{version}.txt"},
     )
 
 

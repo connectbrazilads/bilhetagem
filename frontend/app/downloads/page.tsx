@@ -22,6 +22,7 @@ type AgentRelease = {
   channel: string;
   published_at: string | null;
   notes: string | null;
+  checksums_url: string | null;
   files: ReleaseFile[];
 };
 
@@ -97,6 +98,22 @@ export default function DownloadsPage() {
     const link = document.createElement("a");
     link.href = url;
     link.download = file.filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadChecksums(release: AgentRelease) {
+    if (!release.checksums_url) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const response = await fetch(`${API_URL}${release.checksums_url}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `SHA256SUMS-${release.version}.txt`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -222,6 +239,15 @@ export default function DownloadsPage() {
                       <td className="p-4">
                         <div className="font-semibold">{release.version}</div>
                         <div className="text-xs text-muted-foreground">{release.channel}</div>
+                        <Button
+                          variant="outline"
+                          className="mt-2 h-7 px-2 text-xs"
+                          onClick={() => downloadChecksums(release)}
+                          disabled={!release.checksums_url}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Checksums
+                        </Button>
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2 font-medium">

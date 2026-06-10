@@ -268,6 +268,7 @@ Entregaveis:
 - Assinar EXE do agent e instalador.
 - Criar pipeline de build versionado.
 - Publicar checksums SHA256.
+- Disponibilizar `SHA256SUMS` por versao na API e na tela de Downloads.
 - Validar checksum publicado antes de aplicar auto-update no PC cliente.
 - Criar pagina de downloads por versao.
 - Documentar instalacao normal e silenciosa.

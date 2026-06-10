@@ -8,6 +8,7 @@ from app.api.routes.agent_updates import (
     agent_version,
     create_bulk_queue_actions,
     create_queue_action,
+    download_agent_release_checksums,
     finish_queue_action,
     get_agent_detail,
     list_agent_releases,
@@ -89,11 +90,18 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     version = agent_version(current_version="0.2.0", _=actor)
 
     assert releases[0].version == "0.3.0"
+    assert releases[0].checksums_url == "/agent/releases/0.3.0/checksums"
     assert {file.kind for file in releases[0].files} == {"agent", "installer"}
     assert releases[0].files[0].sha256
     assert next(file.signature_status for file in releases[0].files if file.kind == "agent") == "Valid"
     assert version.update_available is True
     assert version.sha256 == next(file.sha256 for file in releases[0].files if file.kind == "agent")
+
+    checksums = download_agent_release_checksums(version="0.3.0", _=actor)
+    body = checksums.body.decode("utf-8")
+    assert "PrintBillingAgent.exe" in body
+    assert "PrintBillingAgentInstaller.exe" in body
+    assert checksums.headers["content-disposition"] == "attachment; filename=SHA256SUMS-0.3.0.txt"
 
 
 def _request(ip_address: str = "10.0.0.10") -> Request:

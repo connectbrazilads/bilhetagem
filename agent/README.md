@@ -59,6 +59,7 @@ O backend expoe:
 - `GET /agent/version?current_version=0.2.0`
 - `GET /agent/download`
 - `GET /agent/releases`
+- `GET /agent/releases/{version}/checksums`
 
 Quando o agent aplica uma atualizacao, ele registra as etapas em `agent_update.log` na pasta de instalacao. Se a troca falhar, o script restaura o executavel anterior a partir do backup `.bak` e tenta iniciar o servico novamente.
 
