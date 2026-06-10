@@ -17,7 +17,9 @@ from app.api.routes.settings import (
     update_general_settings,
     update_monthly_report_email_settings_endpoint,
 )
+from app.api.routes.printers import create_printer_endpoint
 from app.models.audit_log import AuditLog
+from app.schemas.printer import PrinterCreate
 from app.schemas.settings import GeneralSettings, MonthlyReportEmailSettings
 
 
@@ -136,6 +138,52 @@ def test_auto_created_printer_uses_organization_default_costs(db_session: Sessio
     assert printer.cost_mono == 0.09
     assert printer.cost_color == 0.42
     assert job.cost == 4.2
+
+
+def test_manual_printer_creation_uses_organization_default_costs(db_session: Session):
+    actor = User(username="admin-manual-costs", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    update_system_settings(
+        db_session,
+        {
+            "default_printer_cost_mono": 0.11,
+            "default_printer_cost_color": 0.48,
+        },
+        actor.organization_id,
+    )
+
+    printer = create_printer_endpoint(
+        PrinterCreate(name="IMPRESSORA_MANUAL_CUSTOS", is_color=True),
+        db_session,
+        actor,
+    )
+
+    assert printer.cost_mono == 0.11
+    assert printer.cost_color == 0.48
+
+
+def test_manual_printer_creation_keeps_explicit_costs(db_session: Session):
+    actor = User(username="admin-explicit-costs", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    update_system_settings(
+        db_session,
+        {
+            "default_printer_cost_mono": 0.11,
+            "default_printer_cost_color": 0.48,
+        },
+        actor.organization_id,
+    )
+
+    printer = create_printer_endpoint(
+        PrinterCreate(name="IMPRESSORA_MANUAL_EXPLICITA", is_color=True, cost_mono=0.06, cost_color=0.31),
+        db_session,
+        actor,
+    )
+
+    assert printer.cost_mono == 0.06
+    assert printer.cost_color == 0.31
 
 
 def test_monthly_report_email_settings_updates_are_audited(db_session: Session):

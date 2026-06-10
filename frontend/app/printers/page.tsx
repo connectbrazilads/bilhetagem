@@ -35,18 +35,47 @@ type PrinterRow = {
   }[];
 };
 
-export default function PrintersPage() {
-  const [printers, setPrinters] = useState<PrinterRow[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [form, setForm] = useState({
+type GeneralSettings = {
+  default_printer_cost_mono: number;
+  default_printer_cost_color: number;
+};
+
+type PrinterForm = {
+  name: string;
+  location: string;
+  is_color: boolean;
+  cost_mono: string;
+  cost_color: string;
+  is_active: boolean;
+  ip_address: string;
+};
+
+const FALLBACK_PRINTER_COSTS = {
+  mono: "0.05",
+  color: "0.25",
+};
+
+function emptyPrinterForm(costs = FALLBACK_PRINTER_COSTS): PrinterForm {
+  return {
     name: "",
     location: "",
     is_color: false,
-    cost_mono: "0.05",
-    cost_color: "0.25",
+    cost_mono: costs.mono,
+    cost_color: costs.color,
     is_active: true,
     ip_address: "",
-  });
+  };
+}
+
+function costText(value: number | null | undefined, fallback: string) {
+  return value !== null && value !== undefined ? value.toFixed(2) : fallback;
+}
+
+export default function PrintersPage() {
+  const [printers, setPrinters] = useState<PrinterRow[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [defaultCosts, setDefaultCosts] = useState(FALLBACK_PRINTER_COSTS);
+  const [form, setForm] = useState<PrinterForm>(() => emptyPrinterForm());
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [selectedPrinter, setSelectedPrinter] = useState<PrinterRow | null>(null);
@@ -61,9 +90,29 @@ export default function PrintersPage() {
       .catch(() => setPrinters([]));
   }
 
+  async function loadSettings() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    await apiFetch<GeneralSettings>("/settings", token)
+      .then((data) => {
+        const costs = {
+          mono: String(data.default_printer_cost_mono ?? Number(FALLBACK_PRINTER_COSTS.mono)),
+          color: String(data.default_printer_cost_color ?? Number(FALLBACK_PRINTER_COSTS.color)),
+        };
+        setDefaultCosts(costs);
+        setForm((current) => ({
+          ...current,
+          cost_mono: current.cost_mono === FALLBACK_PRINTER_COSTS.mono ? costs.mono : current.cost_mono,
+          cost_color: current.cost_color === FALLBACK_PRINTER_COSTS.color ? costs.color : current.cost_color,
+        }));
+      })
+      .catch(() => setDefaultCosts(FALLBACK_PRINTER_COSTS));
+  }
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     setIsAdmin(token ? getCurrentRole(token) === "admin" : false);
+    loadSettings();
     load();
     // Poll printer status every 10 seconds for SNMP updates
     const interval = setInterval(load, 10000);
@@ -104,15 +153,7 @@ export default function PrintersPage() {
           }),
         });
       }
-      setForm({
-        name: "",
-        location: "",
-        is_color: false,
-        cost_mono: "0.05",
-        cost_color: "0.25",
-        is_active: true,
-        ip_address: "",
-      });
+      setForm(emptyPrinterForm(defaultCosts));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao processar impressora");
@@ -126,8 +167,8 @@ export default function PrintersPage() {
       name: printer.name,
       location: printer.location ?? "",
       is_color: printer.is_color,
-      cost_mono: String(printer.cost_mono ?? 0.05),
-      cost_color: String(printer.cost_color ?? 0.25),
+      cost_mono: String(printer.cost_mono ?? Number(defaultCosts.mono)),
+      cost_color: String(printer.cost_color ?? Number(defaultCosts.color)),
       is_active: printer.is_active,
       ip_address: printer.ip_address ?? "",
     });
@@ -144,15 +185,7 @@ export default function PrintersPage() {
       await apiFetch<{ status: string; deleted_jobs: number }>(`/printers/${printer.id}`, token, { method: "DELETE" });
       if (editingId === printer.id) {
         setEditingId(null);
-        setForm({
-          name: "",
-          location: "",
-          is_color: false,
-          cost_mono: "0.05",
-          cost_color: "0.25",
-          is_active: true,
-          ip_address: "",
-        });
+        setForm(emptyPrinterForm(defaultCosts));
       }
       if (selectedPrinter?.id === printer.id) {
         setSelectedPrinter(null);
@@ -333,15 +366,7 @@ export default function PrintersPage() {
                 variant="outline"
                 onClick={() => {
                   setEditingId(null);
-                  setForm({
-                    name: "",
-                    location: "",
-                    is_color: false,
-                    cost_mono: "0.05",
-                    cost_color: "0.25",
-                    is_active: true,
-                    ip_address: "",
-                  });
+                  setForm(emptyPrinterForm(defaultCosts));
                 }}
               >
                 Cancelar
@@ -486,8 +511,8 @@ export default function PrintersPage() {
                 </td>
                 <td className="p-3">
                   <div className="font-medium text-foreground">
-                    R$ {printer.cost_mono ? printer.cost_mono.toFixed(2) : "0.05"}{" "}
-                    <span className="text-xs text-muted-foreground">/ R$ {printer.cost_color ? printer.cost_color.toFixed(2) : "0.25"}</span>
+                    R$ {costText(printer.cost_mono, defaultCosts.mono)}{" "}
+                    <span className="text-xs text-muted-foreground">/ R$ {costText(printer.cost_color, defaultCosts.color)}</span>
                   </div>
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold mt-1 ${printer.is_color ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-gray-100 text-gray-700 border border-gray-200"}`}>
                     {printer.is_color ? "Suporta Colorido" : "Apenas P&B"}
