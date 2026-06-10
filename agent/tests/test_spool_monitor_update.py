@@ -70,3 +70,40 @@ def test_agent_update_failure_is_reported_in_diagnostics(monkeypatch, tmp_path: 
         log["level"] == "error" and "Falha ao verificar/baixar atualizacao do agent" in log["message"]
         for log in monitor._diagnostic_logs
     )
+
+
+def test_queue_action_processing_continues_after_malformed_action(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(spool_monitor, "get_app_dir", lambda: tmp_path)
+    monkeypatch.setattr(print_event_log, "get_app_dir", lambda: tmp_path)
+
+    class FakeApiClient:
+        def __init__(self):
+            self.finished = []
+
+        def get_queue_actions(self, agent_uid: str) -> list[dict]:
+            return [
+                {"action_type": "remove_queue", "queue_name": "SEM_ID"},
+                {"id": 11, "action_type": "unknown", "queue_name": "FALHA"},
+                {"id": 12, "action_type": "remove_queue", "queue_name": "OK"},
+            ]
+
+        def finish_queue_action(self, action_id: int, status: str, result_message: str | None = None, agent_uid: str | None = None) -> dict:
+            self.finished.append((action_id, status, result_message, agent_uid))
+            return {"id": action_id, "status": status}
+
+    api_client = FakeApiClient()
+    monitor = SpoolMonitor(
+        api_client,
+        agent_config=AgentConfig(queue_action_interval_seconds=0),
+        sleep=lambda _: None,
+    )
+    monkeypatch.setattr(monitor, "_remove_managed_queue", lambda queue_name: f"Fila removida: {queue_name}")
+
+    monitor._process_queue_actions_if_due()
+
+    assert [entry[0] for entry in api_client.finished] == [11, 12]
+    assert api_client.finished[0][1] == "failed"
+    assert "Acao desconhecida" in api_client.finished[0][2]
+    assert api_client.finished[1] == (12, "succeeded", "Fila removida: OK", monitor._agent_uid)
+    assert monitor._last_error is not None
+    assert "desconhecida" in monitor._last_error
