@@ -148,20 +148,30 @@ $files += Get-FileEntry -Kind "installer" -Path $installerExe -ReleaseVersion $r
 if ($msiPath -and (Test-Path $msiPath)) { $files += Get-FileEntry -Kind "msi" -Path $msiPath -ReleaseVersion $releaseVersion }
 
 $publishedAt = (Get-Date).ToUniversalTime().ToString("o")
-$manifest = [ordered]@{
-    generated_at = $publishedAt
-    versions = @(
-        [ordered]@{
-            version = $releaseVersion
-            channel = $Channel
-            published_at = $publishedAt
-            notes = $Notes
-            files = $files
-        }
-    )
+$manifestPath = Join-Path $ReleaseRoot "manifest.json"
+$existingVersions = @()
+if (Test-Path $manifestPath) {
+    try {
+        $existingManifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
+        $existingVersions = @($existingManifest.versions | Where-Object { $_.version -ne $releaseVersion })
+    } catch {
+        Write-Warning "Manifest existente nao pode ser lido e sera recriado: $manifestPath"
+    }
 }
 
-$manifestPath = Join-Path $ReleaseRoot "manifest.json"
+$currentRelease = [ordered]@{
+    version = $releaseVersion
+    channel = $Channel
+    published_at = $publishedAt
+    notes = $Notes
+    files = $files
+}
+
+$manifest = [ordered]@{
+    generated_at = $publishedAt
+    versions = @($currentRelease) + @($existingVersions)
+}
+
 $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $manifestPath -Encoding UTF8
 
 $sums = foreach ($file in $files) { "$($file.sha256)  $($file.filename)" }

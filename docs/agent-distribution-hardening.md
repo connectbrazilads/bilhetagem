@@ -66,6 +66,8 @@ O painel exibe os arquivos em **Downloads** e o agent usa:
 - `GET /agent/version`
 - `GET /agent/download`
 
+O `build_release.ps1` preserva as versoes ja existentes no `manifest.json` e substitui apenas a entrada da versao que esta sendo gerada. Assim a tela de Downloads continua exibindo releases antigos enquanto a versao nova e publicada.
+
 ## Validacao
 
 Antes de distribuir:
@@ -83,6 +85,8 @@ Valide automaticamente:
 ```powershell
 .\verify_release.ps1
 ```
+
+O verificador confere os hashes dos arquivos, os tamanhos declarados no manifest, o status de assinatura e se o `SHA256SUMS.txt` da versao possui exatamente as mesmas entradas do manifest.
 
 Depois que o certificado real estiver configurado:
 

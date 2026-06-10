@@ -270,6 +270,8 @@ Entregaveis:
 - Criar pipeline de build versionado.
 - Publicar checksums SHA256.
 - Disponibilizar `SHA256SUMS` por versao na API e na tela de Downloads.
+- Preservar historico de versoes no `manifest.json` ao gerar nova release, substituindo apenas a versao publicada novamente.
+- Validar `SHA256SUMS.txt` contra o manifest e os arquivos antes de publicar a release.
 - Validar checksum publicado antes de aplicar auto-update no PC cliente.
 - Criar pagina de downloads por versao.
 - Documentar instalacao normal e silenciosa.

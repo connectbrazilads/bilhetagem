@@ -25,8 +25,43 @@ if ($versions.Count -eq 0) {
 $failures = New-Object System.Collections.Generic.List[string]
 
 foreach ($release in $versions) {
+    $releaseDir = Join-Path $ReleaseRoot $release.version
+    $sumsPath = Join-Path $releaseDir "SHA256SUMS.txt"
+    $expectedSums = @{}
     foreach ($file in @($release.files)) {
-        $path = Join-Path (Join-Path $ReleaseRoot $release.version) $file.filename
+        $expectedSums[$file.filename] = ([string]$file.sha256).ToLowerInvariant()
+    }
+
+    if (-not (Test-Path $sumsPath)) {
+        $failures.Add("SHA256SUMS ausente: $sumsPath")
+    } else {
+        $actualSums = @{}
+        foreach ($line in Get-Content $sumsPath) {
+            $trimmed = $line.Trim()
+            if (-not $trimmed) { continue }
+            $parts = $trimmed -split "\s+", 2
+            if ($parts.Count -ne 2) {
+                $failures.Add("Linha invalida em SHA256SUMS: $trimmed")
+                continue
+            }
+            $actualSums[$parts[1].Trim()] = $parts[0].ToLowerInvariant()
+        }
+        foreach ($name in $expectedSums.Keys) {
+            if (-not $actualSums.ContainsKey($name)) {
+                $failures.Add("SHA256SUMS sem entrada para: $name")
+            } elseif ($actualSums[$name] -ne $expectedSums[$name]) {
+                $failures.Add("SHA256SUMS divergente para: $name")
+            }
+        }
+        foreach ($name in $actualSums.Keys) {
+            if (-not $expectedSums.ContainsKey($name)) {
+                $failures.Add("SHA256SUMS contem arquivo fora do manifest: $name")
+            }
+        }
+    }
+
+    foreach ($file in @($release.files)) {
+        $path = Join-Path $releaseDir $file.filename
         if (-not (Test-Path $path)) {
             $failures.Add("Arquivo ausente: $path")
             continue

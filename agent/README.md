@@ -85,7 +85,8 @@ Saida padrao:
 
 Para publicar na VPS, copie a pasta da versao e o `manifest.json` para o diretorio configurado em
 `AGENT_DOWNLOAD_DIR`, e ajuste `AGENT_LATEST_VERSION` para a versao publicada.
-O manifest inclui `signature_status` e `signer_subject`, exibidos na tela **Downloads**.
+O manifest inclui `signature_status` e `signer_subject`, exibidos na tela **Downloads**. O script preserva
+versoes anteriores ja existentes no `manifest.json` e atualiza apenas a entrada da versao gerada.
 
 Para gerar MSI no host de build, instale o WiX CLI:
 
@@ -99,6 +100,8 @@ Valide os hashes e o status de assinatura antes de publicar:
 ```powershell
 .\verify_release.ps1
 ```
+
+Essa validacao tambem confere se o `SHA256SUMS.txt` da versao bate com o manifest publicado.
 
 Quando o certificado real ja estiver configurado, valide exigindo assinatura:
 
