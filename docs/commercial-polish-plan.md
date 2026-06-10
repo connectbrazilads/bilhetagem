@@ -96,6 +96,7 @@ Entregaveis:
 - Agent baixar nova versao, parar servico, substituir executavel e reiniciar.
 - Agent validar SHA256 da atualizacao baixada antes de substituir o executavel.
 - Manter rollback simples se a atualizacao falhar.
+- Script de auto-update preservar backup `.bak` e restaurar a versao anterior se a troca/start falhar.
 
 Criterios de aceite:
 

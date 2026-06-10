@@ -341,6 +341,7 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
 
     def _schedule_self_update(self, update_path) -> None:
         current_exe = Path(sys.executable)
+        backup_path = current_exe.with_name(f"{current_exe.name}.bak")
         script_path = get_app_dir() / "apply_agent_update.cmd"
         script = "\r\n".join(
             [
@@ -349,9 +350,19 @@ if (Get-Printer -Name $queueName -ErrorAction SilentlyContinue) {{
                 "timeout /t 3 /nobreak > nul",
                 "sc stop PrintBillingAgent > nul 2>&1",
                 "timeout /t 5 /nobreak > nul",
+                f'copy /Y "{current_exe}" "{backup_path}" > nul',
+                "if errorlevel 1 goto rollback",
                 f'copy /Y "{update_path}" "{current_exe}" > nul',
+                "if errorlevel 1 goto rollback",
                 "sc start PrintBillingAgent > nul 2>&1",
+                "if errorlevel 1 goto rollback",
+                "goto cleanup",
+                ":rollback",
+                f'copy /Y "{backup_path}" "{current_exe}" > nul 2>&1',
+                "sc start PrintBillingAgent > nul 2>&1",
+                ":cleanup",
                 f'del "{update_path}" > nul 2>&1',
+                f'del "{backup_path}" > nul 2>&1',
                 f'del "{script_path}" > nul 2>&1',
             ]
         )
