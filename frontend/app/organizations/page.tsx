@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Activity, Building2, CircleDollarSign, Edit, FileText, KeyRound, MonitorCheck, MonitorOff, Plus } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState, type ComponentType } from "react";
+import { AlertTriangle, CircleDollarSign, Edit, FileText, KeyRound, MonitorCheck, MonitorOff, Plus, Printer, TrendingUp } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -87,20 +87,31 @@ export default function OrganizationsPage() {
   }, []);
 
   const summary = useMemo(() => {
+    const active = organizations.filter((organization) => organization.is_active).length;
     return {
       total: organizations.length,
-      active: organizations.filter((organization) => organization.is_active).length,
-      inactive: organizations.filter((organization) => !organization.is_active).length,
+      active,
+      inactive: organizations.length - active,
+      trial: organizations.filter((organization) => organization.billing_status === "trial").length,
+      pastDue: organizations.filter((organization) => organization.billing_status === "past_due").length,
+      suspended: organizations.filter((organization) => organization.billing_status === "suspended").length,
+      printerLimitAlerts: organizations.filter((organization) => organization.contracted_printer_limit_status === "warning" || organization.contracted_printer_limit_status === "exceeded").length,
+      activePrinters: organizations.reduce((total, organization) => total + organization.active_printers_count, 0),
       jobs: organizations.reduce((total, organization) => total + organization.jobs_count, 0),
       jobsMonth: organizations.reduce((total, organization) => total + organization.jobs_month, 0),
       pendingJobsMonth: organizations.reduce((total, organization) => total + organization.pending_jobs_month, 0),
       blockedJobsMonth: organizations.reduce((total, organization) => total + organization.blocked_jobs_month, 0),
+      totalAgents: organizations.reduce((total, organization) => total + organization.agents_count, 0),
       onlineAgents: organizations.reduce((total, organization) => total + organization.online_agents_count, 0),
+      offlineAgents: organizations.reduce((total, organization) => total + organization.offline_agents_count, 0),
       pagesMonth: organizations.reduce((total, organization) => total + organization.pages_month, 0),
       savedPagesMonth: organizations.reduce((total, organization) => total + organization.saved_pages_month, 0),
       costMonth: organizations.reduce((total, organization) => total + organization.cost_month, 0),
     };
   }, [organizations]);
+  const activePercent = summary.total ? Math.round((summary.active / summary.total) * 100) : 0;
+  const agentOnlinePercent = summary.totalAgents ? Math.round((summary.onlineAgents / summary.totalAgents) * 100) : 0;
+  const commercialAlerts = summary.pastDue + summary.suspended + summary.printerLimitAlerts;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -182,18 +193,41 @@ export default function OrganizationsPage() {
         </p>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-10">
-        <Summary label="Empresas" value={summary.total} icon={Building2} />
-        <Summary label="Ativas" value={summary.active} icon={Activity} />
-        <Summary label="Inativas" value={summary.inactive} icon={MonitorOff} />
-        <Summary label="Agents online" value={summary.onlineAgents} icon={MonitorCheck} />
-        <Summary label="Trabalhos mes" value={summary.jobsMonth} icon={FileText} />
-        <Summary label="Pendentes mes" value={summary.pendingJobsMonth} icon={FileText} />
-        <Summary label="Bloqueios mes" value={summary.blockedJobsMonth} icon={FileText} />
-        <Summary label="Paginas mes" value={summary.pagesMonth} icon={FileText} />
-        <Summary label="Salvas mes" value={summary.savedPagesMonth} icon={FileText} />
-        <Summary label="Custo mes" value={money(summary.costMonth)} icon={CircleDollarSign} />
-      </div>
+      <Surface className="mb-6 overflow-hidden">
+        <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="border-b p-5 lg:border-b-0 lg:border-r">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase text-muted-foreground">Centro SaaS</div>
+                <div className="mt-1 text-xl font-bold">Carteira de empresas</div>
+              </div>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${commercialAlerts || summary.inactive ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                {commercialAlerts || summary.inactive ? "Requer acompanhamento" : "Carteira saudavel"}
+              </span>
+            </div>
+            <div className="mb-3 flex flex-wrap items-end gap-3">
+              <div className="text-4xl font-bold">{activePercent}%</div>
+              <div className="pb-1 text-sm text-muted-foreground">
+                {summary.active.toLocaleString("pt-BR")} de {summary.total.toLocaleString("pt-BR")} empresa(s) ativas
+              </div>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${activePercent}%` }} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <OrgSignal icon={CircleDollarSign} label="Custo mensal" value={money(summary.costMonth)} detail={`${summary.pagesMonth.toLocaleString("pt-BR")} paginas no mes`} />
+              <OrgSignal icon={MonitorCheck} label="Agents online" value={`${agentOnlinePercent}%`} detail={`${summary.onlineAgents}/${summary.totalAgents} agent(s)`} />
+              <OrgSignal icon={Printer} label="Impressoras" value={summary.activePrinters.toLocaleString("pt-BR")} detail="Equipamentos ativos" />
+            </div>
+          </div>
+          <div className="grid gap-0 sm:grid-cols-2">
+            <OrgTile icon={AlertTriangle} label="Comercial" value={commercialAlerts} detail={`${summary.pastDue} atraso, ${summary.suspended} suspensa, ${summary.printerLimitAlerts} limite`} tone={commercialAlerts ? "warn" : "ok"} />
+            <OrgTile icon={MonitorOff} label="Offline" value={summary.offlineAgents} detail="Agents sem contato" tone={summary.offlineAgents ? "danger" : "ok"} />
+            <OrgTile icon={FileText} label="Jobs mes" value={summary.jobsMonth} detail={`${summary.pendingJobsMonth} pend., ${summary.blockedJobsMonth} bloq.`} tone={summary.pendingJobsMonth || summary.blockedJobsMonth ? "warn" : "info"} />
+            <OrgTile icon={TrendingUp} label="Pag. salvas" value={summary.savedPagesMonth} detail="Economia por bloqueios/cancelamentos" tone={summary.savedPagesMonth ? "ok" : "muted"} />
+          </div>
+        </div>
+      </Surface>
 
       {isPlatformAdmin === true ? (
         <Surface as="form" className="mb-4 p-4" onSubmit={submit}>
@@ -501,16 +535,63 @@ function MetricPill({ label, value, tone = "muted" }: { label: string; value: nu
   );
 }
 
-function Summary({ label, value, icon: Icon }: { label: string; value: number | string; icon: typeof Building2 }) {
+function OrgSignal({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  detail: string;
+}) {
   return (
-    <Surface className="p-5">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-muted-foreground">{label}</span>
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <Icon className="h-4 w-4" />
-        </div>
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-[11px] font-bold uppercase text-muted-foreground">{label}</div>
+        <Icon className="h-4 w-4 text-primary" />
       </div>
-      <div className="mt-3 text-3xl font-semibold">{typeof value === "number" ? value.toLocaleString("pt-BR") : value}</div>
-    </Surface>
+      <div className="text-lg font-bold">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function OrgTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  detail: string;
+  tone: "ok" | "warn" | "danger" | "info" | "muted";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : tone === "danger"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className="border-b p-4 sm:border-r odd:sm:border-r">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-bold uppercase text-muted-foreground">{label}</div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="text-2xl font-bold">{value.toLocaleString("pt-BR")}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+    </div>
   );
 }
