@@ -4,6 +4,7 @@ Use este roteiro antes de colocar o sistema em teste com uma empresa.
 
 ## 1. Preparar a empresa
 
+- Atualizar a VPS com `.\deploy\update-server.ps1`.
 - Gerar backup da VPS com `.\deploy\backup-server.ps1`.
 - Rodar preflight da VPS com `.\deploy\preflight-server.ps1`.
 - Criar ou selecionar a empresa correta no painel.

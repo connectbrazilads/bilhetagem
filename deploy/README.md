@@ -14,6 +14,35 @@ Depois acesse:
 
 O arquivo `.env` controla senhas, segredo JWT e URLs publicas.
 
+## Atualizar a VPS
+
+Depois de um `git push`, atualize o servidor com:
+
+```powershell
+cd C:\Bilhetagem
+.\deploy\update-server.ps1
+```
+
+Esse comando:
+
+- gera backup antes da atualizacao
+- faz `git pull --ff-only`
+- reconstrui e sobe os containers
+- mostra `docker compose ps`
+- roda o preflight final
+
+Se quiser apenas reconstruir sem puxar codigo:
+
+```powershell
+.\deploy\update-server.ps1 -SkipGitPull
+```
+
+Se estiver sem URL publica pronta para teste:
+
+```powershell
+.\deploy\update-server.ps1 -SkipEndpointChecks
+```
+
 ## Preflight antes do piloto
 
 Depois de subir ou atualizar a VPS, rode:
