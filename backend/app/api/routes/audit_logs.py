@@ -148,6 +148,7 @@ def export_audit_logs(
     total_matching_rows = query.count()
     rows = query.limit(limit).all()
     truncated = total_matching_rows > len(rows)
+    filename = _audit_export_filename(date_from, date_to)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -170,6 +171,7 @@ def export_audit_logs(
         entity="audit_logs",
         actor_user_id=actor.id,
         metadata={
+            "filename": filename,
             "rows": len(rows),
             "total_matching_rows": total_matching_rows,
             "limit": limit,
@@ -187,5 +189,5 @@ def export_audit_logs(
     return Response(
         content=output.getvalue(),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{_audit_export_filename(date_from, date_to)}"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

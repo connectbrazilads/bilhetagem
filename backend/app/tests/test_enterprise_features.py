@@ -2867,6 +2867,7 @@ def test_audit_log_filters_by_date_and_exports_csv(db_session: Session):
 
     audit = db_session.query(AuditLog).filter(AuditLog.action == "audit_logs_exported").one()
     assert audit.actor_user_id == admin.id
+    assert audit.log_metadata["filename"] == "auditoria-2026-02-01-2026-02-28.csv"
     assert audit.log_metadata["rows"] == 1
     assert audit.log_metadata["total_matching_rows"] == 1
     assert audit.log_metadata["limit"] == 100
@@ -2904,6 +2905,7 @@ def test_audit_log_export_audit_marks_truncated_result(db_session: Session):
     body_rows = [line for line in response.body.decode("utf-8").splitlines() if line]
     assert len(body_rows) == 2
     audit = db_session.query(AuditLog).filter(AuditLog.action == "audit_logs_exported").one()
+    assert audit.log_metadata["filename"] == "auditoria.csv"
     assert audit.log_metadata["rows"] == 1
     assert audit.log_metadata["total_matching_rows"] == 3
     assert audit.log_metadata["limit"] == 1

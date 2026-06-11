@@ -92,7 +92,11 @@ const FIELD_LABELS: Record<string, string> = {
   billing_plan: "Plano",
   billing_status: "Status comercial",
   billable_jobs: "Trabalhos cobraveis",
+  blocked_cost: "Custo bloqueado",
+  blocked_jobs: "Trabalhos bloqueados",
+  blocked_pages: "Paginas bloqueadas",
   bulk: "Em lote",
+  color_pages: "Paginas coloridas",
   computer_name: "Computador",
   contracted_printer_limit: "Limite contratado",
   deleted_jobs: "Historico removido",
@@ -106,10 +110,14 @@ const FIELD_LABELS: Record<string, string> = {
   ip_address: "Endereco IP",
   is_active: "Ativo",
   kind: "Tipo de arquivo",
+  limit: "Limite",
+  mono_pages: "Paginas P&B",
   monthly_balance: "Saldo mensal",
   monthly_limit: "Limite mensal",
   month: "Mes",
   password: "Senha",
+  pending_cost: "Custo pendente",
+  pending_jobs: "Trabalhos pendentes",
   period: "Periodo",
   port_name: "Porta",
   previous_dispatched_at: "Envio anterior",
@@ -119,14 +127,17 @@ const FIELD_LABELS: Record<string, string> = {
   redispatch: "Reenvio",
   result_message: "Resultado",
   role: "Perfil",
+  rows: "Linhas exportadas",
   sha256: "SHA256",
   status: "Status",
+  total_matching_rows: "Registros encontrados",
   total_cost: "Custo total",
   total_jobs: "Trabalhos totais",
   total_pages: "Paginas totais",
   target_organization_id: "Empresa alvo",
   target_organization_name: "Nome da empresa alvo",
   target_organization_slug: "Slug da empresa alvo",
+  truncated: "Exportacao truncada",
   version: "Versao",
   year: "Ano",
 };
@@ -367,8 +378,11 @@ function formatMetadata(metadata: Record<string, unknown>) {
   return parts.filter(Boolean).join(" | ");
 }
 
-function formatMetadataValue(value: unknown) {
+function formatMetadataValue(value: unknown): string {
   if (value === null || value === undefined) return "-";
+  if (typeof value === "boolean") return value ? "Sim" : "Nao";
+  if (typeof value === "number") return value.toLocaleString("pt-BR");
+  if (Array.isArray(value)) return value.map(formatMetadataValue).join(", ");
   if (typeof value === "object") {
     return JSON.stringify(value);
   }
