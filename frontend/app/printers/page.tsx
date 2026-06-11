@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { Activity, AlertTriangle, Cpu, Droplets, Edit, FileText, GitMerge, Hash, Info, Server, Trash2, X } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState, type ComponentType } from "react";
+import { Activity, AlertTriangle, CheckCircle2, Cpu, Droplets, Edit, FileText, GitMerge, Hash, Info, Network, Printer, RefreshCw, Server, Trash2, Usb, X } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -321,12 +321,116 @@ export default function PrintersPage() {
     return related ? `Conflito de ${types} com ${related}` : `Conflito de ${types}`;
   }
 
+  const fleetSummary = useMemo(() => {
+    const active = printers.filter((printer) => printer.is_active).length;
+    const monitored = printers.filter((printer) => Boolean(printer.ip_address)).length;
+    const ready = printers.filter((printer) => printer.paper_status === "Pronta").length;
+    const color = printers.filter((printer) => printer.is_color).length;
+    const conflicts = printers.filter((printer) => printer.identity_conflict_count > 0).length;
+    const lowToner = printers.filter((printer) => printer.toner_level !== null && printer.toner_level <= 30).length;
+    const criticalToner = printers.filter((printer) => printer.toner_level !== null && printer.toner_level <= 10).length;
+    const usb = printers.filter((printer) => printer.aliases?.some((alias) => alias.connection_type === "usb")).length;
+    const localOnly = printers.filter((printer) => !printer.ip_address && (printer.aliases?.length ?? 0) > 0).length;
+    const queues = printers.reduce((total, printer) => total + (printer.aliases?.length ?? 0), 0);
+    const staleSnmp = printers.filter((printer) => printer.ip_address && printer.paper_status && printer.paper_status !== "Pronta").length;
+    return {
+      total: printers.length,
+      active,
+      inactive: printers.length - active,
+      monitored,
+      unmonitored: printers.length - monitored,
+      ready,
+      color,
+      conflicts,
+      lowToner,
+      criticalToner,
+      usb,
+      localOnly,
+      queues,
+      staleSnmp,
+    };
+  }, [printers]);
+
+  const monitoredPercent = fleetSummary.total ? Math.round((fleetSummary.monitored / fleetSummary.total) * 100) : 0;
+  const needsAttention = fleetSummary.conflicts + fleetSummary.lowToner + fleetSummary.staleSnmp + fleetSummary.inactive;
+
   return (
     <ProtectedPage>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Impressoras</h1>
-        <p className="text-sm text-muted-foreground">Adicione e gerencie filas de impressao e monitore o status do hardware via SNMP.</p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Impressoras</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Parque fisico, filas locais, custos e telemetria SNMP em tempo real.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-muted-foreground">
+            Atualiza a cada 10s
+          </span>
+          <Button variant="outline" onClick={load}>
+            <RefreshCw className="h-4 w-4" />
+            Atualizar
+          </Button>
+        </div>
       </div>
+
+      <Surface className="mb-6 overflow-hidden">
+        <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="border-b p-5 lg:border-b-0 lg:border-r">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase text-muted-foreground">Centro do parque</div>
+                <div className="mt-1 text-xl font-bold">Saude das impressoras</div>
+              </div>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${needsAttention ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                {needsAttention ? "Requer atencao" : "Operacao normal"}
+              </span>
+            </div>
+            <div className="mb-3 flex flex-wrap items-end gap-3">
+              <div className="text-4xl font-bold">{monitoredPercent}%</div>
+              <div className="pb-1 text-sm text-muted-foreground">
+                {fleetSummary.monitored} de {fleetSummary.total} impressora(s) com IP/SNMP
+              </div>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-blue-600" style={{ width: `${monitoredPercent}%` }} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <SignalPill icon={CheckCircle2} label="Ativas" value={fleetSummary.active} tone="ok" />
+              <SignalPill icon={Network} label="Filas" value={fleetSummary.queues} tone="info" />
+              <SignalPill icon={Printer} label="Prontas" value={fleetSummary.ready} tone={fleetSummary.ready ? "ok" : "muted"} />
+            </div>
+          </div>
+          <div className="grid gap-0 sm:grid-cols-2">
+            <FleetTile
+              icon={AlertTriangle}
+              label="Duplicidade"
+              value={fleetSummary.conflicts}
+              detail="Possiveis impressoras iguais com nomes locais diferentes"
+              tone={fleetSummary.conflicts ? "warn" : "ok"}
+            />
+            <FleetTile
+              icon={Droplets}
+              label="Toner baixo"
+              value={fleetSummary.lowToner}
+              detail={fleetSummary.criticalToner ? `${fleetSummary.criticalToner} em nivel critico` : "Abaixo de 30%"}
+              tone={fleetSummary.lowToner ? "warn" : "ok"}
+            />
+            <FleetTile
+              icon={Usb}
+              label="USB/local"
+              value={fleetSummary.usb + fleetSummary.localOnly}
+              detail="Bilhetagem pelo agent; SNMP depende de IP de rede"
+              tone={fleetSummary.usb || fleetSummary.localOnly ? "info" : "muted"}
+            />
+            <FleetTile
+              icon={Server}
+              label="Sem SNMP"
+              value={fleetSummary.unmonitored}
+              detail="Sem IP configurado para contador, serial e toner"
+              tone={fleetSummary.unmonitored ? "warn" : "ok"}
+            />
+          </div>
+        </div>
+      </Surface>
 
       {isAdmin ? (
         <Surface as="form" className="mb-6 flex flex-wrap gap-3 items-end p-4" onSubmit={submit}>
@@ -627,11 +731,11 @@ export default function PrintersPage() {
           onClick={() => setSelectedPrinter(null)}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-fade-in"
+            className="w-full max-w-lg mx-4 overflow-hidden rounded-lg border bg-white shadow-2xl animate-fade-in"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="bg-gradient-to-r from-primary to-blue-700 px-6 py-4 flex items-center justify-between">
+            <div className="border-b bg-slate-950 px-6 py-4 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-white">{selectedPrinter.name}</h2>
                 {selectedPrinter.serial_number && (
@@ -850,5 +954,72 @@ export default function PrintersPage() {
         </div>
       )}
     </ProtectedPage>
+  );
+}
+
+function SignalPill({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  tone: "ok" | "danger" | "info" | "muted";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "danger"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className={`flex items-center justify-between rounded-md border px-3 py-2 ${toneClass}`}>
+      <div>
+        <div className="text-[11px] font-bold uppercase opacity-80">{label}</div>
+        <div className="text-lg font-bold">{value}</div>
+      </div>
+      <Icon className="h-4 w-4" />
+    </div>
+  );
+}
+
+function FleetTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  detail: string;
+  tone: "ok" | "warn" | "info" | "muted";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className="border-b p-4 sm:border-r odd:sm:border-r">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-bold uppercase text-muted-foreground">{label}</div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="text-2xl font-bold">{value}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+    </div>
   );
 }
