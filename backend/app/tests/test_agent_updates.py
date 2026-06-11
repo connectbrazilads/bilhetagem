@@ -30,6 +30,7 @@ from app.api.routes.agent_updates import (
     rotate_agent_enrollment_key,
 )
 from app.core.config import settings
+from app.core.security import verify_password
 from app.services.agent_release_service import published_agent_update_version, published_agent_version
 from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus, AgentQueueActionType
 from app.models.agent_log import AgentLog
@@ -757,6 +758,45 @@ def test_agent_enrollment_key_configures_agent_without_exposing_shared_password(
     assert [audit.action for audit in audits] == ["agent_enrollment_key_rotated", "agent_enrolled"]
     assert audits[1].organization_id == tenant.id
     assert audits[1].log_metadata["username"] == enrolled.agent_username
+
+
+def test_agent_enrollment_reuses_same_computer_agent_user(db_session: Session):
+    tenant = Organization(name="Cliente Enrollment Reuse", slug="cliente-enrollment-reuse", is_active=True)
+    platform_admin = User(username="platform-enroll-reuse-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add_all([tenant, platform_admin])
+    db_session.commit()
+
+    key_response = rotate_agent_enrollment_key("cliente-enrollment-reuse", db=db_session, actor=platform_admin)
+    first = enroll_agent(
+        AgentEnrollPayload(enrollment_key=key_response.enrollment_key, computer_name="DESKTOP-5JVQBPU"),
+        db=db_session,
+    )
+    agent_user = db_session.query(User).filter(User.organization_id == tenant.id, User.username == first.agent_username).one()
+    first_hash = agent_user.password_hash
+    assert verify_password(first.agent_password, first_hash)
+
+    second = enroll_agent(
+        AgentEnrollPayload(enrollment_key=key_response.enrollment_key, computer_name="DESKTOP-5JVQBPU"),
+        db=db_session,
+    )
+    db_session.refresh(agent_user)
+
+    matching_users = (
+        db_session.query(User)
+        .filter(
+            User.organization_id == tenant.id,
+            User.role == UserRole.agent,
+            User.username.like("agent-desktop-5jvqbpu-%"),
+        )
+        .all()
+    )
+    reused_audit = db_session.query(AuditLog).filter(AuditLog.action == "agent_enrolled_reused").one()
+
+    assert second.agent_username == first.agent_username
+    assert len(matching_users) == 1
+    assert agent_user.password_hash != first_hash
+    assert verify_password(second.agent_password, agent_user.password_hash)
+    assert reused_audit.log_metadata["reused_existing"] is True
 
 
 def test_agent_enrollment_rejects_invalid_key(db_session: Session):

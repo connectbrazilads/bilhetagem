@@ -97,6 +97,24 @@ def _unique_enrolled_agent_username(db: Session, organization_id: int, computer_
     raise HTTPException(status_code=500, detail="Nao foi possivel gerar credencial tecnica do agent")
 
 
+def _existing_enrolled_agent_user(db: Session, organization_id: int, computer_name: str | None) -> User | None:
+    if not computer_name or not computer_name.strip():
+        return None
+    base = f"agent-{_safe_username_part(computer_name)}-"
+    full_name = f"Agente Windows - {computer_name.strip()}"[:180]
+    return (
+        db.query(User)
+        .filter(
+            User.organization_id == organization_id,
+            User.role == UserRole.agent,
+            User.username.ilike(f"{base}%"),
+            User.full_name == full_name,
+        )
+        .order_by(User.is_active.desc(), User.id.desc())
+        .first()
+    )
+
+
 def _organization_from_enrollment_key(db: Session, enrollment_key: str) -> Organization | None:
     digest = _hash_enrollment_key(enrollment_key)
     organization = db.query(Organization).filter(Organization.agent_enrollment_token_hash == digest).first()
@@ -1165,36 +1183,43 @@ def enroll_agent(
     if not organization or not organization_allows_access(organization):
         raise HTTPException(status_code=401, detail="Chave de ativacao invalida ou expirada")
 
-    username = _unique_enrolled_agent_username(db, organization.id, payload.computer_name)
     password = _generate_agent_password()
     full_name_suffix = payload.computer_name.strip() if payload.computer_name else "PC"
-    agent_user = User(
-        organization_id=organization.id,
-        username=username,
-        full_name=f"Agente Windows - {full_name_suffix}"[:180],
-        password_hash=hash_password(password),
-        role=UserRole.agent,
-        is_active=True,
-    )
-    db.add(agent_user)
+    agent_user = _existing_enrolled_agent_user(db, organization.id, payload.computer_name)
+    reused_existing = agent_user is not None
+    if agent_user:
+        agent_user.password_hash = hash_password(password)
+        agent_user.full_name = f"Agente Windows - {full_name_suffix}"[:180]
+        agent_user.is_active = True
+    else:
+        agent_user = User(
+            organization_id=organization.id,
+            username=_unique_enrolled_agent_username(db, organization.id, payload.computer_name),
+            full_name=f"Agente Windows - {full_name_suffix}"[:180],
+            password_hash=hash_password(password),
+            role=UserRole.agent,
+            is_active=True,
+        )
+        db.add(agent_user)
     db.flush()
     write_audit(
         db,
-        action="agent_enrolled",
+        action="agent_enrolled_reused" if reused_existing else "agent_enrolled",
         entity="users",
         entity_id=agent_user.id,
         actor_user_id=None,
         organization_id=organization.id,
         metadata={
-            "username": username,
+            "username": agent_user.username,
             "computer_name": payload.computer_name,
             "organization_slug": organization.slug,
+            "reused_existing": reused_existing,
         },
     )
     db.commit()
     return AgentEnrollRead(
         organization_slug=organization.slug,
-        agent_username=username,
+        agent_username=agent_user.username,
         agent_password=password,
     )
 

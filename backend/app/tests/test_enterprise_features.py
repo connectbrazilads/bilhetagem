@@ -2611,17 +2611,29 @@ def test_user_endpoint_rejects_agent_role_changes(db_session: Session):
     assert agent_user.role == UserRole.agent
 
 
-def test_agent_role_user_cannot_be_deleted_by_accident(db_session: Session):
+def test_seed_agent_user_cannot_be_deleted_by_accident(db_session: Session):
     admin = User(username="delete-agent-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
-    custom_agent = User(username="coletor-filial", full_name="Agent Filial", role=UserRole.agent, is_active=True, organization_id=1)
-    db_session.add_all([admin, custom_agent])
+    seed_agent = User(username="agent", full_name="Agent Padrao", role=UserRole.agent, is_active=True, organization_id=1)
+    db_session.add_all([admin, seed_agent])
     db_session.commit()
 
     with pytest.raises(HTTPException) as exc:
-        delete_user_endpoint(custom_agent.id, db=db_session, actor=admin)
+        delete_user_endpoint(seed_agent.id, db=db_session, actor=admin)
 
     assert exc.value.status_code == 400
-    assert db_session.get(User, custom_agent.id) is not None
+    assert db_session.get(User, seed_agent.id) is not None
+
+
+def test_enrolled_agent_user_can_be_deleted(db_session: Session):
+    admin = User(username="delete-enrolled-agent-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    custom_agent = User(username="agent-desktop-5jvqbpu-38f611", full_name="Agent Filial", role=UserRole.agent, is_active=True, organization_id=1)
+    db_session.add_all([admin, custom_agent])
+    db_session.commit()
+
+    result = delete_user_endpoint(custom_agent.id, db=db_session, actor=admin)
+
+    assert result["status"] == "deleted"
+    assert db_session.get(User, custom_agent.id) is None
 
 
 def test_user_with_linked_policy_cannot_be_deleted(db_session: Session):

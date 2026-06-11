@@ -234,11 +234,15 @@ export default function UsersPage() {
 
   async function deleteUser(user: UserRow) {
     if (!isAdmin) return;
-    if (user.username === "admin" || user.username === "agent" || user.role === "agent") {
-      setError("Usuarios tecnicos nao podem ser excluidos.");
+    if (user.username === "admin" || user.username === "agent") {
+      setError("Usuarios protegidos nao podem ser excluidos.");
       return;
     }
-    const confirmed = window.confirm(`Excluir o usuario "${user.full_name || user.username}"? Usuarios com historico devem ser desativados para preservar relatorios.`);
+    const confirmed = window.confirm(
+      user.role === "agent"
+        ? `Excluir o agent tecnico "${user.username}"? Reinstalacoes futuras do mesmo PC vao reutilizar apenas um cadastro.`
+        : `Excluir o usuario "${user.full_name || user.username}"? Usuarios com historico devem ser desativados para preservar relatorios.`,
+    );
     if (!confirmed) return;
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -494,7 +498,7 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {users.map((user) => {
-                  const canDelete = user.username !== "admin" && user.username !== "agent" && user.role !== "agent";
+                  const canDelete = user.username !== "admin" && user.username !== "agent";
                   return (
                     <tr key={user.id} className="border-t bg-white transition-colors hover:bg-muted/30">
                       <td className="whitespace-nowrap p-4 font-semibold">{user.username}</td>
