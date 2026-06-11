@@ -70,6 +70,12 @@ const UNSAFE_AGENT_PASSWORDS = new Set([
   "senha123",
   "12345678",
 ]);
+const ACTIVATION_KEY_SESSION_STORAGE = "printbilling.activationKeys.v1";
+
+type StoredActivationKey = {
+  key: string;
+  createdAt: string;
+};
 
 function formatBytes(value: number) {
   if (value > 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
@@ -160,6 +166,28 @@ function isValidOrganizationSlug(value: string) {
   return /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(value.trim().toLowerCase());
 }
 
+function readStoredActivationKeys(): Record<string, StoredActivationKey> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.sessionStorage.getItem(ACTIVATION_KEY_SESSION_STORAGE);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function getStoredActivationKey(organizationSlug: string) {
+  return readStoredActivationKeys()[organizationSlug]?.key ?? "";
+}
+
+function saveStoredActivationKey(organizationSlug: string, key: string, createdAt: string) {
+  if (typeof window === "undefined") return;
+  const current = readStoredActivationKeys();
+  current[organizationSlug] = { key, createdAt };
+  window.sessionStorage.setItem(ACTIVATION_KEY_SESSION_STORAGE, JSON.stringify(current));
+}
+
 export default function DownloadsPage() {
   const [releases, setReleases] = useState<AgentRelease[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
@@ -223,6 +251,10 @@ export default function DownloadsPage() {
     setDeployOrg(localStorage.getItem("organization_slug") || "default");
     load();
   }, [load]);
+
+  useEffect(() => {
+    setActivationKey(getStoredActivationKey(deployOrg));
+  }, [deployOrg]);
 
   async function downloadFile(file: ReleaseFile) {
     const token = localStorage.getItem("token");
@@ -294,6 +326,7 @@ export default function DownloadsPage() {
         method: "POST",
       });
       setActivationKey(response.enrollment_key);
+      saveStoredActivationKey(response.organization_slug, response.enrollment_key, response.created_at);
       setOrganizations((current) =>
         current.map((organization) =>
           organization.slug === response.organization_slug ? { ...organization, enrollment_key_created_at: response.created_at } : organization
