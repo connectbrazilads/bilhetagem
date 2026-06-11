@@ -15,6 +15,7 @@ def args(**overrides):
         "username": None,
         "password": None,
         "organization": None,
+        "activation_key": None,
         "default_username": None,
         "spool_server": None,
         "snmp_community": None,
@@ -64,6 +65,35 @@ def test_silent_install_can_clear_existing_default_username():
     config = build_config(existing, {}, args(default_username=""))
 
     assert config["PRINTBILLING_DEFAULT_USERNAME"] == ""
+
+
+def test_silent_install_can_enroll_with_activation_key(monkeypatch):
+    def fake_enroll(api_url, activation_key):
+        assert api_url == "https://billing.example.com"
+        assert activation_key == "pbk_cliente-a_token"
+        return {
+            "organization_slug": "cliente-a",
+            "agent_username": "agent-pc-fin-123abc",
+            "agent_password": "generated-secret",
+        }
+
+    monkeypatch.setattr(agent_installer, "enroll_with_activation_key", fake_enroll)
+
+    config = build_config(
+        {},
+        {},
+        args(
+            api_url="https://billing.example.com/",
+            activation_key="pbk_cliente-a_token",
+            default_username="DIEGO LCD",
+        ),
+    )
+
+    assert config["PRINTBILLING_API_URL"] == "https://billing.example.com"
+    assert config["PRINTBILLING_AGENT_USER"] == "agent-pc-fin-123abc"
+    assert config["PRINTBILLING_AGENT_PASSWORD"] == "generated-secret"
+    assert config["PRINTBILLING_ORGANIZATION_SLUG"] == "cliente-a"
+    assert config["PRINTBILLING_DEFAULT_USERNAME"] == "DIEGO LCD"
 
 
 def test_silent_install_trims_text_values_before_writing_config():

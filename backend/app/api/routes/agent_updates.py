@@ -1,7 +1,10 @@
 import hashlib
+import hmac
 import json
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+import re
+import secrets
 import unicodedata
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -12,6 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import organization_allows_access, require_roles
+from app.core.security import hash_password
 from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus, AgentQueueActionType
 from app.models.agent_log import AgentLog
 from app.models.organization import Organization
@@ -23,6 +27,9 @@ from app.models.user import User
 from app.models.user import UserRole
 from app.schemas.agent import (
     AgentDeploymentOrganizationRead,
+    AgentEnrollPayload,
+    AgentEnrollmentKeyRead,
+    AgentEnrollRead,
     AgentHeartbeatPayload,
     AgentHealthAlertRead,
     AgentLogRead,
@@ -49,10 +56,53 @@ RECENT_AGENT_LOG_ALERT_WINDOW = timedelta(minutes=15)
 AGENT_LOG_RETENTION = timedelta(days=7)
 AGENT_LOG_MAX_PER_AGENT = 200
 ACTIVE_QUEUE_ACTION_STATUSES = (AgentQueueActionStatus.pending, AgentQueueActionStatus.running)
+ENROLLMENT_KEY_PREFIX = "pbk"
 
 
 def _agent_file() -> Path:
     return Path(settings.agent_download_dir) / settings.agent_download_filename
+
+
+def _hash_enrollment_key(value: str) -> str:
+    return hashlib.sha256(value.strip().encode("utf-8")).hexdigest()
+
+
+def _generate_enrollment_key(organization: Organization) -> str:
+    return f"{ENROLLMENT_KEY_PREFIX}_{organization.slug}_{secrets.token_urlsafe(24)}"
+
+
+def _safe_username_part(value: str | None, default: str = "pc") -> str:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii").lower()
+    cleaned = re.sub(r"[^a-z0-9]+", "-", ascii_text).strip("-")
+    return (cleaned or default)[:42]
+
+
+def _generate_agent_password() -> str:
+    return secrets.token_urlsafe(24)
+
+
+def _unique_enrolled_agent_username(db: Session, organization_id: int, computer_name: str | None) -> str:
+    base = f"agent-{_safe_username_part(computer_name)}"
+    for _ in range(20):
+        suffix = secrets.token_hex(3)
+        username = f"{base[:112]}-{suffix}"
+        exists = (
+            db.query(User.id)
+            .filter(User.organization_id == organization_id, User.username == username)
+            .first()
+        )
+        if not exists:
+            return username
+    raise HTTPException(status_code=500, detail="Nao foi possivel gerar credencial tecnica do agent")
+
+
+def _organization_from_enrollment_key(db: Session, enrollment_key: str) -> Organization | None:
+    digest = _hash_enrollment_key(enrollment_key)
+    organization = db.query(Organization).filter(Organization.agent_enrollment_token_hash == digest).first()
+    if organization and organization.agent_enrollment_token_hash and hmac.compare_digest(organization.agent_enrollment_token_hash, digest):
+        return organization
+    return None
 
 
 def _publishable_file_size(path: Path) -> int | None:
@@ -285,6 +335,18 @@ def _latest_agent_release_file() -> tuple[AgentReleaseRead, AgentReleaseFileRead
     for release in _load_release_manifest():
         for file in release.files:
             if file.kind == "agent":
+                return release, file
+    return None
+
+
+def _latest_installer_release_file(kind: str = "installer") -> tuple[AgentReleaseRead, AgentReleaseFileRead] | None:
+    expected_kind = "msi" if kind == "msi" else "installer"
+    for release in _load_release_manifest():
+        for file in release.files:
+            filename = file.filename.lower()
+            if expected_kind == "msi" and (file.kind == "msi" or filename.endswith(".msi")):
+                return release, file
+            if expected_kind == "installer" and (file.kind == "installer" or filename.endswith("installer.exe")):
                 return release, file
     return None
 
@@ -994,6 +1056,7 @@ def _deployment_organization_read(db: Session, organization: Organization) -> Ag
         is_active=organization.is_active,
         billing_status=organization.billing_status,
         agent_username=agent_user.username if agent_user else None,
+        enrollment_key_created_at=organization.agent_enrollment_token_created_at,
     )
 
 
@@ -1050,6 +1113,108 @@ def list_agent_deployment_organizations(
         )
         return [_deployment_organization_read(db, organization) for organization in organizations]
     return [_deployment_organization_read(db, actor.organization)] if organization_allows_access(actor.organization) else []
+
+
+@router.post("/deployment-organizations/{organization_slug}/enrollment-key", response_model=AgentEnrollmentKeyRead)
+def rotate_agent_enrollment_key(
+    organization_slug: str,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> AgentEnrollmentKeyRead:
+    organization = db.query(Organization).filter(Organization.slug == organization_slug.strip().lower()).first()
+    if not organization:
+        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+    if not _can_manage_all_organizations(actor) and organization.id != actor.organization_id:
+        raise HTTPException(status_code=403, detail="Sem permissao para gerar chave desta empresa")
+    if not organization_allows_access(organization):
+        raise HTTPException(status_code=409, detail="Empresa inativa ou suspensa nao pode gerar instalacao")
+
+    enrollment_key = _generate_enrollment_key(organization)
+    created_at = datetime.now(timezone.utc)
+    organization.agent_enrollment_token_hash = _hash_enrollment_key(enrollment_key)
+    organization.agent_enrollment_token_created_at = created_at
+    write_audit(
+        db,
+        action="agent_enrollment_key_rotated",
+        entity="organizations",
+        entity_id=organization.id,
+        actor_user_id=actor.id,
+        organization_id=actor.organization_id,
+        metadata={
+            "target_organization_id": organization.id,
+            "target_organization_slug": organization.slug,
+            "target_organization_name": organization.name,
+        },
+    )
+    db.commit()
+    return AgentEnrollmentKeyRead(
+        organization_id=organization.id,
+        organization_name=organization.name,
+        organization_slug=organization.slug,
+        enrollment_key=enrollment_key,
+        created_at=created_at,
+    )
+
+
+@router.post("/enroll", response_model=AgentEnrollRead)
+def enroll_agent(
+    payload: AgentEnrollPayload,
+    db: Session = Depends(get_db),
+) -> AgentEnrollRead:
+    organization = _organization_from_enrollment_key(db, payload.enrollment_key)
+    if not organization or not organization_allows_access(organization):
+        raise HTTPException(status_code=401, detail="Chave de ativacao invalida ou expirada")
+
+    username = _unique_enrolled_agent_username(db, organization.id, payload.computer_name)
+    password = _generate_agent_password()
+    full_name_suffix = payload.computer_name.strip() if payload.computer_name else "PC"
+    agent_user = User(
+        organization_id=organization.id,
+        username=username,
+        full_name=f"Agente Windows - {full_name_suffix}"[:180],
+        password_hash=hash_password(password),
+        role=UserRole.agent,
+        is_active=True,
+    )
+    db.add(agent_user)
+    db.flush()
+    write_audit(
+        db,
+        action="agent_enrolled",
+        entity="users",
+        entity_id=agent_user.id,
+        actor_user_id=None,
+        organization_id=organization.id,
+        metadata={
+            "username": username,
+            "computer_name": payload.computer_name,
+            "organization_slug": organization.slug,
+        },
+    )
+    db.commit()
+    return AgentEnrollRead(
+        organization_slug=organization.slug,
+        agent_username=username,
+        agent_password=password,
+    )
+
+
+@router.get("/public-installer")
+def download_public_agent_installer(kind: str = Query(default="installer", pattern="^(installer|msi)$")) -> FileResponse:
+    latest = _latest_installer_release_file(kind)
+    if not latest:
+        raise HTTPException(status_code=404, detail="Instalador do agent nao publicado")
+    release, file_entry = latest
+    path = _release_file(release.version, file_entry.filename)
+    if _publishable_file_size(path) is None:
+        raise HTTPException(status_code=404, detail="Instalador do agent nao publicado")
+    if _sha256(path) != file_entry.sha256:
+        raise HTTPException(status_code=409, detail="Checksum do instalador publicado diverge do manifest")
+    return FileResponse(
+        path=str(path),
+        media_type="application/octet-stream",
+        filename=path.name,
+    )
 
 
 @router.get("/releases/{version}/download")

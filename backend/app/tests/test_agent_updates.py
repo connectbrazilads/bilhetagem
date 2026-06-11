@@ -18,12 +18,15 @@ from app.api.routes.agent_updates import (
     download_agent_update,
     download_agent_release_file,
     download_agent_release_checksums,
+    download_public_agent_installer,
+    enroll_agent,
     finish_queue_action,
     get_agent_detail,
     list_agent_deployment_organizations,
     list_agent_releases,
     list_agents,
     poll_queue_actions,
+    rotate_agent_enrollment_key,
 )
 from app.core.config import settings
 from app.services.agent_release_service import published_agent_update_version, published_agent_version
@@ -38,6 +41,7 @@ from app.models.print_job import JobStatus, PrintJob
 from app.models.user import User, UserRole
 from app.schemas.agent import (
     AgentHeartbeatPayload,
+    AgentEnrollPayload,
     AgentQueueActionCreate,
     AgentQueueActionResult,
     AgentQueueBulkActionCreate,
@@ -313,6 +317,35 @@ def test_agent_releases_use_manifest_and_checksums(db_session: Session, monkeypa
     assert "PrintBillingAgentInstaller.exe" in body
     assert releases[0].checksums_sha256 == hashlib.sha256(checksums.body).hexdigest()
     assert checksums.headers["content-disposition"] == "attachment; filename=SHA256SUMS-0.3.0.txt"
+
+
+def test_public_installer_download_serves_latest_installer_without_panel_auth(db_session: Session, monkeypatch, tmp_path: Path):
+    release_dir = tmp_path / "0.7.0"
+    release_dir.mkdir()
+    installer = release_dir / "PrintBillingAgentInstaller.exe"
+    installer.write_bytes(b"installer-v7")
+    (tmp_path / "manifest.json").write_text(
+        """
+        {
+          "versions": [
+            {
+              "version": "0.7.0",
+              "channel": "stable",
+              "published_at": "2026-07-01T00:00:00Z",
+              "files": [
+                {"kind": "installer", "filename": "PrintBillingAgentInstaller.exe"}
+              ]
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "agent_download_dir", str(tmp_path))
+
+    response = download_public_agent_installer()
+
+    assert response.filename == "PrintBillingAgentInstaller.exe"
 
 
 def test_agent_release_downloads_are_audited(db_session: Session, monkeypatch, tmp_path: Path):
@@ -687,6 +720,49 @@ def test_deployment_organizations_are_scoped_for_download_commands(db_session: S
     assert [organization.slug for organization in tenant_options] == ["cliente-download"]
     assert tenant_options[0].agent_username == "agent-cliente-download"
     assert suspended_tenant_options == []
+
+
+def test_agent_enrollment_key_configures_agent_without_exposing_shared_password(db_session: Session):
+    tenant = Organization(name="Cliente Enrollment", slug="cliente-enrollment", is_active=True)
+    platform_admin = User(username="platform-enroll-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    tenant_admin = User(username="tenant-enroll-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization=tenant)
+    db_session.add_all([tenant, platform_admin, tenant_admin])
+    db_session.commit()
+
+    key_response = rotate_agent_enrollment_key("cliente-enrollment", db=db_session, actor=platform_admin)
+    options = list_agent_deployment_organizations(db=db_session, actor=platform_admin)
+    enrolled = enroll_agent(
+        AgentEnrollPayload(enrollment_key=key_response.enrollment_key, computer_name="PC-FINANCEIRO"),
+        db=db_session,
+    )
+
+    agent_user = (
+        db_session.query(User)
+        .filter(User.organization_id == tenant.id, User.username == enrolled.agent_username)
+        .one()
+    )
+
+    assert key_response.organization_slug == "cliente-enrollment"
+    assert key_response.enrollment_key.startswith("pbk_cliente-enrollment_")
+    assert tenant.agent_enrollment_token_hash != key_response.enrollment_key
+    assert next(option for option in options if option.slug == "cliente-enrollment").enrollment_key_created_at is not None
+    assert enrolled.organization_slug == "cliente-enrollment"
+    assert enrolled.agent_password
+    assert agent_user.role == UserRole.agent
+    assert agent_user.full_name == "Agente Windows - PC-FINANCEIRO"
+    assert agent_user.password_hash != enrolled.agent_password
+
+    audits = db_session.query(AuditLog).filter(AuditLog.action.in_(["agent_enrollment_key_rotated", "agent_enrolled"])).order_by(AuditLog.id).all()
+    assert [audit.action for audit in audits] == ["agent_enrollment_key_rotated", "agent_enrolled"]
+    assert audits[1].organization_id == tenant.id
+    assert audits[1].log_metadata["username"] == enrolled.agent_username
+
+
+def test_agent_enrollment_rejects_invalid_key(db_session: Session):
+    with pytest.raises(HTTPException) as exc:
+        enroll_agent(AgentEnrollPayload(enrollment_key="pbk_invalida_token"), db=db_session)
+
+    assert exc.value.status_code == 401
 
 
 def _request(ip_address: str = "10.0.0.10") -> Request:

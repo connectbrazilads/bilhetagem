@@ -42,8 +42,28 @@ class AgentDeploymentOrganizationRead(BaseModel):
     is_active: bool
     billing_status: str = "trial"
     agent_username: str | None = None
+    enrollment_key_created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class AgentEnrollmentKeyRead(BaseModel):
+    organization_id: int
+    organization_name: str
+    organization_slug: str
+    enrollment_key: str
+    created_at: datetime
+
+
+class AgentEnrollPayload(BaseModel):
+    enrollment_key: str = Field(min_length=16, max_length=240)
+    computer_name: str | None = Field(default=None, max_length=180)
+
+
+class AgentEnrollRead(BaseModel):
+    organization_slug: str
+    agent_username: str
+    agent_password: str
 
 
 class AgentQueuePayload(BaseModel):

@@ -36,9 +36,27 @@ type OrganizationOption = {
   is_active: boolean;
   billing_status: "trial" | "active" | "past_due" | "suspended";
   agent_username: string | null;
+  enrollment_key_created_at: string | null;
 };
 
-type CopiedCommand = "exe" | "msi" | "build-release" | "publish-release" | "reload-release" | null;
+type EnrollmentKeyResponse = {
+  organization_id: number;
+  organization_name: string;
+  organization_slug: string;
+  enrollment_key: string;
+  created_at: string;
+};
+
+type CopiedCommand =
+  | "exe"
+  | "msi"
+  | "build-release"
+  | "publish-release"
+  | "reload-release"
+  | "public-installer"
+  | "activation-key"
+  | "activation-command"
+  | null;
 
 const UNSAFE_AGENT_PASSWORDS = new Set([
   "",
@@ -163,6 +181,8 @@ export default function DownloadsPage() {
   const [copiedCommand, setCopiedCommand] = useState<CopiedCommand>(null);
   const [copiedSha, setCopiedSha] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [activationKey, setActivationKey] = useState("");
+  const [generatingKey, setGeneratingKey] = useState(false);
 
   const load = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -263,6 +283,28 @@ export default function DownloadsPage() {
     window.setTimeout(() => setCopiedSha(null), 1800);
   }
 
+  async function rotateEnrollmentKey() {
+    const token = localStorage.getItem("token");
+    if (!token || !deployOrg) return;
+    setGeneratingKey(true);
+    try {
+      setDownloadError(null);
+      const response = await apiFetch<EnrollmentKeyResponse>(`/agent/deployment-organizations/${deployOrg}/enrollment-key`, token, {
+        method: "POST",
+      });
+      setActivationKey(response.enrollment_key);
+      setOrganizations((current) =>
+        current.map((organization) =>
+          organization.slug === response.organization_slug ? { ...organization, enrollment_key_created_at: response.created_at } : organization
+        )
+      );
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "Nao foi possivel gerar a chave de ativacao.");
+    } finally {
+      setGeneratingKey(false);
+    }
+  }
+
   const latest = releases[0];
   const installerFile = latest?.files.find((file) => file.kind === "installer" || file.filename.toLowerCase().endsWith("installer.exe"));
   const msiFile = latest?.files.find((file) => file.kind === "msi" || file.filename.toLowerCase().endsWith(".msi"));
@@ -309,6 +351,39 @@ export default function DownloadsPage() {
   const cancelBlockedArg = cancelBlocked ? "true" : "false";
   const usePrintEventLogArg = usePrintEventLog ? "true" : "false";
   const autoUpdateArg = autoUpdate ? "true" : "false";
+  const publicInstallerUrl = `${API_URL}/agent/public-installer?kind=installer`;
+  const activationCommand =
+    installerFile && activationKey
+      ? [
+          "&",
+          powershellQuote(`.\\${installerFile.filename}`),
+          "--silent",
+          "--api-url",
+          powershellQuote(API_URL),
+          "--activation-key",
+          powershellQuote(activationKey),
+          "--default-username",
+          powershellQuote(defaultUsername),
+          "--spool-server",
+          powershellQuote(spoolServer),
+          "--snmp-community",
+          powershellQuote(snmpCommunity),
+          "--snmp-poll-interval",
+          powershellQuote(snmpPollInterval),
+          "--snmp-timeout",
+          powershellQuote(snmpTimeout),
+          "--snmp-retries",
+          powershellQuote(snmpRetries),
+          "--log-level",
+          powershellQuote(logLevel),
+          "--cancel-blocked",
+          powershellQuote(cancelBlockedArg),
+          "--use-print-event-log",
+          powershellQuote(usePrintEventLogArg),
+          "--auto-update",
+          powershellQuote(autoUpdateArg),
+        ].join(" ")
+      : "";
   const buildReleaseCommand = `cd 'C:\\Projetos\\Sistema Bilhetagem\\agent'
 .\\build_release.ps1
 .\\verify_release.ps1 -RequireMsi -RequireInstaller`;
@@ -509,6 +584,116 @@ pwsh ./deploy/preflight-server.ps1 -SkipEndpointChecks`;
 
       {isAdmin ? (
         <Surface className="mb-6 p-4">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-bold">Instalacao padrao para cliente</h2>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                    Recomendado
+                  </span>
+                </div>
+                <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+                  Envie o instalador padrao e uma chave de ativacao. O cliente nao precisa saber usuario, senha do agent ou slug da empresa.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => copyCommand("public-installer", publicInstallerUrl)} disabled={!installerFile}>
+                {copiedCommand === "public-installer" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copiedCommand === "public-installer" ? "Link copiado" : "Copiar link"}
+              </Button>
+              <Button onClick={() => window.open(publicInstallerUrl, "_blank")} disabled={!installerFile}>
+                <Download className="h-4 w-4" />
+                Baixar instalador
+              </Button>
+            </div>
+          </div>
+
+          <div className="mb-4 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-md border bg-muted/20 p-3">
+              <div className="mb-2 text-xs font-bold uppercase text-muted-foreground">Empresa de destino</div>
+              {organizations.length > 0 ? (
+                <select
+                  className="h-10 w-full rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+                  value={deployOrg}
+                  onChange={(event) => {
+                    const slug = event.target.value;
+                    if (slug !== deployOrg) {
+                      setDeployPassword("");
+                      setActivationKey("");
+                    }
+                    setDeployOrg(slug);
+                    const organization = organizations.find((item) => item.slug === slug);
+                    if (organization?.agent_username) setDeployUser(organization.agent_username);
+                  }}
+                >
+                  {organizations.map((organization) => (
+                    <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
+                      {organization.name} ({organization.slug}){organization.is_active ? billingStatusSuffix(organization.billing_status) : " - inativa"}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={deployOrg} onChange={(event) => setDeployOrg(event.target.value)} />
+              )}
+              <div className="mt-2 text-xs text-muted-foreground">
+                {selectedOrganization?.enrollment_key_created_at
+                  ? `Ultima chave gerada em ${formatDateTime(selectedOrganization.enrollment_key_created_at)}.`
+                  : "Nenhuma chave de ativacao gerada para esta empresa nesta VPS."}
+              </div>
+            </div>
+            <div className="rounded-md border bg-muted/20 p-3">
+              <div className="mb-2 text-xs font-bold uppercase text-muted-foreground">Chave de ativacao</div>
+              <div className="flex gap-2">
+                <Input value={activationKey || "Gere uma chave para copiar"} readOnly className={activationKey ? "font-mono text-xs" : "text-muted-foreground"} />
+                <Button variant="outline" className="shrink-0" onClick={rotateEnrollmentKey} disabled={generatingKey || !selectedOrganizationActive}>
+                  <RefreshCw className={`h-4 w-4 ${generatingKey ? "animate-spin" : ""}`} />
+                  Gerar
+                </Button>
+                <Button
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => copyCommand("activation-key", activationKey)}
+                  disabled={!activationKey}
+                  title="Copiar chave de ativacao"
+                >
+                  {copiedCommand === "activation-key" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                A chave pode ser rotacionada a qualquer momento. Chaves antigas param de ativar novas instalacoes.
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <CommandBox
+              title="Link do instalador padrao"
+              command={publicInstallerUrl}
+              displayCommand={publicInstallerUrl}
+              disabled={!installerFile}
+              copied={copiedCommand === "public-installer"}
+              onCopy={() => copyCommand("public-installer", publicInstallerUrl)}
+            />
+            <CommandBox
+              title="Comando silencioso com chave"
+              command={activationCommand}
+              displayCommand={activationCommand}
+              disabled={!installerFile || !activationKey}
+              emptyMessage={!installerFile ? "Publique o instalador antes de gerar o comando." : "Gere uma chave de ativacao para montar o comando."}
+              copied={copiedCommand === "activation-command"}
+              onCopy={() => copyCommand("activation-command", activationCommand)}
+            />
+          </div>
+        </Surface>
+      ) : null}
+
+      {isAdmin ? (
+        <Surface className="mb-6 p-4">
           <div className="mb-4 flex items-start gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
               <TerminalSquare className="h-5 w-5" />
@@ -532,6 +717,7 @@ pwsh ./deploy/preflight-server.ps1 -SkipEndpointChecks`;
                   onChange={(event) => {
                     const slug = event.target.value;
                     if (slug !== deployOrg) setDeployPassword("");
+                    if (slug !== deployOrg) setActivationKey("");
                     setDeployOrg(slug);
                     const organization = organizations.find((item) => item.slug === slug);
                     if (organization?.agent_username) {
@@ -550,6 +736,7 @@ pwsh ./deploy/preflight-server.ps1 -SkipEndpointChecks`;
                   value={deployOrg}
                   onChange={(event) => {
                     if (event.target.value !== deployOrg) setDeployPassword("");
+                    if (event.target.value !== deployOrg) setActivationKey("");
                     setDeployOrg(event.target.value);
                   }}
                 />

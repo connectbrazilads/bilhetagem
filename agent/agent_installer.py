@@ -216,12 +216,43 @@ def normalize_organization_slug(value: str) -> str:
     return cleaned
 
 
+def computer_name() -> str:
+    return normalize_text(os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "")
+
+
+def enroll_with_activation_key(api_url: str, activation_key: str) -> dict:
+    import requests
+
+    response = requests.post(
+        f"{api_url}/agent/enroll",
+        json={"enrollment_key": normalize_text(activation_key), "computer_name": computer_name() or None},
+        timeout=20,
+    )
+    if response.status_code >= 400:
+        detail = response.text[:500]
+        raise RuntimeError(f"Chave de ativacao recusada pela API ({response.status_code}): {detail}")
+    data = response.json()
+    required = {"organization_slug", "agent_username", "agent_password"}
+    missing = [key for key in required if not normalize_text(data.get(key))]
+    if missing:
+        raise RuntimeError(f"Resposta de ativacao incompleta: {', '.join(missing)}")
+    return data
+
+
 def build_config(existing: dict, template: dict, args: argparse.Namespace) -> dict:
+    activation_key = normalize_text(getattr(args, "activation_key", ""))
     if args.silent:
         api_url = pick_arg_or_existing(args.api_url, existing, "PRINTBILLING_API_URL", "")
-        username = pick_arg_or_existing(args.username, existing, "PRINTBILLING_AGENT_USER", "")
-        password = pick_arg_or_existing(args.password, existing, "PRINTBILLING_AGENT_PASSWORD", "")
-        organization_slug = pick_arg_or_existing(args.organization, existing, "PRINTBILLING_ORGANIZATION_SLUG", "")
+        if activation_key:
+            api_url = normalize_api_url(api_url)
+            enrollment = enroll_with_activation_key(api_url, activation_key)
+            username = enrollment["agent_username"]
+            password = enrollment["agent_password"]
+            organization_slug = enrollment["organization_slug"]
+        else:
+            username = pick_arg_or_existing(args.username, existing, "PRINTBILLING_AGENT_USER", "")
+            password = pick_arg_or_existing(args.password, existing, "PRINTBILLING_AGENT_PASSWORD", "")
+            organization_slug = pick_arg_or_existing(args.organization, existing, "PRINTBILLING_ORGANIZATION_SLUG", "")
         default_username = pick_arg_or_config(
             args.default_username,
             existing,
@@ -239,8 +270,8 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         use_print_event_log = pick_bool_arg_or_config(args.use_print_event_log, existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)
         auto_update = pick_bool_arg_or_config(args.auto_update, existing, template, "PRINTBILLING_AUTO_UPDATE", True)
         log_level = as_log_level(pick_arg_or_config(args.log_level, existing, template, "PRINTBILLING_LOG_LEVEL", "INFO"))
-        if not api_url or not username or not password or not organization_slug:
-            raise RuntimeError("Modo silencioso requer --api-url, --username, --password e --organization em instalacoes novas.")
+        if not activation_key and (not api_url or not username or not password or not organization_slug):
+            raise RuntimeError("Modo silencioso requer --api-url com --activation-key, ou --api-url, --username, --password e --organization.")
     else:
         print()
         print("Configuracao do Agent")
@@ -250,19 +281,28 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             "URL da API na VPS",
             existing.get("PRINTBILLING_API_URL") or template.get("PRINTBILLING_API_URL", ""),
         )
-        username = prompt_value(
-            "Usuario tecnico do agent",
-            existing.get("PRINTBILLING_AGENT_USER") or template.get("PRINTBILLING_AGENT_USER", "agent"),
-        )
-        password = prompt_value(
-            "Senha do usuario tecnico",
-            existing.get("PRINTBILLING_AGENT_PASSWORD") or template.get("PRINTBILLING_AGENT_PASSWORD", ""),
-            secret=True,
-        )
-        organization_slug = prompt_value(
-            "Slug da empresa",
-            existing.get("PRINTBILLING_ORGANIZATION_SLUG") or template.get("PRINTBILLING_ORGANIZATION_SLUG", "default"),
-        )
+        activation_key = prompt_value("Chave de ativacao da empresa (recomendado; deixe vazio para modo avancado)", "")
+        if activation_key:
+            api_url = normalize_api_url(api_url)
+            enrollment = enroll_with_activation_key(api_url, activation_key)
+            username = enrollment["agent_username"]
+            password = enrollment["agent_password"]
+            organization_slug = enrollment["organization_slug"]
+            print(f"Ativacao concluida para empresa: {organization_slug}")
+        else:
+            username = prompt_value(
+                "Usuario tecnico do agent",
+                existing.get("PRINTBILLING_AGENT_USER") or template.get("PRINTBILLING_AGENT_USER", "agent"),
+            )
+            password = prompt_value(
+                "Senha do usuario tecnico",
+                existing.get("PRINTBILLING_AGENT_PASSWORD") or template.get("PRINTBILLING_AGENT_PASSWORD", ""),
+                secret=True,
+            )
+            organization_slug = prompt_value(
+                "Slug da empresa",
+                existing.get("PRINTBILLING_ORGANIZATION_SLUG") or template.get("PRINTBILLING_ORGANIZATION_SLUG", "default"),
+            )
         default_username = prompt_value(
             "Usuario padrao deste PC, se o Windows nao informar",
             existing.get("PRINTBILLING_DEFAULT_USERNAME") or template.get("PRINTBILLING_DEFAULT_USERNAME", ""),
@@ -384,6 +424,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--username", help="Usuario tecnico do agent")
     parser.add_argument("--password", help="Senha do usuario tecnico")
     parser.add_argument("--organization", help="Slug da empresa")
+    parser.add_argument("--activation-key", help="Chave de ativacao da empresa para configurar o agent sem expor credenciais")
     parser.add_argument("--default-username", help="Usuario padrao quando o Windows nao informar")
     parser.add_argument("--spool-server", help="Servidor de impressao remoto opcional para enumerar filas")
     parser.add_argument("--snmp-community", help="Comunidade SNMP usada para monitorar impressoras de rede")

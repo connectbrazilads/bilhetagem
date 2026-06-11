@@ -53,11 +53,19 @@ Para remover:
 
 ## Instalacao silenciosa
 
+Recomendado para SaaS: gere uma chave em **Downloads** no painel e instale sem expor usuario/senha do agent ao cliente.
+
+```powershell
+.\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --activation-key "pbk_empresa_token"
+```
+
+Modo avancado/legado, usando credenciais tecnicas diretamente:
+
 ```powershell
 .\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "SENHA_FORTE_DO_AGENT" --organization default --default-username "" --snmp-community "public" --snmp-poll-interval "60" --snmp-timeout "2.0" --snmp-retries "1" --use-print-event-log "true" --cancel-blocked "true" --auto-update "true"
 ```
 
-Na instalacao silenciosa nova, informe `--api-url`, `--username`, `--password` e `--organization`.
+Na instalacao silenciosa nova, informe `--api-url` com `--activation-key`, ou use o modo avancado com `--username`, `--password` e `--organization`.
 Na reinstalacao silenciosa, parametros omitidos reutilizam o `config.json` existente. Para remover um usuario padrao antigo do PC, envie explicitamente `--default-username ""`.
 O instalador e o agent recusam senhas padrao ou placeholders como `agent12345`, `agent`, `admin12345` e `change-me-agent-password`; gere uma senha exclusiva para o usuario tecnico de cada empresa.
 Se o agent precisa monitorar filas de um servidor de impressao remoto, adicione `--spool-server "\\SRV-PRINT01"`.
