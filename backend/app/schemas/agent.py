@@ -204,6 +204,7 @@ class PrintAgentRead(BaseModel):
     local_admin: bool | None
     last_error: str | None
     last_seen_at: datetime | None
+    last_seen_age_seconds: int | None = None
     created_at: datetime
     is_online: bool
     status: str

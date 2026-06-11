@@ -703,6 +703,12 @@ def _agent_to_read(
     conflict_alias_ids: set[int] | None = None,
 ) -> PrintAgentRead:
     is_online, status_text = _agent_status(agent)
+    last_seen_age_seconds = None
+    if agent.last_seen_at:
+        last_seen = agent.last_seen_at
+        if last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        last_seen_age_seconds = max(0, int((datetime.now(timezone.utc) - last_seen).total_seconds()))
     queue_actions = sorted(
         agent.queue_actions,
         key=lambda action: (action.requested_at, action.id),
@@ -721,6 +727,7 @@ def _agent_to_read(
         local_admin=agent.local_admin,
         last_error=agent.last_error,
         last_seen_at=agent.last_seen_at,
+        last_seen_age_seconds=last_seen_age_seconds,
         created_at=agent.created_at,
         is_online=is_online,
         status=status_text,

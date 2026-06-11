@@ -726,6 +726,8 @@ def test_agent_heartbeat_creates_agent_and_local_queues(db_session: Session):
     assert response.os_user == "diego"
     assert response.ip_address == "10.0.0.10"
     assert response.is_online is True
+    assert response.last_seen_age_seconds is not None
+    assert response.last_seen_age_seconds <= 2
     assert response.aliases[0].queue_name == "KONICA Financeiro"
     assert response.aliases[0].ip_address == "192.168.1.125"
 

@@ -64,6 +64,7 @@ type AgentRow = {
   local_admin: boolean | null;
   last_error: string | null;
   last_seen_at: string | null;
+  last_seen_age_seconds: number | null;
   created_at: string;
   is_online: boolean;
   status: string;
@@ -105,6 +106,17 @@ function formatDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatAge(seconds: number | null) {
+  if (seconds === null) return "-";
+  if (seconds < 60) return "agora";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `ha ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `ha ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `ha ${days} d`;
 }
 
 function captureLabel(mode: string | null) {
@@ -707,7 +719,12 @@ export default function AgentsPage() {
                     <div className="mt-1 text-xs font-semibold text-amber-700">Revisar vinculos de fila</div>
                   ) : null}
                 </td>
-                <td className="p-3">{formatDate(agent.last_seen_at)}</td>
+                <td className="p-3">
+                  <div className="font-medium" title={formatDate(agent.last_seen_at)}>
+                    {formatAge(agent.last_seen_age_seconds)}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{formatDate(agent.last_seen_at)}</div>
+                </td>
                 <td className="p-3">
                   <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusClass(agent)}`}>
                     {agent.status}
@@ -776,7 +793,10 @@ export default function AgentsPage() {
                     <Clock3 className="h-4 w-4" />
                     Ultimo contato
                   </div>
-                  <div className="mt-1 text-sm font-semibold">{formatDate(selectedAgent.last_seen_at)}</div>
+                  <div className="mt-1 text-sm font-semibold" title={formatDate(selectedAgent.last_seen_at)}>
+                    {formatAge(selectedAgent.last_seen_age_seconds)}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{formatDate(selectedAgent.last_seen_at)}</div>
                 </div>
               </div>
 
