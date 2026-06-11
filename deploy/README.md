@@ -14,6 +14,36 @@ Depois acesse:
 
 O arquivo `.env` controla senhas, segredo JWT e URLs publicas.
 
+## Preflight antes do piloto
+
+Depois de subir ou atualizar a VPS, rode:
+
+```powershell
+cd C:\Bilhetagem
+.\deploy\preflight-server.ps1
+```
+
+O preflight confere:
+
+- `.env` e segredos obrigatorios
+- Docker e `docker compose config`
+- servicos `postgres`, `backend` e `frontend`
+- release do agent em `agent\releases`
+- backup recente
+- `/health` da API e frontend
+
+Para validar sem testar URLs externas:
+
+```powershell
+.\deploy\preflight-server.ps1 -SkipEndpointChecks
+```
+
+Quando o certificado de assinatura estiver comprado/configurado:
+
+```powershell
+.\deploy\preflight-server.ps1 -RequireSignedAgent
+```
+
 ## Backup antes do piloto
 
 Antes de instalar agents em uma empresa real, gere um backup operacional:
