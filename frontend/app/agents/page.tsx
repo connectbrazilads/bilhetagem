@@ -434,6 +434,7 @@ export default function AgentsPage() {
         (agentStatusFilter === "online" && agent.is_online) ||
         (agentStatusFilter === "offline" && !agent.is_online) ||
         (agentStatusFilter === "alerts" && agent.health_alerts.length > 0) ||
+        (agentStatusFilter === "heartbeat-delayed" && hasAlert(agent, "heartbeat_delayed")) ||
         (agentStatusFilter === "outdated" && hasAlert(agent, "outdated_version")) ||
         (agentStatusFilter === "auto-update-off" && hasAlert(agent, "auto_update_disabled")) ||
         (agentStatusFilter === "local-admin-missing" && hasAlert(agent, "local_admin_missing")) ||
@@ -533,6 +534,7 @@ export default function AgentsPage() {
             <option value="online">Somente online</option>
             <option value="offline">Somente offline</option>
             <option value="alerts">Com alertas</option>
+            <option value="heartbeat-delayed">Heartbeat atrasado</option>
             <option value="outdated">Versao desatualizada</option>
             <option value="auto-update-off">Auto-update desligado</option>
             <option value="local-admin-missing">Sem admin local</option>

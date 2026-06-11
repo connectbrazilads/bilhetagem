@@ -407,6 +407,16 @@ def _agent_status(agent: PrintAgent, now: datetime | None = None) -> tuple[bool,
     return False, "Offline"
 
 
+def _last_seen_age_seconds(agent: PrintAgent, now: datetime | None = None) -> int | None:
+    if not agent.last_seen_at:
+        return None
+    now = now or datetime.now(timezone.utc)
+    last_seen = agent.last_seen_at
+    if last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    return max(0, int((now - last_seen).total_seconds()))
+
+
 def _can_manage_all_organizations(actor: User) -> bool:
     return bool(actor.organization and actor.organization.slug == DEFAULT_ORGANIZATION_SLUG and actor.role == UserRole.admin)
 
@@ -541,9 +551,18 @@ def _agent_health_alerts(
         if conflict_alias_ids is not None and alias.id in conflict_alias_ids
     ]
     stale_actions = _stale_queue_actions(agent)
+    last_seen_age_seconds = _last_seen_age_seconds(agent)
 
     if not is_online:
         alerts.append(AgentHealthAlertRead(code="offline", severity="error", message="Agent offline ou sem contato recente"))
+    elif last_seen_age_seconds is not None and last_seen_age_seconds >= 120:
+        alerts.append(
+            AgentHealthAlertRead(
+                code="heartbeat_delayed",
+                severity="warning",
+                message="Agent sem heartbeat ha mais de 2 min; verifique servico, rede ou processamento local",
+            )
+        )
     if agent.last_error:
         alerts.append(AgentHealthAlertRead(code="last_error", severity="warning", message=agent.last_error))
     if db is not None:
@@ -703,12 +722,7 @@ def _agent_to_read(
     conflict_alias_ids: set[int] | None = None,
 ) -> PrintAgentRead:
     is_online, status_text = _agent_status(agent)
-    last_seen_age_seconds = None
-    if agent.last_seen_at:
-        last_seen = agent.last_seen_at
-        if last_seen.tzinfo is None:
-            last_seen = last_seen.replace(tzinfo=timezone.utc)
-        last_seen_age_seconds = max(0, int((datetime.now(timezone.utc) - last_seen).total_seconds()))
+    last_seen_age_seconds = _last_seen_age_seconds(agent)
     queue_actions = sorted(
         agent.queue_actions,
         key=lambda action: (action.requested_at, action.id),

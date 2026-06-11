@@ -1380,6 +1380,29 @@ def test_list_agents_reports_stale_running_queue_actions(db_session: Session):
     )
 
 
+def test_list_agents_warns_when_heartbeat_is_delayed_but_still_online(db_session: Session):
+    actor = User(username="agent-delayed-heartbeat-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(actor)
+    db_session.commit()
+    agent = agent_heartbeat(
+        payload=AgentHeartbeatPayload(agent_uid="agent-delayed-heartbeat", computer_name="PC-DELAYED"),
+        request=_request("10.0.0.36"),
+        db=db_session,
+        actor=actor,
+    )
+    persisted_agent = db_session.get(PrintAgent, agent.id)
+    persisted_agent.last_seen_at = datetime.now(timezone.utc) - timedelta(seconds=130)
+    db_session.commit()
+
+    rows = list_agents(db=db_session, actor=actor)
+    delayed_agent = next(row for row in rows if row.agent_uid == agent.agent_uid)
+
+    assert delayed_agent.is_online is True
+    assert delayed_agent.last_seen_age_seconds is not None
+    assert delayed_agent.last_seen_age_seconds >= 120
+    assert any(alert.code == "heartbeat_delayed" for alert in delayed_agent.health_alerts)
+
+
 def test_poll_queue_actions_redispatches_stale_running_actions(db_session: Session):
     actor = User(username="agent-redispatch-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
     printer = Printer(organization_id=1, name="KONICA REDISPATCH", ip_address="192.168.1.131", is_color=True)
