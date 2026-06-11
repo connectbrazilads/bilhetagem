@@ -332,12 +332,13 @@ export default function DashboardPage() {
           <HealthStat
             label="Filas sem vinculo"
             value={health.unbound_queues}
-            detail={`${health.usb_queues.toLocaleString("pt-BR")} USB, ${health.duplicate_queue_aliases.toLocaleString("pt-BR")} duplicada(s), ${health.hardware_identity_conflicts.toLocaleString("pt-BR")} conflito(s)`}
+            detail={`${health.usb_queues.toLocaleString("pt-BR")} USB, ${health.duplicate_queue_aliases.toLocaleString("pt-BR")} duplicada(s), ${health.pending_queue_actions.toLocaleString("pt-BR")} acao(oes), ${health.stale_queue_actions.toLocaleString("pt-BR")} travada(s)`}
             tone={
               health.unbound_queues > 0 ||
               health.duplicate_queue_aliases > 0 ||
               health.generic_queue_aliases > 0 ||
-              health.hardware_identity_conflicts > 0
+              health.hardware_identity_conflicts > 0 ||
+              health.stale_queue_actions > 0
                 ? "warn"
                 : "ok"
             }
