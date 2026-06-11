@@ -38,6 +38,8 @@ type OrganizationOption = {
   agent_username: string | null;
 };
 
+type CopiedCommand = "exe" | "msi" | "build-release" | "publish-release" | "reload-release" | null;
+
 const UNSAFE_AGENT_PASSWORDS = new Set([
   "",
   "admin",
@@ -158,7 +160,7 @@ export default function DownloadsPage() {
   const [cancelBlocked, setCancelBlocked] = useState(true);
   const [usePrintEventLog, setUsePrintEventLog] = useState(true);
   const [autoUpdate, setAutoUpdate] = useState(true);
-  const [copiedCommand, setCopiedCommand] = useState<"exe" | "msi" | null>(null);
+  const [copiedCommand, setCopiedCommand] = useState<CopiedCommand>(null);
   const [copiedSha, setCopiedSha] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -242,7 +244,7 @@ export default function DownloadsPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function copyCommand(kind: "exe" | "msi", command: string) {
+  async function copyCommand(kind: Exclude<CopiedCommand, null>, command: string) {
     await navigator.clipboard.writeText(command);
     setCopiedCommand(kind);
     window.setTimeout(() => setCopiedCommand(null), 1800);
@@ -271,6 +273,7 @@ export default function DownloadsPage() {
     msiFile ? "MSI" : null,
     latest?.checksums_url ? "SHA256" : null,
   ].filter(Boolean);
+  const releaseIncomplete = !latest || latestInstallerCount === 0 || !latest?.checksums_url;
   const selectedOrganization = organizations.find((organization) => organization.slug === deployOrg);
   const selectedOrganizationActive = organizations.length === 0 || selectedOrganization?.is_active === true;
   const validOrganizationSlug = isValidOrganizationSlug(deployOrg);
@@ -306,6 +309,15 @@ export default function DownloadsPage() {
   const cancelBlockedArg = cancelBlocked ? "true" : "false";
   const usePrintEventLogArg = usePrintEventLog ? "true" : "false";
   const autoUpdateArg = autoUpdate ? "true" : "false";
+  const buildReleaseCommand = `cd 'C:\\Projetos\\Sistema Bilhetagem\\agent'
+.\\build_release.ps1
+.\\verify_release.ps1 -RequireMsi -RequireInstaller`;
+  const publishReleaseCommand = `# Ajuste o destino para a pasta do projeto na VPS
+scp -r '.\\releases\\*' usuario@IP_DA_VPS:/caminho/do/projeto/agent/releases/`;
+  const reloadReleaseCommand = `cd /caminho/do/projeto
+docker compose up -d --build backend
+# Opcional, se a VPS tiver PowerShell:
+pwsh ./deploy/preflight-server.ps1 -SkipEndpointChecks`;
   const exeCommand =
     installerFile && commandReady
       ? [
@@ -442,6 +454,58 @@ export default function DownloadsPage() {
           </Button>
         </div>
       </Surface>
+
+      {releaseIncomplete ? (
+        <Surface className="mb-6 p-4">
+          <div className="mb-4 flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <FileArchive className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold">Como publicar o instalador</h2>
+              <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+                Esta tela nao compila o EXE/MSI. Ela mostra e baixa as releases que ja foram geradas no Windows e publicadas na pasta
+                <span className="mx-1 font-mono font-semibold text-foreground">agent/releases</span>
+                da VPS. Depois que o manifest aparecer aqui, os comandos de instalacao silenciosa ficam prontos para copiar.
+              </p>
+            </div>
+          </div>
+          <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+            <div className="font-bold">Fluxo correto</div>
+            <div className="mt-1 text-blue-800">
+              Gere a release no PC de desenvolvimento, publique a pasta <span className="font-mono">agent/releases</span> na VPS e clique em
+              <span className="mx-1 font-semibold">Atualizar</span>
+              nesta tela.
+            </div>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <CommandBox
+              title="1. Gerar no Windows"
+              command={buildReleaseCommand}
+              displayCommand={buildReleaseCommand}
+              disabled={false}
+              copied={copiedCommand === "build-release"}
+              onCopy={() => copyCommand("build-release", buildReleaseCommand)}
+            />
+            <CommandBox
+              title="2. Publicar na VPS"
+              command={publishReleaseCommand}
+              displayCommand={publishReleaseCommand}
+              disabled={false}
+              copied={copiedCommand === "publish-release"}
+              onCopy={() => copyCommand("publish-release", publishReleaseCommand)}
+            />
+            <CommandBox
+              title="3. Revalidar backend"
+              command={reloadReleaseCommand}
+              displayCommand={reloadReleaseCommand}
+              disabled={false}
+              copied={copiedCommand === "reload-release"}
+              onCopy={() => copyCommand("reload-release", reloadReleaseCommand)}
+            />
+          </div>
+        </Surface>
+      ) : null}
 
       {isAdmin ? (
         <Surface className="mb-6 p-4">
