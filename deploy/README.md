@@ -14,6 +14,37 @@ Depois acesse:
 
 O arquivo `.env` controla senhas, segredo JWT e URLs publicas.
 
+## Backup antes do piloto
+
+Antes de instalar agents em uma empresa real, gere um backup operacional:
+
+```powershell
+cd C:\Bilhetagem
+.\deploy\backup-server.ps1
+```
+
+O backup fica em `C:\Bilhetagem\backups\<data-hora>` e inclui:
+
+- `postgres.sql`
+- `metadata.json`
+- copia do `.env`, quando existir
+- `agent-releases.zip`, quando `agent\releases` existir
+
+Para restaurar um backup:
+
+```powershell
+cd C:\Bilhetagem
+.\deploy\restore-server.ps1 -BackupPath .\backups\20260610-220000 -Force
+```
+
+Para restaurar tambem os instaladores do agent:
+
+```powershell
+.\deploy\restore-server.ps1 -BackupPath .\backups\20260610-220000 -RestoreAgentReleases -Force
+```
+
+O restore sempre gera um backup de seguranca antes de sobrescrever o banco.
+
 ## Downloads do agent
 
 O backend serve os instaladores do agent a partir de `agent/releases`, montado no container como `/app/agent_downloads`.

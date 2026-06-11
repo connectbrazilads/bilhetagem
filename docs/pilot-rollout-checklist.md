@@ -4,6 +4,7 @@ Use este roteiro antes de colocar o sistema em teste com uma empresa.
 
 ## 1. Preparar a empresa
 
+- Gerar backup da VPS com `.\deploy\backup-server.ps1`.
 - Criar ou selecionar a empresa correta no painel.
 - Confirmar que a empresa esta ativa.
 - Confirmar usuario tecnico `agent` e senha propria da empresa.
@@ -53,6 +54,17 @@ Use este roteiro antes de colocar o sistema em teste com uma empresa.
 - Nenhuma duplicidade critica pendente.
 - Relatorio PDF/Excel conferido.
 - Backup da VPS ativo antes do uso continuo.
+
+## Rollback do piloto
+
+Se o teste criar dados ruins ou misturar filas/impressoras, restaure o backup:
+
+```powershell
+cd C:\Bilhetagem
+.\deploy\restore-server.ps1 -BackupPath .\backups\<data-hora> -Force
+```
+
+Use `-RestoreAgentReleases` apenas se tambem precisar restaurar os instaladores publicados.
 
 ## Pendencia comercial
 
