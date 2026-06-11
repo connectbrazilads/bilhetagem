@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Edit, Plus, ShieldCheck, TestTube2, Trash2 } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState, type ComponentType } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, Ban, Edit, GitBranch, LockKeyhole, Plus, ShieldCheck, Sparkles, TestTube2, Trash2 } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -150,15 +150,22 @@ export default function PoliciesPage() {
   }, [users, printers]);
 
   const summary = useMemo(() => {
+    const active = policies.filter((policy) => policy.is_active).length;
     return {
       total: policies.length,
-      active: policies.filter((policy) => policy.is_active).length,
+      active,
+      inactive: policies.length - active,
       blockers: policies.filter((policy) => policy.action === "block").length,
       release: policies.filter((policy) => policy.action === "require_release").length,
       mono: policies.filter((policy) => policy.action === "force_mono").length,
       exceptions: policies.filter((policy) => policy.action === "allow").length,
+      scoped: policies.filter((policy) => policy.user_id || policy.department_id || policy.printer_id || policy.printer_alias_id || policy.queue_name).length,
+      scheduleRules: policies.filter((policy) => policy.rule_type === "time_window").length,
+      colorRules: policies.filter((policy) => policy.rule_type === "color").length,
+      maxPageRules: policies.filter((policy) => policy.rule_type === "max_pages").length,
     };
   }, [policies]);
+  const activePercent = summary.total ? Math.round((summary.active / summary.total) * 100) : 0;
 
   const aliases = useMemo(() => {
     return printers.flatMap((printer) =>
@@ -385,14 +392,41 @@ export default function PoliciesPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <Summary label="Politicas" value={summary.total} />
-        <Summary label="Ativas" value={summary.active} />
-        <Summary label="Bloqueios" value={summary.blockers} />
-        <Summary label="Liberacao" value={summary.release} />
-        <Summary label="Cobrar P&B" value={summary.mono} />
-        <Summary label="Excecoes" value={summary.exceptions} />
-      </div>
+      <Surface className="mb-6 overflow-hidden">
+        <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="border-b p-5 lg:border-b-0 lg:border-r">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase text-muted-foreground">Motor de decisao</div>
+                <div className="mt-1 text-xl font-bold">Governanca de impressoes</div>
+              </div>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${summary.active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                {summary.active ? "Politicas ativas" : "Sem regra ativa"}
+              </span>
+            </div>
+            <div className="mb-3 flex flex-wrap items-end gap-3">
+              <div className="text-4xl font-bold">{activePercent}%</div>
+              <div className="pb-1 text-sm text-muted-foreground">
+                {summary.active.toLocaleString("pt-BR")} de {summary.total.toLocaleString("pt-BR")} politica(s) ativas
+              </div>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-blue-600" style={{ width: `${activePercent}%` }} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <PolicySignal icon={GitBranch} label="Segmentadas" value={summary.scoped.toLocaleString("pt-BR")} detail="Usuario, depto., impressora ou fila" />
+              <PolicySignal icon={Sparkles} label="Colorido" value={summary.colorRules.toLocaleString("pt-BR")} detail="Regras focadas em impressao colorida" />
+              <PolicySignal icon={AlertTriangle} label="Inativas" value={summary.inactive.toLocaleString("pt-BR")} detail="Cadastradas, mas sem efeito" />
+            </div>
+          </div>
+          <div className="grid gap-0 sm:grid-cols-2">
+            <PolicyTile icon={Ban} label="Bloqueios" value={summary.blockers} detail="Impedem jobs conforme regra" tone={summary.blockers ? "danger" : "muted"} />
+            <PolicyTile icon={LockKeyhole} label="Liberacao" value={summary.release} detail="Enviam para Follow-Me" tone={summary.release ? "warn" : "muted"} />
+            <PolicyTile icon={ShieldCheck} label="Excecoes" value={summary.exceptions} detail="Permitem cenarios especificos" tone={summary.exceptions ? "ok" : "muted"} />
+            <PolicyTile icon={Sparkles} label="Cobrar P&B" value={summary.mono} detail="Contabilizacao sem prometer driver" tone={summary.mono ? "info" : "muted"} />
+          </div>
+        </div>
+      </Surface>
 
       {isAdmin ? (
         <Surface as="form" className="mb-4 grid gap-3 p-4" onSubmit={submit}>
@@ -669,17 +703,64 @@ export default function PoliciesPage() {
   );
 }
 
-function Summary({ label, value }: { label: string; value: number }) {
+function PolicySignal({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  detail: string;
+}) {
   return (
-    <Surface className="p-5">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-muted-foreground">{label}</span>
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <ShieldCheck className="h-4 w-4" />
-        </div>
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-[11px] font-bold uppercase text-muted-foreground">{label}</div>
+        <Icon className="h-4 w-4 text-primary" />
       </div>
-      <div className="mt-3 text-3xl font-semibold">{value.toLocaleString("pt-BR")}</div>
-    </Surface>
+      <div className="text-lg font-bold">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function PolicyTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  detail: string;
+  tone: "ok" | "warn" | "danger" | "info" | "muted";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : tone === "danger"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className="border-b p-4 sm:border-r odd:sm:border-r">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-bold uppercase text-muted-foreground">{label}</div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="text-2xl font-bold">{value.toLocaleString("pt-BR")}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+    </div>
   );
 }
 
