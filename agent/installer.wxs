@@ -15,6 +15,10 @@
     <Property Id="ORGANIZATION" Secure="yes" Value="default" />
     <Property Id="DEFAULTUSERNAME" Secure="yes" />
     <Property Id="SPOOLSERVER" Secure="yes" />
+    <Property Id="SNMPCOMMUNITY" Secure="yes" Value="public" />
+    <Property Id="SNMPPOLLINTERVAL" Secure="yes" Value="60" />
+    <Property Id="SNMPTIMEOUT" Secure="yes" Value="2.0" />
+    <Property Id="SNMPRETRIES" Secure="yes" Value="1" />
     <Property Id="CANCELBLOCKED" Secure="yes" />
     <Property Id="USEPRINTEVENTLOG" Secure="yes" />
     <Property Id="AUTOUPDATE" Secure="yes" />
@@ -32,7 +36,7 @@
     <CustomAction
       Id="RunAgentInstaller"
       BinaryRef="AgentInstallerExe"
-      ExeCommand="--silent --api-url &quot;[APIURL]&quot; --username &quot;[AGENTUSER]&quot; --password &quot;[AGENTPASSWORD]&quot; --organization &quot;[ORGANIZATION]&quot; --default-username &quot;[DEFAULTUSERNAME]&quot; --spool-server &quot;[SPOOLSERVER]&quot; --log-level &quot;[LOGLEVEL]&quot; --cancel-blocked &quot;[CANCELBLOCKED]&quot; --use-print-event-log &quot;[USEPRINTEVENTLOG]&quot; --auto-update &quot;[AUTOUPDATE]&quot;"
+      ExeCommand="--silent --api-url &quot;[APIURL]&quot; --username &quot;[AGENTUSER]&quot; --password &quot;[AGENTPASSWORD]&quot; --organization &quot;[ORGANIZATION]&quot; --default-username &quot;[DEFAULTUSERNAME]&quot; --spool-server &quot;[SPOOLSERVER]&quot; --snmp-community &quot;[SNMPCOMMUNITY]&quot; --snmp-poll-interval &quot;[SNMPPOLLINTERVAL]&quot; --snmp-timeout &quot;[SNMPTIMEOUT]&quot; --snmp-retries &quot;[SNMPRETRIES]&quot; --log-level &quot;[LOGLEVEL]&quot; --cancel-blocked &quot;[CANCELBLOCKED]&quot; --use-print-event-log &quot;[USEPRINTEVENTLOG]&quot; --auto-update &quot;[AUTOUPDATE]&quot;"
       Execute="deferred"
       Return="check"
       Impersonate="no" />

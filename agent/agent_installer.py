@@ -4,6 +4,7 @@ import ctypes
 import getpass
 import argparse
 import json
+import math
 import os
 import re
 import shutil
@@ -143,6 +144,28 @@ def as_config_float(value, default: float, *, min_value: float | None = None) ->
     return parsed
 
 
+def as_int_arg(value, label: str, *, min_value: int | None = None) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"{label} invalido: {value}") from exc
+    if not math.isfinite(parsed):
+        raise RuntimeError(f"{label} invalido: {value}")
+    if min_value is not None and parsed < min_value:
+        raise RuntimeError(f"{label} invalido: minimo {min_value}")
+    return parsed
+
+
+def as_float_arg(value, label: str, *, min_value: float | None = None) -> float:
+    try:
+        parsed = float(str(value).strip().replace(",", "."))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"{label} invalido: {value}") from exc
+    if min_value is not None and parsed < min_value:
+        raise RuntimeError(f"{label} invalido: minimo {min_value}")
+    return parsed
+
+
 def as_log_level(value, default: str = "INFO") -> str:
     cleaned = normalize_text(value).upper()
     if cleaned in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
@@ -156,6 +179,18 @@ def pick_bool_arg_or_config(arg_value, existing: dict, template: dict, key: str,
     if arg_value is not None and str(arg_value).strip():
         return as_bool(arg_value)
     return as_config_bool(pick_config_value(existing, template, key, default), default)
+
+
+def pick_int_arg_or_config(arg_value, existing: dict, template: dict, key: str, default: int, *, min_value: int | None = None) -> int:
+    if arg_value is not None and str(arg_value).strip():
+        return as_int_arg(arg_value, key, min_value=min_value)
+    return as_config_int(pick_config_value(existing, template, key, default), default, min_value=min_value)
+
+
+def pick_float_arg_or_config(arg_value, existing: dict, template: dict, key: str, default: float, *, min_value: float | None = None) -> float:
+    if arg_value is not None and str(arg_value).strip():
+        return as_float_arg(arg_value, key, min_value=min_value)
+    return as_config_float(pick_config_value(existing, template, key, default), default, min_value=min_value)
 
 
 def normalize_text(value) -> str:
@@ -196,6 +231,10 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             allow_empty_arg=True,
         )
         spool_server = pick_arg_or_config(args.spool_server, existing, template, "PRINTBILLING_SPOOL_SERVER", "")
+        snmp_community = pick_arg_or_config(args.snmp_community, existing, template, "PRINTBILLING_SNMP_COMMUNITY", "public")
+        snmp_poll_interval = pick_int_arg_or_config(args.snmp_poll_interval, existing, template, "PRINTBILLING_SNMP_POLL_INTERVAL", 60, min_value=1)
+        snmp_timeout = pick_float_arg_or_config(args.snmp_timeout, existing, template, "PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2.0, min_value=0.1)
+        snmp_retries = pick_int_arg_or_config(args.snmp_retries, existing, template, "PRINTBILLING_SNMP_RETRIES", 1, min_value=0)
         cancel_blocked = pick_bool_arg_or_config(args.cancel_blocked, existing, template, "PRINTBILLING_CANCEL_BLOCKED", True)
         use_print_event_log = pick_bool_arg_or_config(args.use_print_event_log, existing, template, "PRINTBILLING_USE_PRINT_EVENT_LOG", True)
         auto_update = pick_bool_arg_or_config(args.auto_update, existing, template, "PRINTBILLING_AUTO_UPDATE", True)
@@ -232,6 +271,13 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
             "Servidor de impressao remoto (opcional)",
             existing.get("PRINTBILLING_SPOOL_SERVER") or template.get("PRINTBILLING_SPOOL_SERVER", ""),
         )
+        snmp_community = prompt_value(
+            "Comunidade SNMP",
+            existing.get("PRINTBILLING_SNMP_COMMUNITY") or template.get("PRINTBILLING_SNMP_COMMUNITY", "public"),
+        )
+        snmp_poll_interval = as_config_int(pick_config_value(existing, template, "PRINTBILLING_SNMP_POLL_INTERVAL", 60), 60, min_value=1)
+        snmp_timeout = as_config_float(pick_config_value(existing, template, "PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2.0), 2.0, min_value=0.1)
+        snmp_retries = as_config_int(pick_config_value(existing, template, "PRINTBILLING_SNMP_RETRIES", 1), 1, min_value=0)
         log_level = as_log_level(
             prompt_value(
                 "Modo de log (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
@@ -248,6 +294,7 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
     organization_slug = normalize_organization_slug(organization_slug)
     default_username = normalize_text(default_username)
     spool_server = normalize_text(spool_server)
+    snmp_community = normalize_text(snmp_community) or "public"
     log_level = as_log_level(log_level)
     if not username or not password:
         raise RuntimeError("Configuracao do agent requer API URL, usuario, senha e slug da empresa.")
@@ -262,10 +309,10 @@ def build_config(existing: dict, template: dict, args: argparse.Namespace) -> di
         "PRINTBILLING_CANCEL_BLOCKED": cancel_blocked,
         "PRINTBILLING_POLL_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_POLL_INTERVAL", 5), 5, min_value=1),
         "PRINTBILLING_DEFAULT_USERNAME": default_username,
-        "PRINTBILLING_SNMP_POLL_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_SNMP_POLL_INTERVAL", 60), 60, min_value=1),
-        "PRINTBILLING_SNMP_COMMUNITY": pick_config_value(existing, template, "PRINTBILLING_SNMP_COMMUNITY", "public"),
-        "PRINTBILLING_SNMP_TIMEOUT_SECONDS": as_config_float(pick_config_value(existing, template, "PRINTBILLING_SNMP_TIMEOUT_SECONDS", 2), 2.0, min_value=0.1),
-        "PRINTBILLING_SNMP_RETRIES": as_config_int(pick_config_value(existing, template, "PRINTBILLING_SNMP_RETRIES", 1), 1, min_value=0),
+        "PRINTBILLING_SNMP_POLL_INTERVAL": snmp_poll_interval,
+        "PRINTBILLING_SNMP_COMMUNITY": snmp_community,
+        "PRINTBILLING_SNMP_TIMEOUT_SECONDS": snmp_timeout,
+        "PRINTBILLING_SNMP_RETRIES": snmp_retries,
         "PRINTBILLING_USE_PRINT_EVENT_LOG": use_print_event_log,
         "PRINTBILLING_AUTO_UPDATE": auto_update,
         "PRINTBILLING_UPDATE_CHECK_INTERVAL": as_config_int(pick_config_value(existing, template, "PRINTBILLING_UPDATE_CHECK_INTERVAL", 3600), 3600, min_value=60),
@@ -339,6 +386,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--organization", help="Slug da empresa")
     parser.add_argument("--default-username", help="Usuario padrao quando o Windows nao informar")
     parser.add_argument("--spool-server", help="Servidor de impressao remoto opcional para enumerar filas")
+    parser.add_argument("--snmp-community", help="Comunidade SNMP usada para monitorar impressoras de rede")
+    parser.add_argument("--snmp-poll-interval", help="Intervalo de coleta SNMP em segundos")
+    parser.add_argument("--snmp-timeout", help="Timeout SNMP em segundos")
+    parser.add_argument("--snmp-retries", help="Numero de tentativas SNMP")
     parser.add_argument("--log-level", help="Modo de log: DEBUG, INFO, WARNING, ERROR ou CRITICAL")
     parser.add_argument("--cancel-blocked", help="Cancela trabalhos bloqueados no spool: true ou false")
     parser.add_argument("--use-print-event-log", help="Usa Event Log de impressao do Windows: true ou false")

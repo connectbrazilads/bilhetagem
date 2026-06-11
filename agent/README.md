@@ -10,6 +10,10 @@ O agente deve ser instalado no servidor de impressao Windows ou em uma estacao q
 - `PRINTBILLING_ORGANIZATION_SLUG`: slug da empresa no SaaS; obrigatorio para o agent iniciar
 - `PRINTBILLING_CANCEL_BLOCKED`: `true` para cancelar trabalhos bloqueados
 - `PRINTBILLING_POLL_INTERVAL`: intervalo de varredura em segundos
+- `PRINTBILLING_SNMP_COMMUNITY`: comunidade SNMP usada para impressoras de rede
+- `PRINTBILLING_SNMP_POLL_INTERVAL`: intervalo de coleta SNMP em segundos
+- `PRINTBILLING_SNMP_TIMEOUT_SECONDS`: timeout de cada tentativa SNMP em segundos
+- `PRINTBILLING_SNMP_RETRIES`: numero de tentativas SNMP
 - `PRINTBILLING_AUTO_UPDATE`: `true` para permitir auto-update do agent
 - `PRINTBILLING_UPDATE_CHECK_INTERVAL`: intervalo de checagem de update em segundos
 - `PRINTBILLING_HEARTBEAT_INTERVAL`: intervalo para enviar saude do PC e filas locais em segundos
@@ -50,13 +54,14 @@ Para remover:
 ## Instalacao silenciosa
 
 ```powershell
-.\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "SENHA_FORTE_DO_AGENT" --organization default --default-username "" --use-print-event-log "true" --cancel-blocked "true" --auto-update "true"
+.\\PrintBillingAgentInstaller.exe --silent --api-url "https://billing.empresa.local" --username agent --password "SENHA_FORTE_DO_AGENT" --organization default --default-username "" --snmp-community "public" --snmp-poll-interval "60" --snmp-timeout "2.0" --snmp-retries "1" --use-print-event-log "true" --cancel-blocked "true" --auto-update "true"
 ```
 
 Na instalacao silenciosa nova, informe `--api-url`, `--username`, `--password` e `--organization`.
 Na reinstalacao silenciosa, parametros omitidos reutilizam o `config.json` existente. Para remover um usuario padrao antigo do PC, envie explicitamente `--default-username ""`.
 O instalador e o agent recusam senhas padrao ou placeholders como `agent12345`, `agent`, `admin12345` e `change-me-agent-password`; gere uma senha exclusiva para o usuario tecnico de cada empresa.
 Se o agent precisa monitorar filas de um servidor de impressao remoto, adicione `--spool-server "\\SRV-PRINT01"`.
+Se a rede do cliente usa comunidade SNMP diferente de `public` ou impressoras lentas, ajuste `--snmp-community`, `--snmp-poll-interval`, `--snmp-timeout` e `--snmp-retries`.
 Use `--use-print-event-log`, `--cancel-blocked` e `--auto-update` com `true` ou `false` para padronizar o modo de captura e comportamento do agent em implantacoes em lote.
 
 ## Auto-update
@@ -142,5 +147,5 @@ $env:PRINTBILLING_CERT_PASSWORD="senha"
 MSI silencioso:
 
 ```powershell
-msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="SENHA_FORTE_DO_AGENT" ORGANIZATION="default" SPOOLSERVER="\\SRV-PRINT01" USEPRINTEVENTLOG="true" CANCELBLOCKED="true" AUTOUPDATE="true" /qn
+msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="SENHA_FORTE_DO_AGENT" ORGANIZATION="default" SPOOLSERVER="\\SRV-PRINT01" SNMPCOMMUNITY="public" SNMPPOLLINTERVAL="60" SNMPTIMEOUT="2.0" SNMPRETRIES="1" USEPRINTEVENTLOG="true" CANCELBLOCKED="true" AUTOUPDATE="true" /qn
 ```

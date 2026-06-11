@@ -17,6 +17,10 @@ def args(**overrides):
         "organization": None,
         "default_username": None,
         "spool_server": None,
+        "snmp_community": None,
+        "snmp_poll_interval": None,
+        "snmp_timeout": None,
+        "snmp_retries": None,
         "log_level": None,
         "cancel_blocked": None,
         "use_print_event_log": None,
@@ -236,6 +240,52 @@ def test_silent_install_can_set_remote_spool_server():
     )
 
     assert config["PRINTBILLING_SPOOL_SERVER"] == r"\\SRV-PRINT01"
+
+
+def test_silent_install_can_override_snmp_settings():
+    config = build_config(
+        {},
+        {},
+        args(
+            api_url="https://billing.example.com",
+            username="agent",
+            password="secret",
+            organization="cliente-a",
+            snmp_community=" cliente-snmp ",
+            snmp_poll_interval="120",
+            snmp_timeout="3,5",
+            snmp_retries="2",
+        ),
+    )
+
+    assert config["PRINTBILLING_SNMP_COMMUNITY"] == "cliente-snmp"
+    assert config["PRINTBILLING_SNMP_POLL_INTERVAL"] == 120
+    assert config["PRINTBILLING_SNMP_TIMEOUT_SECONDS"] == 3.5
+    assert config["PRINTBILLING_SNMP_RETRIES"] == 2
+
+
+def test_silent_install_rejects_invalid_snmp_args():
+    for overrides in (
+        {"snmp_poll_interval": "0"},
+        {"snmp_timeout": "0"},
+        {"snmp_retries": "-1"},
+    ):
+        try:
+            build_config(
+                {},
+                {},
+                args(
+                    api_url="https://billing.example.com",
+                    username="agent",
+                    password="secret",
+                    organization="cliente-a",
+                    **overrides,
+                ),
+            )
+        except RuntimeError as exc:
+            assert "SNMP" in str(exc) or "PRINTBILLING_SNMP" in str(exc)
+        else:
+            raise AssertionError(f"Argumento SNMP invalido deveria falhar: {overrides}")
 
 
 def test_silent_install_can_set_log_level():

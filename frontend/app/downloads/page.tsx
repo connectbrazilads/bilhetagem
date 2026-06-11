@@ -150,6 +150,10 @@ export default function DownloadsPage() {
   const [deployPassword, setDeployPassword] = useState("");
   const [defaultUsername, setDefaultUsername] = useState("");
   const [spoolServer, setSpoolServer] = useState("");
+  const [snmpCommunity, setSnmpCommunity] = useState("public");
+  const [snmpPollInterval, setSnmpPollInterval] = useState("60");
+  const [snmpTimeout, setSnmpTimeout] = useState("2.0");
+  const [snmpRetries, setSnmpRetries] = useState("1");
   const [logLevel, setLogLevel] = useState("INFO");
   const [cancelBlocked, setCancelBlocked] = useState(true);
   const [usePrintEventLog, setUsePrintEventLog] = useState(true);
@@ -271,11 +275,31 @@ export default function DownloadsPage() {
   const selectedOrganizationActive = organizations.length === 0 || selectedOrganization?.is_active === true;
   const validOrganizationSlug = isValidOrganizationSlug(deployOrg);
   const unsafePassword = isUnsafeAgentPassword(deployPassword);
-  const commandReady = Boolean(deployOrg.trim() && validOrganizationSlug && deployUser.trim() && deployPassword.trim() && selectedOrganizationActive && !unsafePassword);
+  const snmpPollIntervalNumber = Number(snmpPollInterval);
+  const snmpTimeoutNumber = Number(snmpTimeout.replace(",", "."));
+  const snmpRetriesNumber = Number(snmpRetries);
+  const snmpSettingsValid =
+    Number.isFinite(snmpPollIntervalNumber) &&
+    snmpPollIntervalNumber >= 1 &&
+    Number.isFinite(snmpTimeoutNumber) &&
+    snmpTimeoutNumber >= 0.1 &&
+    Number.isFinite(snmpRetriesNumber) &&
+    snmpRetriesNumber >= 0;
+  const commandReady = Boolean(
+    deployOrg.trim() &&
+      validOrganizationSlug &&
+      deployUser.trim() &&
+      deployPassword.trim() &&
+      selectedOrganizationActive &&
+      !unsafePassword &&
+      snmpSettingsValid
+  );
   const commandMissingMessage = unsafePassword
     ? "Use uma senha exclusiva para esta empresa; senhas padrao ou placeholders sao bloqueadas."
     : !validOrganizationSlug
     ? "Slug da empresa invalido. Use apenas letras, numeros e hifens, sem espacos."
+    : !snmpSettingsValid
+    ? "Revise SNMP: intervalo minimo 1s, timeout minimo 0,1s e tentativas a partir de 0."
     : selectedOrganizationActive
     ? "Informe empresa, usuario e senha do agent para gerar o comando."
     : "Empresa inativa: reative a empresa antes de gerar comando de instalacao.";
@@ -300,6 +324,14 @@ export default function DownloadsPage() {
           powershellQuote(defaultUsername),
           "--spool-server",
           powershellQuote(spoolServer),
+          "--snmp-community",
+          powershellQuote(snmpCommunity),
+          "--snmp-poll-interval",
+          powershellQuote(snmpPollInterval),
+          "--snmp-timeout",
+          powershellQuote(snmpTimeout),
+          "--snmp-retries",
+          powershellQuote(snmpRetries),
           "--log-level",
           powershellQuote(logLevel),
           "--cancel-blocked",
@@ -322,6 +354,10 @@ export default function DownloadsPage() {
           msiProperty("ORGANIZATION", deployOrg),
           msiProperty("DEFAULTUSERNAME", defaultUsername),
           msiProperty("SPOOLSERVER", spoolServer),
+          msiProperty("SNMPCOMMUNITY", snmpCommunity),
+          msiProperty("SNMPPOLLINTERVAL", snmpPollInterval),
+          msiProperty("SNMPTIMEOUT", snmpTimeout),
+          msiProperty("SNMPRETRIES", snmpRetries),
           msiProperty("LOGLEVEL", logLevel),
           msiProperty("CANCELBLOCKED", cancelBlockedArg),
           msiProperty("USEPRINTEVENTLOG", usePrintEventLogArg),
@@ -458,6 +494,24 @@ export default function DownloadsPage() {
                 <option value="ERROR">ERROR</option>
                 <option value="CRITICAL">CRITICAL</option>
               </select>
+            </label>
+          </div>
+          <div className="mb-4 grid gap-3 md:grid-cols-4">
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Comunidade SNMP
+              <Input value={snmpCommunity} onChange={(event) => setSnmpCommunity(event.target.value)} />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Coleta SNMP (s)
+              <Input type="number" min={1} value={snmpPollInterval} onChange={(event) => setSnmpPollInterval(event.target.value)} />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Timeout SNMP (s)
+              <Input type="number" min={0.1} step={0.1} value={snmpTimeout} onChange={(event) => setSnmpTimeout(event.target.value)} />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Tentativas SNMP
+              <Input type="number" min={0} value={snmpRetries} onChange={(event) => setSnmpRetries(event.target.value)} />
             </label>
           </div>
           <div className="mb-4 grid gap-2 md:grid-cols-3">
