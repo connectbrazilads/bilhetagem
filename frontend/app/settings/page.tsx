@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { AlertCircle, CheckCircle, Mail, RefreshCw, Save, Server, UploadCloud } from "lucide-react";
+import { FormEvent, useEffect, useState, type ComponentType } from "react";
+import { AlertCircle, CheckCircle, CloudUpload, Gauge, LockKeyhole, Mail, RefreshCw, Save, Server, ShieldCheck, UploadCloud, Users, WalletCards } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -321,11 +321,43 @@ export default function SettingsPage() {
         </div>
       )}
 
+      <Surface className="mb-6 overflow-hidden">
+        <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="border-b p-5 lg:border-b-0 lg:border-r">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase text-muted-foreground">Centro de configuracao</div>
+                <div className="mt-1 text-xl font-bold">Governanca da empresa</div>
+              </div>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${blockingEnabled && safeReleaseEnabled ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                {blockingEnabled && safeReleaseEnabled ? "Controle ativo" : "Revisar regras"}
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <ConfigSignal icon={WalletCards} label="Cota padrao" value={`${defaultQuota.toLocaleString("pt-BR")} pag.`} detail="Aplicada a novos usuarios" />
+              <ConfigSignal icon={Gauge} label="Custo P&B" value={defaultPrinterCostMono.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} detail="Valor padrao por pagina" />
+              <ConfigSignal icon={Gauge} label="Custo cor" value={defaultPrinterCostColor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} detail="Valor padrao por pagina" />
+            </div>
+          </div>
+          <div className="grid gap-0 sm:grid-cols-2">
+            <ModuleTile icon={Users} label="Usuarios auto" active={autoCreateUsers} detail="Cria usuario no primeiro job capturado" />
+            <ModuleTile icon={LockKeyhole} label="Bloqueio" active={blockingEnabled} detail="Interrompe jobs sem cota ou saldo" />
+            <ModuleTile icon={ShieldCheck} label="Follow-Me" active={safeReleaseEnabled} detail="Fila de liberacao segura" />
+            <ModuleTile icon={CloudUpload} label="Web Print" active={webPrintEnabled} detail="Modulo opcional para PDF no navegador" />
+          </div>
+        </div>
+      </Surface>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Surface className="p-5">
-          <div className="mb-5">
+          <div className="mb-5 flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
             <h2 className="text-lg font-semibold">Geral</h2>
             <p className="text-xs text-muted-foreground">Regras basicas de cota, bloqueio e criacao automatica.</p>
+            </div>
           </div>
           <div className="grid gap-4">
             <label className="text-sm font-medium">
@@ -374,7 +406,12 @@ export default function SettingsPage() {
             </div>
             <div>
               <h2 className="text-lg font-semibold">Relatorios mensais</h2>
-              <p className="text-xs text-muted-foreground">Envio automatico do fechamento comercial por e-mail.</p>
+              <p className="text-xs text-muted-foreground">
+                Envio automatico do fechamento comercial por e-mail. Status:{" "}
+                <span className={monthlyEmailEnabled ? "font-semibold text-emerald-700" : "font-semibold text-muted-foreground"}>
+                  {monthlyEmailEnabled ? "ativo" : "inativo"}
+                </span>
+              </p>
             </div>
           </div>
           <div className="grid gap-4">
@@ -414,7 +451,12 @@ export default function SettingsPage() {
             </div>
             <div>
               <h2 className="text-lg font-semibold">Integracao AD / LDAP</h2>
-              <p className="text-xs text-muted-foreground">Sincronizacao de usuarios e departamentos corporativos.</p>
+              <p className="text-xs text-muted-foreground">
+                Sincronizacao de usuarios e departamentos corporativos.{" "}
+                <span className={hasSavedLdapPassword ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+                  {hasSavedLdapPassword ? "Senha salva" : "senha ainda nao salva"}
+                </span>
+              </p>
             </div>
           </div>
           <div className="grid gap-4">
@@ -556,6 +598,58 @@ function ToggleRow({ id, checked, onChange, label }: { id: string; checked: bool
       <label htmlFor={id} className="cursor-pointer text-sm font-medium">
         {label}
       </label>
+    </div>
+  );
+}
+
+function ConfigSignal({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-[11px] font-bold uppercase text-muted-foreground">{label}</div>
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <div className="text-lg font-bold">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function ModuleTile({
+  icon: Icon,
+  label,
+  active,
+  detail,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  active: boolean;
+  detail: string;
+}) {
+  return (
+    <div className="border-b p-4 sm:border-r odd:sm:border-r">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-bold uppercase text-muted-foreground">{label}</div>
+        <span
+          className={`flex h-8 w-8 items-center justify-center rounded-md border ${
+            active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="text-lg font-bold">{active ? "Ativo" : "Inativo"}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
     </div>
   );
 }
