@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, Cpu, FileText, MonitorCog, Network, Plus, RefreshCw, Search, Server, TerminalSquare, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, Cpu, FileText, MonitorCog, Network, Plus, RefreshCw, Search, Server, TerminalSquare, Trash2, Usb, X } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -131,6 +131,13 @@ function statusClass(agent: AgentRow) {
   return "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
+function statusLabel(agent: AgentRow) {
+  if (!agent.is_online) return "Offline";
+  if (agent.health_alerts.some((alert) => alert.severity === "error")) return "Erro";
+  if (agent.health_alerts.some((alert) => alert.severity === "warning")) return "Atencao";
+  return "Saudavel";
+}
+
 function alertClass(severity: string) {
   if (severity === "error") return "border-red-200 bg-red-50 text-red-700";
   if (severity === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
@@ -213,6 +220,15 @@ function printerName(printers: PrinterOption[], printerId: number | null) {
 
 function hasAlert(agent: AgentRow, code: string) {
   return agent.health_alerts.some((alert) => alert.code === code);
+}
+
+function actionableAlertCount(agent: AgentRow) {
+  return agent.health_alerts.filter((alert) => alert.severity === "warning" || alert.severity === "error").length;
+}
+
+function onlinePercent(total: number, online: number) {
+  if (!total) return 0;
+  return Math.round((online / total) * 100);
 }
 
 function plainTextKey(value: string | null | undefined) {
@@ -406,7 +422,14 @@ export default function AgentsPage() {
     const online = agents.filter((agent) => agent.is_online).length;
     const withError = agents.filter((agent) => agent.health_alerts.length > 0).length;
     const queues = agents.reduce((total, agent) => total + agent.aliases.filter((alias) => alias.is_present).length, 0);
-    return { total: agents.length, online, offline: agents.length - online, withError, queues };
+    const unboundQueues = agents.reduce((total, agent) => total + agent.aliases.filter((alias) => alias.is_present && !alias.printer_id).length, 0);
+    const usbQueues = agents.reduce((total, agent) => total + agent.aliases.filter((alias) => alias.is_present && alias.connection_type === "usb").length, 0);
+    const genericQueues = agents.reduce((total, agent) => total + agent.aliases.filter((alias) => alias.is_present && isGenericQueueName(alias.queue_name)).length, 0);
+    const queueActions = agents.reduce(
+      (total, agent) => total + agent.queue_actions.filter((action) => action.status === "pending" || action.status === "running").length,
+      0
+    );
+    return { total: agents.length, online, offline: agents.length - online, withError, queues, unboundQueues, usbQueues, genericQueues, queueActions };
   }, [agents]);
   const filteredAgents = useMemo(() => {
     const search = agentSearch.trim().toLowerCase();
@@ -460,52 +483,83 @@ export default function AgentsPage() {
     <ProtectedPage>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Agents</h1>
-          <p className="text-sm text-muted-foreground">Saude dos PCs que capturam impressoes e filas locais detectadas.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Operacao dos PCs que capturam impressoes, filas locais e acoes remotas.</p>
         </div>
-        <Button variant="outline" onClick={load} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-muted-foreground">
+            Atualiza a cada 15s
+          </span>
+          <Button variant="outline" onClick={load} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
-      <div className="mb-6 grid gap-4 md:grid-cols-5">
-        <Surface className="p-4">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            Total
-            <MonitorCog className="h-4 w-4 text-primary" />
+      <Surface className="mb-6 overflow-hidden">
+        <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="border-b p-5 lg:border-b-0 lg:border-r">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase text-muted-foreground">Centro de operacao</div>
+                <div className="mt-1 text-xl font-bold">Saude do parque de agents</div>
+              </div>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${summary.offline || summary.withError ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                {summary.offline || summary.withError ? "Requer atencao" : "Operacao normal"}
+              </span>
+            </div>
+            <div className="mb-3 flex items-end gap-3">
+              <div className="text-4xl font-bold">{onlinePercent(summary.total, summary.online)}%</div>
+              <div className="pb-1 text-sm text-muted-foreground">
+                {summary.online} de {summary.total} PC(s) online
+              </div>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${onlinePercent(summary.total, summary.online)}%` }} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <SignalPill icon={CheckCircle2} label="Online" value={summary.online} tone="ok" />
+              <SignalPill icon={Clock3} label="Offline" value={summary.offline} tone={summary.offline ? "danger" : "muted"} />
+              <SignalPill icon={Network} label="Filas" value={summary.queues} tone="info" />
+            </div>
           </div>
-          <div className="mt-2 text-2xl font-bold">{summary.total}</div>
-        </Surface>
-        <Surface className="p-4">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            Online
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          <div className="grid gap-0 sm:grid-cols-2">
+            <OpsTile
+              icon={AlertTriangle}
+              label="Alertas"
+              value={summary.withError}
+              detail="Agents com erro, aviso ou ajuste pendente"
+              tone={summary.withError ? "warn" : "ok"}
+              onClick={() => setAgentStatusFilter("alerts")}
+            />
+            <OpsTile
+              icon={Network}
+              label="Sem vinculo"
+              value={summary.unboundQueues}
+              detail="Filas ainda nao ligadas a uma impressora fisica"
+              tone={summary.unboundQueues ? "warn" : "ok"}
+              onClick={() => setAgentStatusFilter("unbound")}
+            />
+            <OpsTile
+              icon={Usb}
+              label="USB"
+              value={summary.usbQueues}
+              detail="Bilhetagem local sem SNMP de rede"
+              tone={summary.usbQueues ? "info" : "muted"}
+              onClick={() => setAgentStatusFilter("usb")}
+            />
+            <OpsTile
+              icon={TerminalSquare}
+              label="Acoes"
+              value={summary.queueActions}
+              detail="Criacao, restauracao ou remocao em andamento"
+              tone={summary.queueActions ? "info" : "muted"}
+              onClick={() => setAgentStatusFilter("all")}
+            />
           </div>
-          <div className="mt-2 text-2xl font-bold">{summary.online}</div>
-        </Surface>
-        <Surface className="p-4">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            Offline
-            <Clock3 className="h-4 w-4 text-red-600" />
-          </div>
-          <div className="mt-2 text-2xl font-bold">{summary.offline}</div>
-        </Surface>
-        <Surface className="p-4">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            Alertas
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-          </div>
-          <div className="mt-2 text-2xl font-bold">{summary.withError}</div>
-        </Surface>
-        <Surface className="p-4">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            Filas
-            <Network className="h-4 w-4 text-primary" />
-          </div>
-          <div className="mt-2 text-2xl font-bold">{summary.queues}</div>
-        </Surface>
-      </div>
+        </div>
+      </Surface>
 
       {error ? (
         <Surface className="mb-6 flex items-center gap-2 border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -515,7 +569,28 @@ export default function AgentsPage() {
       ) : null}
 
       <Surface className="mb-6 p-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-center">
+        <div className="mb-3 flex flex-wrap gap-2">
+          {[
+            ["all", "Todos"],
+            ["online", "Online"],
+            ["alerts", "Alertas"],
+            ["unbound", "Sem vinculo"],
+            ["generic", "Nome generico"],
+            ["usb", "USB"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={`rounded-md border px-3 py-1.5 text-xs font-bold transition-colors ${
+                agentStatusFilter === value ? "border-primary bg-primary/10 text-primary" : "bg-white text-muted-foreground hover:border-primary/30"
+              }`}
+              onClick={() => setAgentStatusFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="grid gap-3 md:grid-cols-[1fr_240px_auto] md:items-center">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -729,8 +804,13 @@ export default function AgentsPage() {
                 </td>
                 <td className="p-3">
                   <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusClass(agent)}`}>
-                    {agent.status}
+                    {statusLabel(agent)}
                   </span>
+                  {actionableAlertCount(agent) > 0 ? (
+                    <div className="mt-1 text-[10px] font-semibold text-amber-700">
+                      {actionableAlertCount(agent)} ajuste(s) acionavel(is)
+                    </div>
+                  ) : null}
                   {agent.health_alerts.length > 0 ? (
                     <div className="mt-1 flex max-w-[320px] flex-wrap gap-1">
                       {agent.health_alerts.slice(0, 3).map((alert) => (
@@ -1193,5 +1273,74 @@ export default function AgentsPage() {
         </div>
       ) : null}
     </ProtectedPage>
+  );
+}
+
+function SignalPill({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  tone: "ok" | "danger" | "info" | "muted";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "danger"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className={`flex items-center justify-between rounded-md border px-3 py-2 ${toneClass}`}>
+      <div>
+        <div className="text-[11px] font-bold uppercase opacity-80">{label}</div>
+        <div className="text-lg font-bold">{value}</div>
+      </div>
+      <Icon className="h-4 w-4" />
+    </div>
+  );
+}
+
+function OpsTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  detail: string;
+  tone: "ok" | "warn" | "info" | "muted";
+  onClick: () => void;
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <button type="button" className="border-b p-4 text-left transition-colors hover:bg-muted/30 sm:border-r odd:sm:border-r" onClick={onClick}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-bold uppercase text-muted-foreground">{label}</div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="text-2xl font-bold">{value}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+    </button>
   );
 }
