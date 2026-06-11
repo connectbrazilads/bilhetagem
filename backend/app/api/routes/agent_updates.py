@@ -67,8 +67,15 @@ def _hash_enrollment_key(value: str) -> str:
     return hashlib.sha256(value.strip().encode("utf-8")).hexdigest()
 
 
-def _generate_enrollment_key(organization: Organization) -> str:
-    return f"{ENROLLMENT_KEY_PREFIX}_{organization.slug}_{secrets.token_urlsafe(24)}"
+def _enrollment_key_timestamp(value: datetime) -> str:
+    issued_at = value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return issued_at.strftime("%Y%m%d%H%M%S%f")
+
+
+def _generate_enrollment_key(organization: Organization, issued_at: datetime) -> str:
+    message = f"{organization.id}:{organization.slug}:{_enrollment_key_timestamp(issued_at)}"
+    digest = hmac.new(settings.secret_key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{ENROLLMENT_KEY_PREFIX}_{organization.slug}_{digest[:40]}"
 
 
 def _safe_username_part(value: str | None, default: str = "pc") -> str:
@@ -1136,6 +1143,7 @@ def list_agent_deployment_organizations(
 @router.post("/deployment-organizations/{organization_slug}/enrollment-key", response_model=AgentEnrollmentKeyRead)
 def rotate_agent_enrollment_key(
     organization_slug: str,
+    renew: bool = False,
     db: Session = Depends(get_db),
     actor: User = Depends(require_roles(UserRole.admin)),
 ) -> AgentEnrollmentKeyRead:
@@ -1147,13 +1155,21 @@ def rotate_agent_enrollment_key(
     if not organization_allows_access(organization):
         raise HTTPException(status_code=409, detail="Empresa inativa ou suspensa nao pode gerar instalacao")
 
-    enrollment_key = _generate_enrollment_key(organization)
-    created_at = datetime.now(timezone.utc)
-    organization.agent_enrollment_token_hash = _hash_enrollment_key(enrollment_key)
-    organization.agent_enrollment_token_created_at = created_at
+    created_at = organization.agent_enrollment_token_created_at
+    created_new_key = renew or created_at is None
+    if created_new_key:
+        created_at = datetime.now(timezone.utc)
+
+    enrollment_key = _generate_enrollment_key(organization, created_at)
+    expected_hash = _hash_enrollment_key(enrollment_key)
+    stored_hash_matches = organization.agent_enrollment_token_hash == expected_hash
+    if created_new_key or not stored_hash_matches:
+        organization.agent_enrollment_token_hash = expected_hash
+        organization.agent_enrollment_token_created_at = created_at
+
     write_audit(
         db,
-        action="agent_enrollment_key_rotated",
+        action="agent_enrollment_key_rotated" if renew else "agent_enrollment_key_requested",
         entity="organizations",
         entity_id=organization.id,
         actor_user_id=actor.id,
@@ -1162,6 +1178,8 @@ def rotate_agent_enrollment_key(
             "target_organization_id": organization.id,
             "target_organization_slug": organization.slug,
             "target_organization_name": organization.name,
+            "renewed": renew,
+            "created_new_key": created_new_key or not stored_hash_matches,
         },
     )
     db.commit()

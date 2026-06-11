@@ -316,13 +316,14 @@ export default function DownloadsPage() {
     window.setTimeout(() => setCopiedSha(null), 1800);
   }
 
-  async function rotateEnrollmentKey() {
+  async function requestEnrollmentKey(renew = false) {
     const token = localStorage.getItem("token");
     if (!token || !deployOrg) return;
+    if (renew && !window.confirm("Renovar a chave desta empresa? A chave anterior para de ativar novas instalacoes.")) return;
     setGeneratingKey(true);
     try {
       setDownloadError(null);
-      const response = await apiFetch<EnrollmentKeyResponse>(`/agent/deployment-organizations/${deployOrg}/enrollment-key`, token, {
+      const response = await apiFetch<EnrollmentKeyResponse>(`/agent/deployment-organizations/${deployOrg}/enrollment-key${renew ? "?renew=true" : ""}`, token, {
         method: "POST",
       });
       setActivationKey(response.enrollment_key);
@@ -333,7 +334,7 @@ export default function DownloadsPage() {
         )
       );
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : "Nao foi possivel gerar a chave de ativacao.");
+      setDownloadError(error instanceof Error ? error.message : "Nao foi possivel obter a chave de ativacao.");
     } finally {
       setGeneratingKey(false);
     }
@@ -662,7 +663,7 @@ pwsh ./deploy/preflight-server.ps1 -SkipEndpointChecks`;
               number="2"
               icon={KeyRound}
               title="Chave por empresa"
-              detail={activationKey ? "Chave gerada nesta sessao" : selectedOrganization?.enrollment_key_created_at ? "Empresa ja possui chave ativa" : "Gere uma chave antes de instalar"}
+              detail={activationKey ? "Chave padrao disponivel" : selectedOrganization?.enrollment_key_created_at ? "Empresa ja possui chave padrao" : "Crie a chave padrao antes de instalar"}
               tone={activationKey || selectedOrganization?.enrollment_key_created_at ? "ok" : "warn"}
             />
             <InstallStep
@@ -713,17 +714,21 @@ pwsh ./deploy/preflight-server.ps1 -SkipEndpointChecks`;
                 )}
                 <div className="mt-2 text-xs text-muted-foreground">
                   {selectedOrganization?.enrollment_key_created_at
-                    ? `Ultima chave gerada em ${formatDateTime(selectedOrganization.enrollment_key_created_at)}.`
-                    : "Nenhuma chave de ativacao gerada para esta empresa nesta VPS."}
+                    ? `Chave padrao criada em ${formatDateTime(selectedOrganization.enrollment_key_created_at)}.`
+                    : "Nenhuma chave padrao criada para esta empresa nesta VPS."}
                 </div>
               </div>
               <div className="rounded-md border bg-muted/20 p-3">
                 <div className="mb-2 text-xs font-bold uppercase text-muted-foreground">Chave de ativacao</div>
                 <div className="flex gap-2">
-                  <Input value={activationKey || "Gere uma chave para copiar"} readOnly className={activationKey ? "font-mono text-xs" : "text-muted-foreground"} />
-                  <Button variant="outline" className="shrink-0" onClick={rotateEnrollmentKey} disabled={generatingKey || !selectedOrganizationActive}>
+                  <Input value={activationKey || "Obtenha a chave para copiar"} readOnly className={activationKey ? "font-mono text-xs" : "text-muted-foreground"} />
+                  <Button variant="outline" className="shrink-0" onClick={() => requestEnrollmentKey(false)} disabled={generatingKey || !selectedOrganizationActive}>
                     <RefreshCw className={`h-4 w-4 ${generatingKey ? "animate-spin" : ""}`} />
-                    Gerar
+                    Obter
+                  </Button>
+                  <Button variant="outline" className="shrink-0" onClick={() => requestEnrollmentKey(true)} disabled={generatingKey || !selectedOrganizationActive} title="Renovar e invalidar a chave anterior">
+                    <KeyRound className="h-4 w-4" />
+                    Renovar
                   </Button>
                   <Button
                     variant="outline"
@@ -736,7 +741,7 @@ pwsh ./deploy/preflight-server.ps1 -SkipEndpointChecks`;
                   </Button>
                 </div>
                 <div className="mt-2 text-xs text-muted-foreground">
-                  Chaves antigas param de ativar novas instalacoes quando uma nova chave e gerada.
+                  Cada empresa tem uma chave padrao fixa. Use Renovar apenas quando precisar invalidar a anterior.
                 </div>
               </div>
             </div>
@@ -755,7 +760,7 @@ pwsh ./deploy/preflight-server.ps1 -SkipEndpointChecks`;
                 command={activationCommand}
                 displayCommand={activationCommand}
                 disabled={!installerFile || !activationKey}
-                emptyMessage={!installerFile ? "Publique o instalador antes de gerar o comando." : "Gere uma chave de ativacao para montar o comando."}
+                emptyMessage={!installerFile ? "Publique o instalador antes de gerar o comando." : "Obtenha a chave de ativacao para montar o comando."}
                 copied={copiedCommand === "activation-command"}
                 onCopy={() => copyCommand("activation-command", activationCommand)}
               />

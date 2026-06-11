@@ -754,10 +754,27 @@ def test_agent_enrollment_key_configures_agent_without_exposing_shared_password(
     assert agent_user.full_name == "Agente Windows - PC-FINANCEIRO"
     assert agent_user.password_hash != enrolled.agent_password
 
-    audits = db_session.query(AuditLog).filter(AuditLog.action.in_(["agent_enrollment_key_rotated", "agent_enrolled"])).order_by(AuditLog.id).all()
-    assert [audit.action for audit in audits] == ["agent_enrollment_key_rotated", "agent_enrolled"]
+    audits = db_session.query(AuditLog).filter(AuditLog.action.in_(["agent_enrollment_key_requested", "agent_enrolled"])).order_by(AuditLog.id).all()
+    assert [audit.action for audit in audits] == ["agent_enrollment_key_requested", "agent_enrolled"]
     assert audits[1].organization_id == tenant.id
     assert audits[1].log_metadata["username"] == enrolled.agent_username
+
+
+def test_agent_enrollment_key_is_stable_until_renewed(db_session: Session):
+    tenant = Organization(name="Cliente Chave Padrao", slug="cliente-chave-padrao", is_active=True)
+    platform_admin = User(username="platform-key-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add_all([tenant, platform_admin])
+    db_session.commit()
+
+    first = rotate_agent_enrollment_key("cliente-chave-padrao", db=db_session, actor=platform_admin)
+    second = rotate_agent_enrollment_key("cliente-chave-padrao", db=db_session, actor=platform_admin)
+    renewed = rotate_agent_enrollment_key("cliente-chave-padrao", renew=True, db=db_session, actor=platform_admin)
+
+    assert first.enrollment_key == second.enrollment_key
+    assert renewed.enrollment_key != first.enrollment_key
+    assert tenant.agent_enrollment_token_hash == agent_updates_route._hash_enrollment_key(renewed.enrollment_key)
+    assert agent_updates_route._organization_from_enrollment_key(db_session, first.enrollment_key) is None
+    assert agent_updates_route._organization_from_enrollment_key(db_session, renewed.enrollment_key).id == tenant.id
 
 
 def test_agent_enrollment_reuses_same_computer_agent_user(db_session: Session):
