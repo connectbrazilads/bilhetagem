@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarCheck, Download, FileText, Mail, Printer, Search, Users } from "lucide-react";
+import { BarChart3, CalendarCheck, CircleDollarSign, Download, FileText, Leaf, Mail, Printer, Search, Users } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -337,6 +337,10 @@ export default function ReportsPage() {
     );
   }, [jobs]);
   const averageCost = summary.pages > 0 ? summary.cost / summary.pages : 0;
+  const monoShare = summary.pages > 0 ? Math.round((summary.monoPages / summary.pages) * 100) : 0;
+  const colorShare = summary.pages > 0 ? Math.round((summary.colorPages / summary.pages) * 100) : 0;
+  const savedBase = summary.pages + summary.savedPages;
+  const savedShare = savedBase > 0 ? Math.round((summary.savedPages / savedBase) * 100) : 0;
   const closingSummary = useMemo(() => {
     const latestClosing = closings[0];
     return closings.reduce(
@@ -359,6 +363,7 @@ export default function ReportsPage() {
     );
   }, [closings]);
   const closingAverageCost = closingSummary.pages > 0 ? closingSummary.cost / closingSummary.pages : 0;
+  const commercialScope = dateQuery ? new Date(`${dateQuery}T00:00:00`).toLocaleDateString("pt-BR") : "Filtros atuais";
   const costCenters = useMemo(
     () => Array.from(new Set(departments.map((department) => department.cost_center).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b)),
     [departments]
@@ -385,15 +390,47 @@ export default function ReportsPage() {
 
       {exportError ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">{exportError}</div> : null}
 
-      <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <Surface className="mb-4 overflow-hidden">
+        <div className="grid gap-0 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="border-b p-5 xl:border-b-0 xl:border-r">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase text-muted-foreground">Painel comercial</div>
+                <div className="mt-1 text-xl font-bold">Consumo faturavel do periodo</div>
+                <div className="mt-1 text-xs text-muted-foreground">{commercialScope}</div>
+              </div>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+                {summary.billableJobs.toLocaleString("pt-BR")} job(s) cobraveis
+              </span>
+            </div>
+            <div className="text-4xl font-bold">{money(summary.cost)}</div>
+            <div className="mt-2 text-sm text-muted-foreground">
+              {summary.pages.toLocaleString("pt-BR")} pagina(s), custo medio de {money(averageCost)} por pagina.
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <ShareBar label="P&B" value={summary.monoPages} percent={monoShare} className="bg-slate-700" />
+              <ShareBar label="Colorido" value={summary.colorPages} percent={colorShare} className="bg-violet-500" />
+              <ShareBar label="Salvas" value={summary.savedPages} percent={savedShare} className="bg-emerald-500" />
+            </div>
+          </div>
+          <div className="grid gap-0 sm:grid-cols-2">
+            <ReportSignal icon={Printer} label="Paginas" value={summary.pages} detail="Volume cobravel" tone="info" />
+            <ReportSignal icon={Leaf} label="Economia" value={summary.savedPages} detail="Bloqueios e cancelamentos" tone={summary.savedPages > 0 ? "success" : "neutral"} />
+            <ReportSignal icon={Users} label="Usuarios" value={summary.users.size} detail={`${summary.printers.size.toLocaleString("pt-BR")} impressora(s) usadas`} tone="neutral" />
+            <ReportSignal icon={CalendarCheck} label="Ultimo fechamento" value={closingSummary.latestPeriod} detail={`${closingSummary.count.toLocaleString("pt-BR")} snapshot(s) gerado(s)`} tone={closingSummary.count > 0 ? "success" : "warn"} />
+          </div>
+        </div>
+      </Surface>
+
+      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <Summary label="Trabalhos" value={summary.jobs} icon={FileText} />
-        <Summary label="Cobraveis" value={summary.billableJobs} icon={FileText} />
+        <Summary label="Cobraveis" value={summary.billableJobs} icon={BarChart3} />
         <Summary label="P&B cobravel" value={summary.monoPages} icon={Printer} />
         <Summary label="Coloridas cobraveis" value={summary.colorPages} icon={Printer} />
-        <Summary label="Paginas salvas" value={summary.savedPages} icon={FileText} />
-        <Summary label="Custo P&B" value={money(summary.monoCost)} icon={FileText} />
-        <Summary label="Custo colorido" value={money(summary.colorCost)} icon={FileText} />
-        <Summary label="Custo cobravel" value={money(summary.cost)} icon={FileText} />
+        <Summary label="Paginas salvas" value={summary.savedPages} icon={Leaf} />
+        <Summary label="Custo P&B" value={money(summary.monoCost)} icon={CircleDollarSign} />
+        <Summary label="Custo colorido" value={money(summary.colorCost)} icon={CircleDollarSign} />
+        <Summary label="Custo cobravel" value={money(summary.cost)} icon={CircleDollarSign} />
         <Summary label="Custo medio" value={money(averageCost)} icon={FileText} />
         <Summary label="Usuarios / impressoras" value={`${summary.users.size.toLocaleString("pt-BR")} / ${summary.printers.size.toLocaleString("pt-BR")}`} icon={Users} />
       </div>
@@ -761,6 +798,72 @@ function ClosingMetric({
         {detail}
       </div>
     </Surface>
+  );
+}
+
+function ReportSignal({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: number | string;
+  detail: string;
+  icon: typeof FileText;
+  tone: "neutral" | "success" | "warn" | "info";
+}) {
+  const displayValue = typeof value === "number" ? value.toLocaleString("pt-BR") : value;
+  const toneClass =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className="border-b p-4 sm:border-r">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-bold uppercase text-muted-foreground">{label}</div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="truncate text-2xl font-bold" title={displayValue}>
+        {displayValue}
+      </div>
+      <div className="mt-1 truncate text-xs text-muted-foreground" title={detail}>
+        {detail}
+      </div>
+    </div>
+  );
+}
+
+function ShareBar({
+  label,
+  value,
+  percent,
+  className,
+}: {
+  label: string;
+  value: number;
+  percent: number;
+  className: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+        <span className="font-bold uppercase text-muted-foreground">{label}</span>
+        <span className="font-semibold">{percent}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${className}`} style={{ width: `${percent}%` }} />
+      </div>
+      <div className="mt-1 text-xs text-muted-foreground">{value.toLocaleString("pt-BR")} pag.</div>
+    </div>
   );
 }
 
