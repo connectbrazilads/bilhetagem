@@ -8,6 +8,7 @@ class OperationalHealth(BaseModel):
     agents_online: int = 0
     agents_offline: int = 0
     agents_with_alerts: int = 0
+    agents_with_delayed_heartbeat: int = 0
     agents_without_local_admin: int = 0
     agents_without_event_log: int = 0
     outdated_agents: int = 0

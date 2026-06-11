@@ -18,6 +18,7 @@ from app.services.organization_contract_service import printer_contract_overview
 from app.services.printer_identity_service import physical_identity_conflicts
 
 AGENT_ONLINE_WINDOW = timedelta(minutes=3)
+AGENT_HEARTBEAT_DELAYED_AFTER = timedelta(minutes=2)
 QUEUE_ACTION_STALE_AFTER = timedelta(minutes=15)
 RECENT_AGENT_LOG_ALERT_WINDOW = timedelta(minutes=15)
 
@@ -88,6 +89,17 @@ def _agent_is_online(agent: PrintAgent, now: datetime) -> bool:
     return now - last_seen <= AGENT_ONLINE_WINDOW
 
 
+def _agent_heartbeat_delayed(agent: PrintAgent, now: datetime) -> bool:
+    if not _agent_is_online(agent, now):
+        return False
+    last_seen = agent.last_seen_at
+    if last_seen is None:
+        return False
+    if last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    return now - last_seen >= AGENT_HEARTBEAT_DELAYED_AFTER
+
+
 def _alias_is_present(agent: PrintAgent, alias: PrinterAlias) -> bool:
     if not agent.last_seen_at or not alias.last_seen_at:
         return False
@@ -120,6 +132,8 @@ def _agent_has_operational_alert(
     now: datetime,
 ) -> bool:
     if not _agent_is_online(agent, now):
+        return True
+    if _agent_heartbeat_delayed(agent, now):
         return True
     if agent.last_error or agent.event_log_enabled is False or agent.local_admin is False:
         return True
@@ -158,6 +172,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
     agents = db.query(PrintAgent).filter(PrintAgent.organization_id == organization_id).all()
     printers = db.query(Printer).filter(Printer.organization_id == organization_id, Printer.is_active.is_(True)).all()
     online_agents = sum(1 for agent in agents if _agent_is_online(agent, now))
+    agents_with_delayed_heartbeat = sum(1 for agent in agents if _agent_heartbeat_delayed(agent, now))
     agents_without_local_admin = sum(1 for agent in agents if agent.local_admin is False)
     agents_without_event_log = sum(1 for agent in agents if agent.event_log_enabled is False)
     monitored_printers = sum(1 for printer in printers if printer.ip_address)
@@ -229,6 +244,7 @@ def _operational_health(db: Session, organization_id: int, now: datetime) -> dic
         "agents_online": online_agents,
         "agents_offline": max(len(agents) - online_agents, 0),
         "agents_with_alerts": agents_with_alerts,
+        "agents_with_delayed_heartbeat": agents_with_delayed_heartbeat,
         "agents_without_local_admin": agents_without_local_admin,
         "agents_without_event_log": agents_without_event_log,
         "outdated_agents": outdated_agents,

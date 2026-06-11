@@ -1152,7 +1152,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         computer_name="PC-OUTDATED",
         event_log_enabled=True,
         version="0.1.0",
-        last_seen_at=now,
+        last_seen_at=now - timedelta(seconds=130),
     )
     org_two_agent = PrintAgent(
         organization_id=other_org.id,
@@ -1369,6 +1369,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
         "agents_online": 4,
         "agents_offline": 1,
         "agents_with_alerts": 5,
+        "agents_with_delayed_heartbeat": 1,
         "agents_without_local_admin": 1,
         "agents_without_event_log": 1,
         "outdated_agents": 5,
@@ -1390,6 +1391,7 @@ def test_organization_scope_isolates_core_views(db_session: Session, monkeypatch
     assert validated_metrics.contract_overview.printer_usage_percent == 66.7
     assert validated_metrics.operational_health is not None
     assert validated_metrics.operational_health.agents_without_local_admin == 1
+    assert validated_metrics.operational_health.agents_with_delayed_heartbeat == 1
     assert validated_metrics.operational_health.agents_without_event_log == 1
     assert validated_metrics.operational_health.outdated_agents == 5
     assert validated_metrics.operational_health.agents_with_recent_errors == 1

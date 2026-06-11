@@ -18,6 +18,7 @@ export type DashboardMetrics = {
     agents_online: number;
     agents_offline: number;
     agents_with_alerts: number;
+    agents_with_delayed_heartbeat: number;
     agents_without_local_admin: number;
     agents_without_event_log: number;
     outdated_agents: number;
