@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Building2, Edit, Plus, ShieldCheck, Trash2, Users } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState, type ComponentType } from "react";
+import { AlertTriangle, Building2, Edit, MonitorCog, Plus, ShieldCheck, Trash2, UserCog, Users, WalletCards } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -90,13 +90,25 @@ export default function UsersPage() {
   }, []);
 
   const summary = useMemo(() => {
+    const active = users.filter((user) => user.is_active).length;
     return {
       total: users.length,
-      active: users.filter((user) => user.is_active).length,
+      active,
+      inactive: users.length - active,
       admins: users.filter((user) => user.role === "admin").length,
+      managers: users.filter((user) => user.role === "manager").length,
+      agents: users.filter((user) => user.role === "agent").length,
+      panelUsers: users.filter((user) => user.role === "admin" || user.role === "manager").length,
+      withoutDepartment: users.filter((user) => user.role !== "agent" && !user.department_id).length,
+      totalLimit: users.reduce((total, user) => total + (user.monthly_limit ?? 0), 0),
+      totalBalance: users.reduce((total, user) => total + (user.monthly_balance ?? 0), 0),
+      usedBalance: users.reduce((total, user) => total + (user.used_balance ?? 0), 0),
       departments: departments.length,
     };
   }, [users, departments]);
+  const activePercent = summary.total ? Math.round((summary.active / summary.total) * 100) : 0;
+  const humanUsers = Math.max(summary.total - summary.agents, 0);
+  const departmentCoveragePercent = humanUsers ? Math.round(((humanUsers - summary.withoutDepartment) / humanUsers) * 100) : 0;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -251,12 +263,41 @@ export default function UsersPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-4">
-        <SummaryCard label="Usuarios cadastrados" value={summary.total} icon={Users} />
-        <SummaryCard label="Usuarios ativos" value={summary.active} icon={ShieldCheck} />
-        <SummaryCard label="Administradores" value={summary.admins} icon={ShieldCheck} />
-        <SummaryCard label="Departamentos" value={summary.departments} icon={Building2} />
-      </div>
+      <Surface className="mb-6 overflow-hidden">
+        <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="border-b p-5 lg:border-b-0 lg:border-r">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase text-muted-foreground">Diretorio operacional</div>
+                <div className="mt-1 text-xl font-bold">Usuarios, acessos e centros de custo</div>
+              </div>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${summary.inactive || summary.withoutDepartment ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                {summary.inactive || summary.withoutDepartment ? "Revisar cadastros" : "Base organizada"}
+              </span>
+            </div>
+            <div className="mb-3 flex flex-wrap items-end gap-3">
+              <div className="text-4xl font-bold">{activePercent}%</div>
+              <div className="pb-1 text-sm text-muted-foreground">
+                {summary.active.toLocaleString("pt-BR")} de {summary.total.toLocaleString("pt-BR")} usuario(s) ativos
+              </div>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${activePercent}%` }} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <UserSignal icon={Building2} label="Cobertura depto." value={`${departmentCoveragePercent}%`} detail={`${summary.departments} departamento(s)`} />
+              <UserSignal icon={WalletCards} label="Limite total" value={`${summary.totalLimit.toLocaleString("pt-BR")} pag.`} detail={showBalance ? `${money(summary.totalBalance)} em saldo` : "Saldo oculto nas telas"} />
+              <UserSignal icon={Users} label="Humanos" value={humanUsers.toLocaleString("pt-BR")} detail={`${summary.agents} tecnico(s) agent`} />
+            </div>
+          </div>
+          <div className="grid gap-0 sm:grid-cols-2">
+            <UserTile icon={MonitorCog} label="Acesso painel" value={summary.panelUsers} detail={`${summary.admins} admin, ${summary.managers} gestor(es)`} tone={summary.panelUsers ? "info" : "muted"} />
+            <UserTile icon={UserCog} label="Tecnicos agent" value={summary.agents} detail="Credenciais de captura e instalacao" tone={summary.agents ? "info" : "warn"} />
+            <UserTile icon={AlertTriangle} label="Sem depto." value={summary.withoutDepartment} detail="Afeta relatorios por centro de custo" tone={summary.withoutDepartment ? "warn" : "ok"} />
+            <UserTile icon={ShieldCheck} label="Inativos" value={summary.inactive} detail="Mantidos para preservar historico" tone={summary.inactive ? "warn" : "ok"} />
+          </div>
+        </div>
+      </Surface>
 
       {isAdmin ? (
         <Surface as="form" className="mb-4 grid gap-3 p-4 xl:grid-cols-[160px_minmax(180px,1fr)_150px_190px_150px_120px_auto]" onSubmit={submit}>
@@ -508,17 +549,62 @@ export default function UsersPage() {
   );
 }
 
-function SummaryCard({ label, value, icon: Icon }: { label: string; value: number; icon: typeof Users }) {
+function UserSignal({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  detail: string;
+}) {
   return (
-    <Surface className="p-5">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-muted-foreground">{label}</span>
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <Icon className="h-4 w-4" />
-        </div>
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-[11px] font-bold uppercase text-muted-foreground">{label}</div>
+        <Icon className="h-4 w-4 text-primary" />
       </div>
-      <div className="mt-3 text-3xl font-semibold">{value.toLocaleString("pt-BR")}</div>
-    </Surface>
+      <div className="text-lg font-bold">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function UserTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  detail: string;
+  tone: "ok" | "warn" | "info" | "muted";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className="border-b p-4 sm:border-r odd:sm:border-r">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-bold uppercase text-muted-foreground">{label}</div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="text-2xl font-bold">{value.toLocaleString("pt-BR")}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+    </div>
   );
 }
 
