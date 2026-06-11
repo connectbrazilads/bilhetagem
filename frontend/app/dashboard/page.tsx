@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity, AlertTriangle, BarChart3, Check, FileText, Info, Leaf, Printer, Server, ShieldAlert, TrendingUp, Users, WalletCards, X } from "lucide-react";
+import Link from "next/link";
+import { Activity, AlertTriangle, BarChart3, Check, ClipboardCheck, Download, FileText, Info, Leaf, Printer, Server, ShieldAlert, TrendingUp, Users, WalletCards, X } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Surface } from "@/components/ui";
@@ -223,32 +224,43 @@ export default function DashboardPage() {
 
   return (
     <ProtectedPage>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Visao operacional de impressoes, consumo e filas.</p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Surface className="flex items-center gap-3 px-4 py-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
-              <TrendingUp className="h-4 w-4" />
+      <Surface className="mb-6 overflow-hidden border-slate-200 bg-slate-950 p-0 text-white">
+        <div className="grid gap-6 p-6 lg:grid-cols-[1fr_auto] lg:p-7">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Operacao em tempo real
             </div>
-            <div>
-              <div className="text-xs font-medium text-muted-foreground">Volume mensal</div>
-              <div className="text-sm font-semibold">{totalMonth.toLocaleString("pt-BR")} paginas</div>
+            <h1 className="mt-4 text-3xl font-bold">Dashboard</h1>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-300">Visao operacional de impressoes, consumo, saude dos agents e contrato.</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button asChild className="bg-white text-slate-950 hover:bg-slate-100 hover:text-slate-950">
+                <Link href="/deployment">
+                  <ClipboardCheck className="h-4 w-4" />
+                  Validar piloto
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
+                <Link href="/downloads">
+                  <Download className="h-4 w-4" />
+                  Agent
+                </Link>
+              </Button>
             </div>
-          </Surface>
-          <Surface className={`flex items-center gap-3 px-4 py-3 ${contractTone(contract)}`}>
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white/60">
-              <WalletCards className="h-4 w-4" />
+          </div>
+          <div className="grid min-w-[280px] gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-white/10 bg-white/10 p-4">
+              <div className="text-xs font-semibold uppercase text-slate-300">Volume mensal</div>
+              <div className="mt-2 text-3xl font-bold">{totalMonth.toLocaleString("pt-BR")}</div>
+              <div className="mt-1 text-xs text-slate-300">paginas capturadas</div>
             </div>
-            <div>
+            <div className={`rounded-lg border p-4 ${contractTone(contract).replace("bg-", "bg-").replace("text-", "text-")}`}>
               <div className="text-xs font-semibold uppercase opacity-75">Contrato {planLabel(contract?.billing_plan)}</div>
-              <div className="text-sm font-semibold">{contractStatusText(contract)}</div>
+              <div className="mt-2 text-sm font-bold">{contractStatusText(contract)}</div>
             </div>
-          </Surface>
+          </div>
         </div>
-      </div>
+      </Surface>
 
       {error ? (
         <Surface className="mb-6 flex items-center gap-2 border-red-200 bg-red-50 p-4 text-sm text-red-800">

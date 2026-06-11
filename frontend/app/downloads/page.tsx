@@ -408,6 +408,41 @@ export default function DownloadsPage() {
         />
       </div>
 
+      <Surface
+        className={`mb-6 p-4 ${
+          latest && latestInstallerCount > 0 && latest?.checksums_url
+            ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+            : "border-amber-200 bg-amber-50 text-amber-900"
+        }`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white/70">
+              <PackageCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold">
+                {latest && latestInstallerCount > 0 && latest?.checksums_url ? "Release pronta para piloto interno" : "Release ainda incompleta"}
+              </h2>
+              <p className="mt-1 text-sm opacity-80">
+                {latest && latestInstallerCount > 0 && latest?.checksums_url
+                  ? `Versao ${latest.version} com ${latestReadyArtifacts.join(" + ")} publicada para instalacao em PCs de teste.`
+                  : "Publique pelo menos um instalador e checksums SHA256 antes de instalar em campo."}
+              </p>
+              {latest?.signature_status !== "signed" ? (
+                <p className="mt-2 text-xs font-semibold opacity-80">
+                  Assinatura digital ainda pendente: para cliente externo, assine EXE/MSI com certificado de codigo.
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <Button variant="outline" onClick={load} disabled={loading} className="bg-white/70">
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Revalidar release
+          </Button>
+        </div>
+      </Surface>
+
       {isAdmin ? (
         <Surface className="mb-6 p-4">
           <div className="mb-4 flex items-start gap-3">

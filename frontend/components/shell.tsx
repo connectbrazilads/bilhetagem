@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Building2, Download, Gauge, History, LogOut, Menu, MonitorCog, Printer, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
+import { BarChart3, Building2, ClipboardCheck, Download, Gauge, History, LogOut, Menu, MonitorCog, Printer, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
 
 import { Button } from "@/components/ui";
 import { apiFetch, clearAuthStorage, getCurrentRole } from "@/lib/api";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Gauge, roles: ["admin", "manager"] },
+  { href: "/deployment", label: "Implantacao", icon: ClipboardCheck, roles: ["admin", "manager"] },
   { href: "/organizations", label: "Empresas", icon: Building2, roles: ["admin"] },
   { href: "/users", label: "Usuarios", icon: Users, roles: ["admin", "manager"] },
   { href: "/agents", label: "Agents", icon: MonitorCog, roles: ["admin", "manager"] },
@@ -80,14 +81,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r border-slate-900/10 bg-slate-950 text-white md:block">
-        <div className="flex h-16 items-center gap-3 border-b border-white/10 px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-white">PB</div>
+      <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r border-slate-200/80 bg-white/95 text-slate-950 shadow-sm backdrop-blur md:block">
+        <div className="flex h-16 items-center gap-3 border-b border-slate-200/80 px-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-950 text-sm font-bold text-white shadow-sm">PB</div>
           <div>
-            <div className="text-sm font-semibold">PrintBilling</div>
-            <div className="text-xs text-slate-400">Controle de impressao</div>
+            <div className="text-sm font-bold">PrintBilling</div>
+            <div className="text-xs text-muted-foreground">Controle de impressao</div>
           </div>
         </div>
+        {organizationSlug ? (
+          <div className="mx-3 mt-3 rounded-lg border bg-muted/40 p-3 text-xs">
+            <div className="truncate font-bold">{organizationName || organizationSlug}</div>
+            {organizationName ? <div className="mt-0.5 truncate text-muted-foreground">{organizationSlug}</div> : null}
+            {billingStatusLabel(organizationBillingStatus) ? (
+              <span className={cn("mt-2 inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-bold", billingStatusClass(organizationBillingStatus))}>
+                {billingStatusLabel(organizationBillingStatus)}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         <nav className="space-y-1 p-3">
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
@@ -97,8 +109,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex h-10 items-center gap-3 rounded-md px-3 text-sm text-slate-300 transition-colors hover:bg-white/10 hover:text-white",
-                  active && "bg-white text-slate-950 shadow-sm hover:bg-white hover:text-slate-950"
+                  "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted-foreground transition-all hover:bg-primary/10 hover:text-primary",
+                  active && "bg-primary text-white shadow-sm shadow-primary/20 hover:bg-primary hover:text-white"
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -116,28 +128,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-slate-950/50"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative flex h-full w-72 max-w-[85vw] flex-col border-r border-white/10 bg-slate-950 text-white shadow-xl">
-            <div className="flex h-16 items-center justify-between gap-3 border-b border-white/10 px-5">
+          <aside className="relative flex h-full w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white text-slate-950 shadow-xl">
+            <div className="flex h-16 items-center justify-between gap-3 border-b border-slate-200 px-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-white">PB</div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-950 text-sm font-bold text-white">PB</div>
                 <div>
                   <div className="text-sm font-semibold">PrintBilling</div>
-                  <div className="text-xs text-slate-400">Controle de impressao</div>
+                  <div className="text-xs text-muted-foreground">Controle de impressao</div>
                 </div>
               </div>
               <button
                 type="button"
                 aria-label="Fechar menu"
-                className="flex h-9 w-9 items-center justify-center rounded-md text-slate-300 hover:bg-white/10 hover:text-white"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                 onClick={() => setMobileOpen(false)}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             {organizationSlug ? (
-              <div className="border-b border-white/10 px-5 py-3 text-xs text-slate-300">
-                <div className="font-semibold text-white">{organizationName || organizationSlug}</div>
-                {organizationName ? <div className="mt-0.5 text-slate-400">{organizationSlug}</div> : null}
+              <div className="border-b border-slate-200 px-5 py-3 text-xs text-muted-foreground">
+                <div className="font-semibold text-foreground">{organizationName || organizationSlug}</div>
+                {organizationName ? <div className="mt-0.5 text-muted-foreground">{organizationSlug}</div> : null}
                 {billingStatusLabel(organizationBillingStatus) ? (
                   <span className={cn("mt-2 inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-bold", billingStatusClass(organizationBillingStatus))}>
                     {billingStatusLabel(organizationBillingStatus)}
@@ -154,8 +166,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex h-10 items-center gap-3 rounded-md px-3 text-sm text-slate-300 transition-colors hover:bg-white/10 hover:text-white",
-                      active && "bg-white text-slate-950 shadow-sm hover:bg-white hover:text-slate-950"
+                      "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted-foreground transition-all hover:bg-primary/10 hover:text-primary",
+                      active && "bg-primary text-white shadow-sm shadow-primary/20 hover:bg-primary hover:text-white"
                     )}
                   >
                     <Icon className="h-4 w-4" />
@@ -168,7 +180,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
       <main className="md:pl-64">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-white/90 px-4 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/86 px-4 shadow-sm shadow-slate-200/40 backdrop-blur md:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -202,7 +214,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Button>
           </div>
         </header>
-        <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">{children}</div>
+        <div className="mx-auto max-w-[1440px] p-4 md:p-6 lg:p-8">{children}</div>
       </main>
     </div>
   );
