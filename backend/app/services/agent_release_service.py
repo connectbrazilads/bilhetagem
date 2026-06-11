@@ -132,7 +132,7 @@ def published_agent_update_version() -> str | None:
     manifest_path = Path(settings.agent_download_dir) / settings.agent_release_manifest_filename
     if manifest_path.exists():
         try:
-            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            data = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
             raw_releases = data.get("versions", []) if isinstance(data, dict) else []
             releases = sorted([release for release in raw_releases if isinstance(release, dict)], key=_release_sort_key, reverse=True)
             for release in releases:

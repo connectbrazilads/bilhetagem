@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     initial_agent_username: str = "agent"
     initial_agent_password: str = ""
     agent_latest_version: str = "0.2.1"
-    agent_download_dir: str = "agent_downloads"
+    agent_download_dir: str = "uploads/agents"
     agent_download_filename: str = "PrintBillingAgent.exe"
     agent_release_manifest_filename: str = "manifest.json"
     smtp_host: str = ""

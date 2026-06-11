@@ -198,7 +198,9 @@ $manifest = [ordered]@{
     versions = @($currentRelease) + @($existingVersions)
 }
 
-$manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $manifestPath -Encoding UTF8
+$manifestJson = $manifest | ConvertTo-Json -Depth 10
+$utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+[System.IO.File]::WriteAllText($manifestPath, $manifestJson + [Environment]::NewLine, $utf8NoBom)
 
 $sums = foreach ($file in $files) { "$($file.sha256)  $($file.filename)" }
 $sums | Set-Content -Path (Join-Path $releaseDir "SHA256SUMS.txt") -Encoding ASCII

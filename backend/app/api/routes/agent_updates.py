@@ -229,7 +229,7 @@ def _load_release_manifest() -> list[AgentReleaseRead]:
     releases: list[AgentReleaseRead] = []
     if manifest_path.exists():
         try:
-            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            data = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         except (OSError, json.JSONDecodeError):
             data = None
     else:
