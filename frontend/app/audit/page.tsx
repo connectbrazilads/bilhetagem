@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Filter, History, RefreshCcw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import { Activity, AlertTriangle, Download, FileDown, Filter, History, RefreshCcw, ServerCog, ShieldCheck, UserCheck } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -220,15 +220,20 @@ export default function AuditPage() {
 
   const summary = useMemo(() => {
     const actors = new Set(logs.map((log) => log.actor_username || "sistema"));
+    const entities = new Set(logs.map((log) => log.entity));
     return {
       total: logs.length,
       actors: actors.size,
-      entities: new Set(logs.map((log) => log.entity)).size,
+      entities: entities.size,
       critical: logs.filter((log) => isCriticalAuditAction(log.action)).length,
       queueActions: logs.filter((log) => log.action.startsWith("agent_queue_action_")).length,
       exports: logs.filter((log) => log.action.endsWith("_exported")).length,
+      settings: logs.filter((log) => log.entity === "settings" || log.action.includes("settings")).length,
+      jobs: logs.filter((log) => log.entity === "print_jobs").length,
+      system: logs.filter((log) => !log.actor_username).length,
     };
   }, [logs]);
+  const criticalPercent = summary.total ? Math.round((summary.critical / summary.total) * 100) : 0;
 
   return (
     <ProtectedPage>
@@ -249,14 +254,41 @@ export default function AuditPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <Summary label="Eventos" value={summary.total} />
-        <Summary label="Atores" value={summary.actors} />
-        <Summary label="Entidades" value={summary.entities} />
-        <Summary label="Criticos" value={summary.critical} tone={summary.critical > 0 ? "warn" : "neutral"} />
-        <Summary label="Acoes remotas" value={summary.queueActions} tone={summary.queueActions > 0 ? "info" : "neutral"} />
-        <Summary label="Exportacoes" value={summary.exports} tone={summary.exports > 0 ? "info" : "neutral"} />
-      </div>
+      <Surface className="mb-6 overflow-hidden">
+        <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="border-b p-5 lg:border-b-0 lg:border-r">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase text-muted-foreground">Centro de rastreabilidade</div>
+                <div className="mt-1 text-xl font-bold">Auditoria administrativa</div>
+              </div>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${summary.critical ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                {summary.critical ? "Eventos sensiveis" : "Sem alerta no filtro"}
+              </span>
+            </div>
+            <div className="mb-3 flex flex-wrap items-end gap-3">
+              <div className="text-4xl font-bold">{criticalPercent}%</div>
+              <div className="pb-1 text-sm text-muted-foreground">
+                {summary.critical.toLocaleString("pt-BR")} de {summary.total.toLocaleString("pt-BR")} evento(s) sensiveis no filtro
+              </div>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className={`h-full rounded-full ${summary.critical ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${criticalPercent}%` }} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <AuditSignal icon={History} label="Eventos" value={summary.total.toLocaleString("pt-BR")} detail="Dentro do filtro atual" />
+              <AuditSignal icon={UserCheck} label="Atores" value={summary.actors.toLocaleString("pt-BR")} detail={`${summary.system} evento(s) do sistema`} />
+              <AuditSignal icon={ShieldCheck} label="Entidades" value={summary.entities.toLocaleString("pt-BR")} detail="Areas afetadas" />
+            </div>
+          </div>
+          <div className="grid gap-0 sm:grid-cols-2">
+            <AuditTile icon={AlertTriangle} label="Criticos" value={summary.critical} detail="Mudancas sensiveis e falhas" tone={summary.critical ? "warn" : "ok"} />
+            <AuditTile icon={ServerCog} label="Acoes remotas" value={summary.queueActions} detail="Criacao, restauracao e remocao de filas" tone={summary.queueActions ? "info" : "muted"} />
+            <AuditTile icon={FileDown} label="Exportacoes" value={summary.exports} detail="Relatorios, fechamentos e auditoria" tone={summary.exports ? "info" : "muted"} />
+            <AuditTile icon={Activity} label="Configuracoes" value={summary.settings} detail="Alteracoes de parametros e integracoes" tone={summary.settings ? "warn" : "muted"} />
+          </div>
+        </div>
+      </Surface>
 
       <Surface className="mb-4 p-4">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_160px_auto]">
@@ -343,23 +375,61 @@ export default function AuditPage() {
   );
 }
 
-function Summary({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "neutral" | "warn" | "info" }) {
-  const toneClass =
-    tone === "warn"
-      ? "bg-amber-100 text-amber-700"
-      : tone === "info"
-      ? "bg-blue-100 text-blue-700"
-      : "bg-primary/10 text-primary";
+function AuditSignal({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  detail: string;
+}) {
   return (
-    <Surface className="p-5">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-muted-foreground">{label}</span>
-        <div className={`flex h-9 w-9 items-center justify-center rounded-md ${toneClass}`}>
-          <History className="h-4 w-4" />
-        </div>
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-[11px] font-bold uppercase text-muted-foreground">{label}</div>
+        <Icon className="h-4 w-4 text-primary" />
       </div>
-      <div className="mt-3 text-3xl font-semibold">{value.toLocaleString("pt-BR")}</div>
-    </Surface>
+      <div className="text-lg font-bold">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function AuditTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  detail: string;
+  tone: "ok" | "warn" | "info" | "muted";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+  return (
+    <div className="border-b p-4 sm:border-r odd:sm:border-r">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-bold uppercase text-muted-foreground">{label}</div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="text-2xl font-bold">{value.toLocaleString("pt-BR")}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+    </div>
   );
 }
 
