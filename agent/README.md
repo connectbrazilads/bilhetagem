@@ -155,5 +155,5 @@ $env:PRINTBILLING_CERT_PASSWORD="senha"
 MSI silencioso:
 
 ```powershell
-msiexec /i PrintBillingAgent-0.2.0.msi APIURL="https://billing.empresa.local" AGENTUSER="agent" AGENTPASSWORD="SENHA_FORTE_DO_AGENT" ORGANIZATION="default" SPOOLSERVER="\\SRV-PRINT01" SNMPCOMMUNITY="public" SNMPPOLLINTERVAL="60" SNMPTIMEOUT="2.0" SNMPRETRIES="1" USEPRINTEVENTLOG="true" CANCELBLOCKED="true" AUTOUPDATE="true" /qn
+msiexec /i PrintBillingAgent-0.2.1.msi APIURL="https://billing.empresa.local" ACTIVATIONKEY="pbk_empresa_token" SPOOLSERVER="\\SRV-PRINT01" SNMPCOMMUNITY="public" SNMPPOLLINTERVAL="60" SNMPTIMEOUT="2.0" SNMPRETRIES="1" USEPRINTEVENTLOG="true" CANCELBLOCKED="true" AUTOUPDATE="true" /qn
 ```
