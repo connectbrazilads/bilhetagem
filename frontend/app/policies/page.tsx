@@ -154,6 +154,9 @@ export default function PoliciesPage() {
       total: policies.length,
       active: policies.filter((policy) => policy.is_active).length,
       blockers: policies.filter((policy) => policy.action === "block").length,
+      release: policies.filter((policy) => policy.action === "require_release").length,
+      mono: policies.filter((policy) => policy.action === "force_mono").length,
+      exceptions: policies.filter((policy) => policy.action === "allow").length,
     };
   }, [policies]);
 
@@ -382,10 +385,13 @@ export default function PoliciesPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-3">
+      <div className="mb-4 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <Summary label="Politicas" value={summary.total} />
         <Summary label="Ativas" value={summary.active} />
         <Summary label="Bloqueios" value={summary.blockers} />
+        <Summary label="Liberacao" value={summary.release} />
+        <Summary label="Cobrar P&B" value={summary.mono} />
+        <Summary label="Excecoes" value={summary.exceptions} />
       </div>
 
       {isAdmin ? (
@@ -592,7 +598,11 @@ export default function PoliciesPage() {
                   <div className="text-xs text-muted-foreground">{policy.description || policy.message || "-"}</div>
                 </td>
                 <td className="p-4 text-muted-foreground">{describePolicy(policy)}</td>
-                <td className="p-4 font-medium">{actionLabels[policy.action]}</td>
+                <td className="p-4">
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${actionClass(policy.action)}`}>
+                    {actionLabels[policy.action]}
+                  </span>
+                </td>
                 <td className="p-4">
                   <label
                     className={`inline-flex items-center gap-2 rounded-full border px-2 py-0.5 text-xs font-semibold ${
@@ -671,4 +681,11 @@ function Summary({ label, value }: { label: string; value: number }) {
       <div className="mt-3 text-3xl font-semibold">{value.toLocaleString("pt-BR")}</div>
     </Surface>
   );
+}
+
+function actionClass(action: PolicyAction) {
+  if (action === "block") return "border-red-200 bg-red-50 text-red-700";
+  if (action === "require_release") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (action === "force_mono") return "border-blue-200 bg-blue-50 text-blue-700";
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
