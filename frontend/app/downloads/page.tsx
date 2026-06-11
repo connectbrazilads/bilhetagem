@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ComponentType } from "react";
-import { CalendarClock, Check, Copy, Download, FileArchive, PackageCheck, RefreshCw, ShieldCheck, TerminalSquare } from "lucide-react";
+import { CalendarClock, Check, Copy, Download, FileArchive, KeyRound, MousePointerClick, PackageCheck, RefreshCw, Settings2, ShieldCheck, TerminalSquare } from "lucide-react";
 
 import { ProtectedPage } from "@/components/protected-page";
 import { Button, Input, Surface } from "@/components/ui";
@@ -183,6 +183,7 @@ export default function DownloadsPage() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [activationKey, setActivationKey] = useState("");
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [showAdvancedInstall, setShowAdvancedInstall] = useState(false);
 
   const load = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -316,6 +317,7 @@ export default function DownloadsPage() {
     latest?.checksums_url ? "SHA256" : null,
   ].filter(Boolean);
   const releaseIncomplete = !latest || latestInstallerCount === 0 || !latest?.checksums_url;
+  const standardInstallReady = Boolean(installerFile && latest?.checksums_url);
   const selectedOrganization = organizations.find((organization) => organization.slug === deployOrg);
   const selectedOrganizationActive = organizations.length === 0 || selectedOrganization?.is_active === true;
   const validOrganizationSlug = isValidOrganizationSlug(deployOrg);
@@ -583,268 +585,323 @@ pwsh ./deploy/preflight-server.ps1 -SkipEndpointChecks`;
       ) : null}
 
       {isAdmin ? (
-        <Surface className="mb-6 p-4">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm font-bold">Instalacao padrao para cliente</h2>
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                    Recomendado
-                  </span>
+        <Surface className="mb-6 overflow-hidden">
+          <div className="border-b bg-white/70 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+                  <ShieldCheck className="h-5 w-5" />
                 </div>
-                <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
-                  Envie o instalador padrao e uma chave de ativacao. O cliente nao precisa saber usuario, senha do agent ou slug da empresa.
-                </p>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-bold">Instalador padrao para cliente</h2>
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                      Recomendado
+                    </span>
+                  </div>
+                  <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                    Baixe um unico instalador e ative cada PC com a chave da empresa. Login, senha tecnica e slug ficam protegidos no backend.
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => copyCommand("public-installer", publicInstallerUrl)} disabled={!installerFile}>
-                {copiedCommand === "public-installer" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copiedCommand === "public-installer" ? "Link copiado" : "Copiar link"}
-              </Button>
-              <Button onClick={() => window.open(publicInstallerUrl, "_blank")} disabled={!installerFile}>
-                <Download className="h-4 w-4" />
-                Baixar instalador
-              </Button>
-            </div>
-          </div>
-
-          <div className="mb-4 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-md border bg-muted/20 p-3">
-              <div className="mb-2 text-xs font-bold uppercase text-muted-foreground">Empresa de destino</div>
-              {organizations.length > 0 ? (
-                <select
-                  className="h-10 w-full rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
-                  value={deployOrg}
-                  onChange={(event) => {
-                    const slug = event.target.value;
-                    if (slug !== deployOrg) {
-                      setDeployPassword("");
-                      setActivationKey("");
-                    }
-                    setDeployOrg(slug);
-                    const organization = organizations.find((item) => item.slug === slug);
-                    if (organization?.agent_username) setDeployUser(organization.agent_username);
-                  }}
-                >
-                  {organizations.map((organization) => (
-                    <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
-                      {organization.name} ({organization.slug}){organization.is_active ? billingStatusSuffix(organization.billing_status) : " - inativa"}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input value={deployOrg} onChange={(event) => setDeployOrg(event.target.value)} />
-              )}
-              <div className="mt-2 text-xs text-muted-foreground">
-                {selectedOrganization?.enrollment_key_created_at
-                  ? `Ultima chave gerada em ${formatDateTime(selectedOrganization.enrollment_key_created_at)}.`
-                  : "Nenhuma chave de ativacao gerada para esta empresa nesta VPS."}
-              </div>
-            </div>
-            <div className="rounded-md border bg-muted/20 p-3">
-              <div className="mb-2 text-xs font-bold uppercase text-muted-foreground">Chave de ativacao</div>
-              <div className="flex gap-2">
-                <Input value={activationKey || "Gere uma chave para copiar"} readOnly className={activationKey ? "font-mono text-xs" : "text-muted-foreground"} />
-                <Button variant="outline" className="shrink-0" onClick={rotateEnrollmentKey} disabled={generatingKey || !selectedOrganizationActive}>
-                  <RefreshCw className={`h-4 w-4 ${generatingKey ? "animate-spin" : ""}`} />
-                  Gerar
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => copyCommand("public-installer", publicInstallerUrl)} disabled={!installerFile}>
+                  {copiedCommand === "public-installer" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copiedCommand === "public-installer" ? "Link copiado" : "Copiar link"}
                 </Button>
-                <Button
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={() => copyCommand("activation-key", activationKey)}
-                  disabled={!activationKey}
-                  title="Copiar chave de ativacao"
-                >
-                  {copiedCommand === "activation-key" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                <Button onClick={() => window.open(publicInstallerUrl, "_blank")} disabled={!installerFile}>
+                  <Download className="h-4 w-4" />
+                  Baixar instalador
                 </Button>
-              </div>
-              <div className="mt-2 text-xs text-muted-foreground">
-                A chave pode ser rotacionada a qualquer momento. Chaves antigas param de ativar novas instalacoes.
               </div>
             </div>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-2">
-            <CommandBox
-              title="Link do instalador padrao"
-              command={publicInstallerUrl}
-              displayCommand={publicInstallerUrl}
-              disabled={!installerFile}
-              copied={copiedCommand === "public-installer"}
-              onCopy={() => copyCommand("public-installer", publicInstallerUrl)}
+          <div className="grid border-b md:grid-cols-3">
+            <InstallStep
+              number="1"
+              icon={Download}
+              title="Instalador unico"
+              detail={installerFile ? `${installerFile.filename} pronto para download` : "Publique o EXE para liberar o download"}
+              tone={standardInstallReady ? "ok" : "warn"}
             />
-            <CommandBox
-              title="Comando silencioso com chave"
-              command={activationCommand}
-              displayCommand={activationCommand}
-              disabled={!installerFile || !activationKey}
-              emptyMessage={!installerFile ? "Publique o instalador antes de gerar o comando." : "Gere uma chave de ativacao para montar o comando."}
-              copied={copiedCommand === "activation-command"}
-              onCopy={() => copyCommand("activation-command", activationCommand)}
+            <InstallStep
+              number="2"
+              icon={KeyRound}
+              title="Chave por empresa"
+              detail={activationKey ? "Chave gerada nesta sessao" : selectedOrganization?.enrollment_key_created_at ? "Empresa ja possui chave ativa" : "Gere uma chave antes de instalar"}
+              tone={activationKey || selectedOrganization?.enrollment_key_created_at ? "ok" : "warn"}
             />
+            <InstallStep
+              number="3"
+              icon={MousePointerClick}
+              title="Instalacao assistida"
+              detail={activationCommand ? "Comando silencioso pronto" : "Use download manual ou gere a chave para comando silencioso"}
+              tone={activationCommand ? "ok" : "neutral"}
+            />
+          </div>
+
+          <div className="p-5">
+            {!standardInstallReady ? (
+              <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="font-bold">Instalador padrao ainda indisponivel</div>
+                <div className="mt-0.5 text-xs text-amber-800">
+                  Publique o instalador EXE e o SHA256 na release atual para liberar o download publico.
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mb-4 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-md border bg-muted/20 p-3">
+                <div className="mb-2 text-xs font-bold uppercase text-muted-foreground">Empresa de destino</div>
+                {organizations.length > 0 ? (
+                  <select
+                    className="h-10 w-full rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+                    value={deployOrg}
+                    onChange={(event) => {
+                      const slug = event.target.value;
+                      if (slug !== deployOrg) {
+                        setDeployPassword("");
+                        setActivationKey("");
+                      }
+                      setDeployOrg(slug);
+                      const organization = organizations.find((item) => item.slug === slug);
+                      if (organization?.agent_username) setDeployUser(organization.agent_username);
+                    }}
+                  >
+                    {organizations.map((organization) => (
+                      <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
+                        {organization.name} ({organization.slug}){organization.is_active ? billingStatusSuffix(organization.billing_status) : " - inativa"}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input value={deployOrg} onChange={(event) => setDeployOrg(event.target.value)} />
+                )}
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {selectedOrganization?.enrollment_key_created_at
+                    ? `Ultima chave gerada em ${formatDateTime(selectedOrganization.enrollment_key_created_at)}.`
+                    : "Nenhuma chave de ativacao gerada para esta empresa nesta VPS."}
+                </div>
+              </div>
+              <div className="rounded-md border bg-muted/20 p-3">
+                <div className="mb-2 text-xs font-bold uppercase text-muted-foreground">Chave de ativacao</div>
+                <div className="flex gap-2">
+                  <Input value={activationKey || "Gere uma chave para copiar"} readOnly className={activationKey ? "font-mono text-xs" : "text-muted-foreground"} />
+                  <Button variant="outline" className="shrink-0" onClick={rotateEnrollmentKey} disabled={generatingKey || !selectedOrganizationActive}>
+                    <RefreshCw className={`h-4 w-4 ${generatingKey ? "animate-spin" : ""}`} />
+                    Gerar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => copyCommand("activation-key", activationKey)}
+                    disabled={!activationKey}
+                    title="Copiar chave de ativacao"
+                  >
+                    {copiedCommand === "activation-key" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Chaves antigas param de ativar novas instalacoes quando uma nova chave e gerada.
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              <CommandBox
+                title="Link do instalador padrao"
+                command={publicInstallerUrl}
+                displayCommand={publicInstallerUrl}
+                disabled={!installerFile}
+                copied={copiedCommand === "public-installer"}
+                onCopy={() => copyCommand("public-installer", publicInstallerUrl)}
+              />
+              <CommandBox
+                title="Comando silencioso com chave"
+                command={activationCommand}
+                displayCommand={activationCommand}
+                disabled={!installerFile || !activationKey}
+                emptyMessage={!installerFile ? "Publique o instalador antes de gerar o comando." : "Gere uma chave de ativacao para montar o comando."}
+                copied={copiedCommand === "activation-command"}
+                onCopy={() => copyCommand("activation-command", activationCommand)}
+              />
+            </div>
           </div>
         </Surface>
       ) : null}
 
       {isAdmin ? (
-        <Surface className="mb-6 p-4">
-          <div className="mb-4 flex items-start gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <TerminalSquare className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold">Instalacao silenciosa</h2>
-              <p className="text-xs text-muted-foreground">Comandos PowerShell prontos para implantar o agent. A senha fica mascarada na tela, mas e copiada corretamente.</p>
-            </div>
-          </div>
-          <div className="mb-4 grid gap-3 md:grid-cols-4">
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              API
-              <Input value={API_URL} readOnly />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Empresa
-              {organizations.length > 0 ? (
-                <select
-                  className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
-                  value={deployOrg}
-                  onChange={(event) => {
-                    const slug = event.target.value;
-                    if (slug !== deployOrg) setDeployPassword("");
-                    if (slug !== deployOrg) setActivationKey("");
-                    setDeployOrg(slug);
-                    const organization = organizations.find((item) => item.slug === slug);
-                    if (organization?.agent_username) {
-                      setDeployUser(organization.agent_username);
-                    }
-                  }}
-                >
-                  {organizations.map((organization) => (
-                    <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
-                      {organization.name} ({organization.slug}){organization.is_active ? billingStatusSuffix(organization.billing_status) : " - inativa"}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  value={deployOrg}
-                  onChange={(event) => {
-                    if (event.target.value !== deployOrg) setDeployPassword("");
-                    if (event.target.value !== deployOrg) setActivationKey("");
-                    setDeployOrg(event.target.value);
-                  }}
-                />
-              )}
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Usuario agent
-              <Input
-                value={deployUser}
-                onChange={(event) => setDeployUser(event.target.value)}
-                title={selectedOrganization?.agent_username ? `Usuario tecnico cadastrado: ${selectedOrganization.agent_username}` : undefined}
-              />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Senha atual do agent
-              <Input type="password" value={deployPassword} onChange={(event) => setDeployPassword(event.target.value)} />
-              <span className="text-[11px] font-medium text-muted-foreground">
-                Use a senha cadastrada para o usuario tecnico desta empresa; ao trocar a empresa, este campo e limpo automaticamente.
-              </span>
-            </label>
-          </div>
-          <div className="mb-4 grid gap-3 md:grid-cols-3">
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Usuario padrao do PC
-              <Input placeholder="Opcional" value={defaultUsername} onChange={(event) => setDefaultUsername(event.target.value)} />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Servidor de impressao
-              <Input placeholder="Opcional: \\SRV-PRINT01" value={spoolServer} onChange={(event) => setSpoolServer(event.target.value)} />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Modo de log
-              <select
-                className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
-                value={logLevel}
-                onChange={(event) => setLogLevel(event.target.value)}
-              >
-                <option value="INFO">INFO</option>
-                <option value="DEBUG">DEBUG</option>
-                <option value="WARNING">WARNING</option>
-                <option value="ERROR">ERROR</option>
-                <option value="CRITICAL">CRITICAL</option>
-              </select>
-            </label>
-          </div>
-          <div className="mb-4 grid gap-3 md:grid-cols-4">
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Comunidade SNMP
-              <Input value={snmpCommunity} onChange={(event) => setSnmpCommunity(event.target.value)} />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Coleta SNMP (s)
-              <Input type="number" min={1} value={snmpPollInterval} onChange={(event) => setSnmpPollInterval(event.target.value)} />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Timeout SNMP (s)
-              <Input type="number" min={0.1} step={0.1} value={snmpTimeout} onChange={(event) => setSnmpTimeout(event.target.value)} />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-              Tentativas SNMP
-              <Input type="number" min={0} value={snmpRetries} onChange={(event) => setSnmpRetries(event.target.value)} />
-            </label>
-          </div>
-          <div className="mb-4 grid gap-2 md:grid-cols-3">
-            <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground">
-              <input type="checkbox" checked={cancelBlocked} onChange={(event) => setCancelBlocked(event.target.checked)} />
-              Cancelar bloqueados
-            </label>
-            <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground">
-              <input type="checkbox" checked={usePrintEventLog} onChange={(event) => setUsePrintEventLog(event.target.checked)} />
-              Usar Event Log
-            </label>
-            <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground">
-              <input type="checkbox" checked={autoUpdate} onChange={(event) => setAutoUpdate(event.target.checked)} />
-              Auto-update
-            </label>
-          </div>
-          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-            <div className="flex items-start gap-2">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+        <Surface className="mb-6 overflow-hidden">
+          <div className="flex flex-wrap items-start justify-between gap-4 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-700">
+                <Settings2 className="h-5 w-5" />
+              </div>
               <div>
-                <div className="font-bold">Execute o comando em PowerShell como Administrador.</div>
-                <div className="mt-0.5 text-amber-800">
-                  Sem elevacao, o agent pode instalar parcialmente e aparecer em Agents como &quot;Sem admin local&quot;, limitando criacao/restauracao de filas e acoes remotas.
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-bold">Instalacao avancada por credenciais</h2>
+                  <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700">
+                    Legado
+                  </span>
                 </div>
+                <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+                  Use apenas quando precisar implantar com usuario e senha tecnica do agent, sem chave de ativacao.
+                </p>
               </div>
             </div>
+            <Button variant="outline" onClick={() => setShowAdvancedInstall((current) => !current)}>
+              <Settings2 className="h-4 w-4" />
+              {showAdvancedInstall ? "Ocultar avancado" : "Mostrar avancado"}
+            </Button>
           </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            <CommandBox
-              title="EXE"
-              command={exeCommand}
-              displayCommand={maskSecret(exeCommand, deployPassword)}
-              disabled={!installerFile || !commandReady}
-              emptyMessage={!installerFile ? undefined : commandMissingMessage}
-              copied={copiedCommand === "exe"}
-              onCopy={() => copyCommand("exe", exeCommand)}
-            />
-            <CommandBox
-              title="MSI"
-              command={msiCommand}
-              displayCommand={maskSecret(msiCommand, deployPassword)}
-              disabled={!msiFile || !commandReady}
-              emptyMessage={!msiFile ? undefined : commandMissingMessage}
-              copied={copiedCommand === "msi"}
-              onCopy={() => copyCommand("msi", msiCommand)}
-            />
-          </div>
+
+          {showAdvancedInstall ? (
+            <div className="border-t p-4">
+              <div className="mb-4 grid gap-3 md:grid-cols-4">
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  API
+                  <Input value={API_URL} readOnly />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Empresa
+                  {organizations.length > 0 ? (
+                    <select
+                      className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+                      value={deployOrg}
+                      onChange={(event) => {
+                        const slug = event.target.value;
+                        if (slug !== deployOrg) setDeployPassword("");
+                        if (slug !== deployOrg) setActivationKey("");
+                        setDeployOrg(slug);
+                        const organization = organizations.find((item) => item.slug === slug);
+                        if (organization?.agent_username) {
+                          setDeployUser(organization.agent_username);
+                        }
+                      }}
+                    >
+                      {organizations.map((organization) => (
+                        <option key={organization.id} value={organization.slug} disabled={!organization.is_active}>
+                          {organization.name} ({organization.slug}){organization.is_active ? billingStatusSuffix(organization.billing_status) : " - inativa"}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      value={deployOrg}
+                      onChange={(event) => {
+                        if (event.target.value !== deployOrg) setDeployPassword("");
+                        if (event.target.value !== deployOrg) setActivationKey("");
+                        setDeployOrg(event.target.value);
+                      }}
+                    />
+                  )}
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Usuario agent
+                  <Input
+                    value={deployUser}
+                    onChange={(event) => setDeployUser(event.target.value)}
+                    title={selectedOrganization?.agent_username ? `Usuario tecnico cadastrado: ${selectedOrganization.agent_username}` : undefined}
+                  />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Senha atual do agent
+                  <Input type="password" value={deployPassword} onChange={(event) => setDeployPassword(event.target.value)} />
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    Use a senha cadastrada para o usuario tecnico desta empresa; ao trocar a empresa, este campo e limpo automaticamente.
+                  </span>
+                </label>
+              </div>
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Usuario padrao do PC
+                  <Input placeholder="Opcional" value={defaultUsername} onChange={(event) => setDefaultUsername(event.target.value)} />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Servidor de impressao
+                  <Input placeholder="Opcional: \\SRV-PRINT01" value={spoolServer} onChange={(event) => setSpoolServer(event.target.value)} />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Modo de log
+                  <select
+                    className="h-9 rounded-md border bg-white px-3 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/20"
+                    value={logLevel}
+                    onChange={(event) => setLogLevel(event.target.value)}
+                  >
+                    <option value="INFO">INFO</option>
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                  </select>
+                </label>
+              </div>
+              <div className="mb-4 grid gap-3 md:grid-cols-4">
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Comunidade SNMP
+                  <Input value={snmpCommunity} onChange={(event) => setSnmpCommunity(event.target.value)} />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Coleta SNMP (s)
+                  <Input type="number" min={1} value={snmpPollInterval} onChange={(event) => setSnmpPollInterval(event.target.value)} />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Timeout SNMP (s)
+                  <Input type="number" min={0.1} step={0.1} value={snmpTimeout} onChange={(event) => setSnmpTimeout(event.target.value)} />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Tentativas SNMP
+                  <Input type="number" min={0} value={snmpRetries} onChange={(event) => setSnmpRetries(event.target.value)} />
+                </label>
+              </div>
+              <div className="mb-4 grid gap-2 md:grid-cols-3">
+                <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground">
+                  <input type="checkbox" checked={cancelBlocked} onChange={(event) => setCancelBlocked(event.target.checked)} />
+                  Cancelar bloqueados
+                </label>
+                <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground">
+                  <input type="checkbox" checked={usePrintEventLog} onChange={(event) => setUsePrintEventLog(event.target.checked)} />
+                  Usar Event Log
+                </label>
+                <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground">
+                  <input type="checkbox" checked={autoUpdate} onChange={(event) => setAutoUpdate(event.target.checked)} />
+                  Auto-update
+                </label>
+              </div>
+              <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <div className="flex items-start gap-2">
+                  <TerminalSquare className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <div className="font-bold">Execute em PowerShell como Administrador.</div>
+                    <div className="mt-0.5 text-amber-800">
+                      Sem elevacao, o agent pode instalar parcialmente e limitar criacao/restauracao de filas remotas.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <CommandBox
+                  title="EXE"
+                  command={exeCommand}
+                  displayCommand={maskSecret(exeCommand, deployPassword)}
+                  disabled={!installerFile || !commandReady}
+                  emptyMessage={!installerFile ? undefined : commandMissingMessage}
+                  copied={copiedCommand === "exe"}
+                  onCopy={() => copyCommand("exe", exeCommand)}
+                />
+                <CommandBox
+                  title="MSI"
+                  command={msiCommand}
+                  displayCommand={maskSecret(msiCommand, deployPassword)}
+                  disabled={!msiFile || !commandReady}
+                  emptyMessage={!msiFile ? undefined : commandMissingMessage}
+                  copied={copiedCommand === "msi"}
+                  onCopy={() => copyCommand("msi", msiCommand)}
+                />
+              </div>
+            </div>
+          ) : null}
         </Surface>
       ) : null}
 
@@ -994,6 +1051,43 @@ function ReleaseSummaryCard({
         {detail}
       </div>
     </Surface>
+  );
+}
+
+function InstallStep({
+  number,
+  icon: Icon,
+  title,
+  detail,
+  tone,
+}: {
+  number: string;
+  icon: ComponentType<{ className?: string }>;
+  title: string;
+  detail: string;
+  tone: "ok" | "warn" | "neutral";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : "border-blue-200 bg-blue-50 text-blue-700";
+
+  return (
+    <div className="border-b p-4 md:border-b-0 md:border-r last:md:border-r-0">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-950 text-xs font-bold text-white">{number}</span>
+          <div className="text-xs font-bold uppercase text-muted-foreground">Etapa</div>
+        </div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="text-sm font-bold">{title}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+    </div>
   );
 }
 
