@@ -306,6 +306,13 @@ export default function ReportsPage() {
           acc.billableJobs += 1;
           acc.pages += job.pages;
           acc.cost += job.cost;
+          if (job.is_color) {
+            acc.colorPages += job.pages;
+            acc.colorCost += job.cost;
+          } else {
+            acc.monoPages += job.pages;
+            acc.monoCost += job.cost;
+          }
         }
         if (savedStatuses.has(job.status)) {
           acc.savedPages += job.pages;
@@ -314,9 +321,22 @@ export default function ReportsPage() {
         acc.printers.add(job.printer_name);
         return acc;
       },
-      { jobs: 0, billableJobs: 0, pages: 0, savedPages: 0, cost: 0, users: new Set<string>(), printers: new Set<string>() }
+      {
+        jobs: 0,
+        billableJobs: 0,
+        pages: 0,
+        monoPages: 0,
+        colorPages: 0,
+        savedPages: 0,
+        cost: 0,
+        monoCost: 0,
+        colorCost: 0,
+        users: new Set<string>(),
+        printers: new Set<string>(),
+      }
     );
   }, [jobs]);
+  const averageCost = summary.pages > 0 ? summary.cost / summary.pages : 0;
   const closingSummary = useMemo(() => {
     const latestClosing = closings[0];
     return closings.reduce(
@@ -365,14 +385,17 @@ export default function ReportsPage() {
 
       {exportError ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">{exportError}</div> : null}
 
-      <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-7">
+      <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Summary label="Trabalhos" value={summary.jobs} icon={FileText} />
         <Summary label="Cobraveis" value={summary.billableJobs} icon={FileText} />
-        <Summary label="Paginas cobraveis" value={summary.pages} icon={Printer} />
+        <Summary label="P&B cobravel" value={summary.monoPages} icon={Printer} />
+        <Summary label="Coloridas cobraveis" value={summary.colorPages} icon={Printer} />
         <Summary label="Paginas salvas" value={summary.savedPages} icon={FileText} />
-        <Summary label="Usuarios" value={summary.users.size} icon={Users} />
-        <Summary label="Impressoras" value={summary.printers.size} icon={Printer} />
+        <Summary label="Custo P&B" value={money(summary.monoCost)} icon={FileText} />
+        <Summary label="Custo colorido" value={money(summary.colorCost)} icon={FileText} />
         <Summary label="Custo cobravel" value={money(summary.cost)} icon={FileText} />
+        <Summary label="Custo medio" value={money(averageCost)} icon={FileText} />
+        <Summary label="Usuarios / impressoras" value={`${summary.users.size.toLocaleString("pt-BR")} / ${summary.printers.size.toLocaleString("pt-BR")}`} icon={Users} />
       </div>
 
       <Surface className="mb-4 grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_180px_auto]">
