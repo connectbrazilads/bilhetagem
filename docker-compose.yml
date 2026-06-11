@@ -27,9 +27,12 @@ services:
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:?Set INITIAL_ADMIN_PASSWORD before docker compose up}
       INITIAL_AGENT_USERNAME: ${INITIAL_AGENT_USERNAME:-agent}
       INITIAL_AGENT_PASSWORD: ${INITIAL_AGENT_PASSWORD:?Set INITIAL_AGENT_PASSWORD before docker compose up}
+      AGENT_DOWNLOAD_DIR: /app/agent_downloads
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./agent/releases:/app/agent_downloads:ro
     ports:
       - "8000:8000"
 
