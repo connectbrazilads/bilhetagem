@@ -137,14 +137,17 @@ def export_audit_logs(
     actor: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ) -> Response:
     _validate_date_range(date_from, date_to)
-    rows = _audit_query(
+    query = _audit_query(
         db,
         actor,
         action=action,
         entity=entity,
         date_from=date_from,
         date_to=date_to,
-    ).limit(limit).all()
+    )
+    total_matching_rows = query.count()
+    rows = query.limit(limit).all()
+    truncated = total_matching_rows > len(rows)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -168,12 +171,14 @@ def export_audit_logs(
         actor_user_id=actor.id,
         metadata={
             "rows": len(rows),
+            "total_matching_rows": total_matching_rows,
+            "limit": limit,
+            "truncated": truncated,
             "filters": {
                 "action": action,
                 "entity": entity,
                 "date_from": date_from.isoformat() if date_from else None,
                 "date_to": date_to.isoformat() if date_to else None,
-                "limit": limit,
             },
         },
     )

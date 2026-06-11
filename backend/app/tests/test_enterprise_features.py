@@ -2868,9 +2868,47 @@ def test_audit_log_filters_by_date_and_exports_csv(db_session: Session):
     audit = db_session.query(AuditLog).filter(AuditLog.action == "audit_logs_exported").one()
     assert audit.actor_user_id == admin.id
     assert audit.log_metadata["rows"] == 1
+    assert audit.log_metadata["total_matching_rows"] == 1
+    assert audit.log_metadata["limit"] == 100
+    assert audit.log_metadata["truncated"] is False
     assert audit.log_metadata["filters"]["date_from"] == "2026-02-01T00:00:00+00:00"
     assert audit.log_metadata["filters"]["date_to"] == "2026-02-28T23:59:00+00:00"
-    assert audit.log_metadata["filters"]["limit"] == 100
+
+
+def test_audit_log_export_audit_marks_truncated_result(db_session: Session):
+    admin = User(username="audit-truncated-admin", full_name="Audit Truncated", role=UserRole.admin, is_active=True, organization_id=1)
+    db_session.add(admin)
+    db_session.flush()
+
+    for index in range(3):
+        write_audit(
+            db_session,
+            action="printer_updated",
+            entity="printers",
+            entity_id=index + 1,
+            actor_user_id=admin.id,
+            metadata={"index": index},
+        )
+    db_session.commit()
+
+    response = export_audit_logs(
+        action="printer_updated",
+        entity=None,
+        date_from=None,
+        date_to=None,
+        limit=1,
+        db=db_session,
+        actor=admin,
+    )
+
+    body_rows = [line for line in response.body.decode("utf-8").splitlines() if line]
+    assert len(body_rows) == 2
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "audit_logs_exported").one()
+    assert audit.log_metadata["rows"] == 1
+    assert audit.log_metadata["total_matching_rows"] == 3
+    assert audit.log_metadata["limit"] == 1
+    assert audit.log_metadata["truncated"] is True
+    assert audit.log_metadata["filters"]["action"] == "printer_updated"
 
 
 def test_audit_log_rejects_invalid_date_range_without_export_audit(db_session: Session):
