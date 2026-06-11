@@ -43,7 +43,7 @@ sys.modules.setdefault(
         WAIT_OBJECT_0=0,
     ),
 )
-sys.modules.setdefault("win32service", types.SimpleNamespace(SERVICE_STOP_PENDING=3))
+sys.modules.setdefault("win32service", types.SimpleNamespace(SERVICE_STOP_PENDING=3, SERVICE_STOPPED=1))
 sys.modules.setdefault(
     "win32serviceutil",
     types.SimpleNamespace(
@@ -88,3 +88,17 @@ def test_service_logs_startup_failure_after_logging_is_configured(monkeypatch):
 
     assert exceptions == ["Erro fatal no monitor do spooler"]
     assert errors == ["PrintBillingAgent falhou: senha insegura"]
+
+
+def test_service_sleep_waits_on_stop_event(monkeypatch):
+    waits = []
+    sentinel = object()
+
+    monkeypatch.setattr(service.win32event, "CreateEvent", lambda *_args: sentinel)
+    monkeypatch.setattr(service.win32event, "WaitForSingleObject", lambda event, timeout: waits.append((event, timeout)) or 1)
+
+    instance = service.PrintBillingService([])
+
+    instance._sleep_or_stop(1.25)
+
+    assert waits == [(sentinel, 1250)]

@@ -260,6 +260,7 @@ export default function AgentsPage() {
   const [selectedBulkAgentIds, setSelectedBulkAgentIds] = useState<number[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const [deletingAgentId, setDeletingAgentId] = useState<number | null>(null);
 
   async function load() {
     const token = localStorage.getItem("token");
@@ -366,6 +367,27 @@ export default function AgentsPage() {
       await load();
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : "Falha ao vincular fila");
+    }
+  }
+
+  async function deleteSelectedAgent() {
+    if (!selectedAgent || !isAdmin) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const label = selectedAgent.computer_name || selectedAgent.agent_uid;
+    const confirmed = window.confirm(`Excluir o agent "${label}" do painel? Historico de jobs sera preservado, mas filas e logs deste PC serao removidos.`);
+    if (!confirmed) return;
+    setDeletingAgentId(selectedAgent.id);
+    setActionMessage(null);
+    try {
+      await apiFetch(`/agent/agents/${selectedAgent.id}`, token, { method: "DELETE" });
+      setSelectedAgent(null);
+      setSelectedBulkAgentIds((ids) => ids.filter((id) => id !== selectedAgent.id));
+      await load();
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Falha ao excluir agent");
+    } finally {
+      setDeletingAgentId(null);
     }
   }
 
@@ -843,9 +865,22 @@ export default function AgentsPage() {
                 <h2 className="text-lg font-bold">{selectedAgent.computer_name || selectedAgent.agent_uid}</h2>
                 <p className="text-xs text-slate-300">{selectedAgent.agent_uid}</p>
               </div>
-              <button className="text-white/80 transition-colors hover:text-white" onClick={() => setSelectedAgent(null)}>
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {isAdmin ? (
+                  <button
+                    className="inline-flex h-9 items-center gap-2 rounded-md border border-red-300/60 px-3 text-xs font-bold text-red-100 transition-colors hover:bg-red-500/20 disabled:opacity-60"
+                    onClick={deleteSelectedAgent}
+                    disabled={deletingAgentId === selectedAgent.id}
+                    title="Excluir agent do painel"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {deletingAgentId === selectedAgent.id ? "Excluindo" : "Excluir"}
+                  </button>
+                ) : null}
+                <button className="text-white/80 transition-colors hover:text-white" onClick={() => setSelectedAgent(null)}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
             <div className="grid max-h-[calc(90vh-72px)] gap-5 overflow-auto p-5">
               <div className="grid gap-3 md:grid-cols-4">

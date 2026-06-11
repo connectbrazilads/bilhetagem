@@ -1417,6 +1417,62 @@ def get_agent_detail(
     return _agent_to_read(agent, include_jobs=True, db=db, conflict_alias_ids=conflict_ids)
 
 
+@router.delete("/agents/{agent_id}", status_code=204)
+def delete_agent(
+    agent_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(UserRole.admin)),
+) -> Response:
+    agent = db.query(PrintAgent).filter(PrintAgent.organization_id == actor.organization_id, PrintAgent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent nao encontrado")
+
+    metadata = {
+        "agent_id": agent.id,
+        "agent_uid": agent.agent_uid,
+        "computer_name": agent.computer_name,
+        "version": agent.version,
+        "last_seen_at": agent.last_seen_at.isoformat() if agent.last_seen_at else None,
+    }
+    alias_ids = [
+        row[0]
+        for row in db.query(PrinterAlias.id)
+        .filter(PrinterAlias.organization_id == actor.organization_id, PrinterAlias.agent_id == agent.id)
+        .all()
+    ]
+    job_filters = [PrintJob.agent_id == agent.id]
+    if alias_ids:
+        job_filters.append(PrintJob.printer_alias_id.in_(alias_ids))
+    db.query(PrintJob).filter(PrintJob.organization_id == actor.organization_id, or_(*job_filters)).update(
+        {PrintJob.agent_id: None, PrintJob.printer_alias_id: None},
+        synchronize_session=False,
+    )
+    db.query(AgentQueueAction).filter(
+        AgentQueueAction.organization_id == actor.organization_id,
+        AgentQueueAction.agent_id == agent.id,
+    ).delete(synchronize_session=False)
+    db.query(AgentLog).filter(
+        AgentLog.organization_id == actor.organization_id,
+        AgentLog.agent_id == agent.id,
+    ).delete(synchronize_session=False)
+    db.query(PrinterAlias).filter(
+        PrinterAlias.organization_id == actor.organization_id,
+        PrinterAlias.agent_id == agent.id,
+    ).delete(synchronize_session=False)
+    db.delete(agent)
+    write_audit(
+        db,
+        action="agent_deleted",
+        entity="print_agents",
+        entity_id=agent_id,
+        actor_user_id=actor.id,
+        metadata=metadata,
+        organization_id=actor.organization_id,
+    )
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.post("/agents/{agent_id}/queue-actions", response_model=AgentQueueActionRead)
 def create_queue_action(
     agent_id: int,

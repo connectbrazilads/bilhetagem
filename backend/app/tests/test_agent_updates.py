@@ -15,6 +15,7 @@ from app.api.routes.agent_updates import (
     cancel_queue_action,
     create_bulk_queue_actions,
     create_queue_action,
+    delete_agent,
     download_agent_update,
     download_agent_release_file,
     download_agent_release_checksums,
@@ -30,7 +31,7 @@ from app.api.routes.agent_updates import (
 )
 from app.core.config import settings
 from app.services.agent_release_service import published_agent_update_version, published_agent_version
-from app.models.agent_queue_action import AgentQueueActionStatus, AgentQueueActionType
+from app.models.agent_queue_action import AgentQueueAction, AgentQueueActionStatus, AgentQueueActionType
 from app.models.agent_log import AgentLog
 from app.models.audit_log import AuditLog
 from app.models.organization import Organization
@@ -1417,6 +1418,68 @@ def test_list_agents_is_scoped_by_organization(db_session: Session):
     visible_agents = list_agents(db=db_session, actor=actor_default)
 
     assert [agent.agent_uid for agent in visible_agents] == ["agent-a"]
+
+
+def test_delete_agent_removes_agent_operational_data_and_preserves_jobs(db_session: Session):
+    actor = User(username="agent-delete-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    user = User(username="agent-delete-user", full_name="User", role=UserRole.user, is_active=True, organization_id=1)
+    printer = Printer(organization_id=1, name="KONICA DELETE", ip_address="192.168.1.155", is_color=True)
+    agent = PrintAgent(organization_id=1, agent_uid="agent-delete", computer_name="PC-DELETE", version="0.2.1")
+    db_session.add_all([actor, user, printer, agent])
+    db_session.flush()
+    alias = PrinterAlias(organization_id=1, agent_id=agent.id, printer_id=printer.id, queue_name="KONICA_DELETE")
+    log = AgentLog(organization_id=1, agent_id=agent.id, level="info", message="log", source="test")
+    action = AgentQueueAction(
+        organization_id=1,
+        agent_id=agent.id,
+        action_type=AgentQueueActionType.remove_queue,
+        queue_name="KONICA_DELETE",
+        status=AgentQueueActionStatus.pending,
+    )
+    db_session.add_all([alias, log, action])
+    db_session.flush()
+    job = PrintJob(
+        organization_id=1,
+        user_id=user.id,
+        printer_id=printer.id,
+        printer_alias_id=alias.id,
+        agent_id=agent.id,
+        pages=1,
+        is_color=False,
+        status=JobStatus.authorized,
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    response = delete_agent(agent_id=agent.id, db=db_session, actor=actor)
+
+    assert response.status_code == 204
+    assert db_session.get(PrintAgent, agent.id) is None
+    assert db_session.query(PrinterAlias).filter(PrinterAlias.agent_id == agent.id).count() == 0
+    assert db_session.query(AgentLog).filter(AgentLog.agent_id == agent.id).count() == 0
+    assert db_session.query(AgentQueueAction).filter(AgentQueueAction.agent_id == agent.id).count() == 0
+    persisted_job = db_session.get(PrintJob, job.id)
+    assert persisted_job is not None
+    assert persisted_job.agent_id is None
+    assert persisted_job.printer_alias_id is None
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "agent_deleted").one()
+    assert audit.log_metadata["agent_uid"] == "agent-delete"
+
+
+def test_delete_agent_is_scoped_by_organization(db_session: Session):
+    other_org = Organization(name="Outro Delete", slug="outro-delete", is_active=True)
+    db_session.add(other_org)
+    db_session.flush()
+    actor = User(username="agent-delete-scope-admin", full_name="Admin", role=UserRole.admin, is_active=True, organization_id=1)
+    other_agent = PrintAgent(organization_id=other_org.id, agent_uid="agent-delete-other", computer_name="PC-OTHER")
+    db_session.add_all([actor, other_agent])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        delete_agent(agent_id=other_agent.id, db=db_session, actor=actor)
+
+    assert exc.value.status_code == 404
+    assert db_session.get(PrintAgent, other_agent.id) is not None
 
 
 def test_list_agents_reports_stale_running_queue_actions(db_session: Session):

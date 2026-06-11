@@ -67,6 +67,56 @@ def run(command: list[str], *, check: bool = True, timeout: int = 60) -> subproc
     return result
 
 
+def service_pid() -> int | None:
+    result = run(["sc.exe", "queryex", SERVICE_NAME], check=False, timeout=15)
+    match = re.search(r"PID\s*:\s*(\d+)", f"{result.stdout}\n{result.stderr}", re.IGNORECASE)
+    if not match:
+        return None
+    pid = int(match.group(1))
+    return pid if pid > 0 else None
+
+
+def force_stop_service_if_running() -> None:
+    pid = service_pid()
+    if pid is None:
+        return
+    print(f"Servico ainda ativo no PID {pid}; encerrando processo para concluir reinstalacao...")
+    run(["taskkill.exe", "/PID", str(pid), "/F", "/T"], check=False, timeout=30)
+
+
+def service_exists() -> bool:
+    result = run(["sc.exe", "queryex", SERVICE_NAME], check=False, timeout=15)
+    return result.returncode == 0
+
+
+def wait_for_service_removed(timeout_seconds: int = 30) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if not service_exists():
+            return True
+        time.sleep(1)
+    return not service_exists()
+
+
+def ensure_service_removed() -> None:
+    if wait_for_service_removed():
+        return
+    raise RuntimeError(
+        "O servico PrintBillingAgent ainda esta marcado para exclusao pelo Windows. "
+        "Feche a janela de Servicos se estiver aberta, reinicie o Windows e execute o instalador novamente."
+    )
+
+
+def ensure_service_running() -> None:
+    result = run(["sc.exe", "query", SERVICE_NAME], check=False, timeout=15)
+    output = f"{result.stdout}\n{result.stderr}"
+    if result.returncode != 0:
+        raise RuntimeError("Servico PrintBillingAgent nao foi encontrado apos a instalacao.")
+    if re.search(r"STATE\s*:\s*\d+\s+RUNNING", output, re.IGNORECASE):
+        return
+    raise RuntimeError("Servico PrintBillingAgent foi instalado, mas nao entrou em execucao. Verifique agent.log e o Visualizador de Eventos.")
+
+
 def prompt_value(label: str, default: str = "", secret: bool = False) -> str:
     if secret:
         suffix = " [manter senha atual]" if default else ""
@@ -368,8 +418,10 @@ def stop_and_remove_existing_service(target_exe: Path) -> None:
         run([str(target_exe), "stop"], check=False, timeout=30)
         run([str(target_exe), "remove"], check=False, timeout=30)
     run(["sc.exe", "stop", SERVICE_NAME], check=False, timeout=30)
+    time.sleep(3)
+    force_stop_service_if_running()
     run(["sc.exe", "delete", SERVICE_NAME], check=False, timeout=30)
-    time.sleep(2)
+    ensure_service_removed()
 
 
 def install(args: argparse.Namespace) -> None:
@@ -408,6 +460,7 @@ def install(args: argparse.Namespace) -> None:
 
     print("Iniciando servico...")
     run([str(target_exe), "start"], timeout=60)
+    ensure_service_running()
 
     print()
     print("Instalacao concluida.")

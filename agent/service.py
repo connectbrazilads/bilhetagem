@@ -40,7 +40,7 @@ class PrintBillingService(win32serviceutil.ServiceFramework):
         logging.info(f"{SERVICE_NAME} iniciado")
         servicemanager.LogInfoMsg(f"{SERVICE_NAME} iniciado")
         try:
-            self.monitor = SpoolMonitor(BillingApiClient())
+            self.monitor = SpoolMonitor(BillingApiClient(), sleep=self._sleep_or_stop)
             self.monitor.run_forever(should_stop=self._should_stop)
         except Exception as e:
             logging.exception("Erro fatal no monitor do spooler")
@@ -49,9 +49,18 @@ class PrintBillingService(win32serviceutil.ServiceFramework):
             except Exception:
                 pass
             raise
+        finally:
+            try:
+                self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+            except Exception:
+                pass
 
     def _should_stop(self) -> bool:
         return win32event.WaitForSingleObject(self.stop_event, 0) == win32event.WAIT_OBJECT_0
+
+    def _sleep_or_stop(self, seconds: float) -> None:
+        timeout_ms = max(0, int(seconds * 1000))
+        win32event.WaitForSingleObject(self.stop_event, timeout_ms)
 
 
 if __name__ == "__main__":

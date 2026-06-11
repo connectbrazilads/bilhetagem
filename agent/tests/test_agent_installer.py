@@ -541,3 +541,58 @@ def test_install_validates_config_before_removing_existing_service(monkeypatch, 
 
     assert stop_calls == []
     assert target_exe.read_text(encoding="utf-8") == "old agent"
+
+
+def test_stop_and_remove_force_kills_stuck_service(monkeypatch, tmp_path):
+    target_exe = tmp_path / AGENT_EXE_NAME
+    target_exe.write_text("agent", encoding="utf-8")
+    commands = []
+
+    def fake_run(command, *, check=True, timeout=60):
+        commands.append(command)
+        stdout = "SERVICE_NAME: PrintBillingAgent\n        PID                : 4321\n" if command[:2] == ["sc.exe", "queryex"] else ""
+        return agent_installer.subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(agent_installer, "run", fake_run)
+    monkeypatch.setattr(agent_installer.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(agent_installer, "ensure_service_removed", lambda: None)
+
+    agent_installer.stop_and_remove_existing_service(target_exe)
+
+    assert ["taskkill.exe", "/PID", "4321", "/F", "/T"] in commands
+    assert commands[-1] == ["sc.exe", "delete", agent_installer.SERVICE_NAME]
+
+
+def test_stop_and_remove_reports_delete_pending_service(monkeypatch, tmp_path):
+    target_exe = tmp_path / AGENT_EXE_NAME
+    target_exe.write_text("agent", encoding="utf-8")
+
+    def fake_run(command, *, check=True, timeout=60):
+        return agent_installer.subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(agent_installer, "run", fake_run)
+    monkeypatch.setattr(agent_installer, "force_stop_service_if_running", lambda: None)
+    monkeypatch.setattr(agent_installer, "wait_for_service_removed", lambda: False)
+    monkeypatch.setattr(agent_installer.time, "sleep", lambda _seconds: None)
+
+    try:
+        agent_installer.stop_and_remove_existing_service(target_exe)
+    except RuntimeError as exc:
+        assert "marcado para exclusao" in str(exc)
+        assert "reinicie o Windows" in str(exc)
+    else:
+        raise AssertionError("Servico marcado para exclusao deveria bloquear instalacao")
+
+
+def test_ensure_service_running_rejects_stopped_service(monkeypatch):
+    def fake_run(command, *, check=True, timeout=60):
+        return agent_installer.subprocess.CompletedProcess(command, 0, stdout="STATE              : 1  STOPPED", stderr="")
+
+    monkeypatch.setattr(agent_installer, "run", fake_run)
+
+    try:
+        agent_installer.ensure_service_running()
+    except RuntimeError as exc:
+        assert "nao entrou em execucao" in str(exc)
+    else:
+        raise AssertionError("Servico parado deveria falhar a instalacao")

@@ -105,7 +105,7 @@ class PrintEventLogReader:
                 logger.warning("Evento PrintService sem usuario/impressora reconhecidos. record_id=%s campos=%s", record_id, values)
                 return None
 
-            logger.info(
+            logger.debug(
                 "Evento PrintService interpretado: record_id=%s usuario=%s impressora=%s paginas=%s documento=%s",
                 record_id,
                 username,
